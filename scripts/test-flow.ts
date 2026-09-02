@@ -4,7 +4,7 @@ import { existsSync, unlinkSync } from "node:fs";
 import path from "node:path";
 import { hash } from "bcryptjs";
 import { PrismaClient } from "@prisma/client";
-import { mintCredits } from "../lib/zecca/mint";
+import { mintCredits, ensureTreasury } from "../lib/zecca/mint";
 import { purchaseCredits } from "../lib/zecca/credits";
 import { placeOrder } from "../lib/zecca/shop";
 import { getForgeState } from "../lib/zecca/forge";
@@ -68,13 +68,11 @@ async function main() {
     assert.equal(await treasuryBalance(db), 800);
     assert.equal(await pocketBalance("USER", customer.id, db), 200);
 
-    let short = false;
-    try {
-      await purchaseCredits({ userId: customer.id, credits: 9000, method: "demo", db });
-    } catch (error) {
-      short = error instanceof Error && error.message.includes("tesoreria è a corto");
-    }
-    assert.equal(short, true, "tesoreria short deve fallire in italiano");
+    await ensureTreasury({ needed: 9000, actorId: admin.id, db });
+    assert.equal(await treasuryBalance(db), 9000);
+
+    await mintCredits({ amount: 1_000_001, note: "Oltre il vecchio tetto", actorId: admin.id, db });
+    assert.equal(await treasuryBalance(db), 1_009_001);
 
     await placeOrder({
       userId: customer.id,

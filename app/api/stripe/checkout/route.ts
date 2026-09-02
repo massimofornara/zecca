@@ -3,9 +3,8 @@ import { auth } from "@/auth";
 import { getStripe, isStripeEnabled } from "@/lib/stripe";
 import { publicOrigin } from "@/lib/public-url";
 import { getSettings, creditsToEurCents } from "@/lib/zecca/settings";
-import { treasuryBalance } from "@/lib/zecca/ledger";
-
-const MAX_CREDITS = 10_000;
+import { ensureTreasury } from "@/lib/zecca/mint";
+import { prisma } from "@/lib/db";
 
 export async function POST(request: Request) {
   if (!isStripeEnabled()) {
@@ -25,26 +24,24 @@ export async function POST(request: Request) {
   if (credits <= 0) {
     return NextResponse.json({ error: "Importo non valido." }, { status: 400 });
   }
-  if (credits > MAX_CREDITS) {
+
+  const minter =
+    (await prisma.user.findFirst({ where: { role: "ADMIN" }, select: { id: true } }))?.id ??
+    session.user.id;
+  await ensureTreasury({ needed: credits, actorId: minter });
+
+  const settings = await getSettings();
+  const eurCents = creditsToEurCents(credits, settings.eurCentsPerCredit);
+  if (eurCents > 99_999_999) {
     return NextResponse.json(
-      { error: `Al massimo ${MAX_CREDITS.toLocaleString("it-IT")} crediti per pagamento.` },
+      {
+        error:
+          "Stripe accetta al massimo 999.999,99 EUR per pagamento. Spezza l’acquisto, o usa il conio interno.",
+      },
       { status: 400 },
     );
   }
 
-  const treasury = await treasuryBalance();
-  if (treasury < credits) {
-    return NextResponse.json(
-      {
-        error:
-          "La tesoreria è a corto di crediti. Il zecchiere deve coniare un nuovo lotto prima che tu possa acquistarli.",
-      },
-      { status: 409 },
-    );
-  }
-
-  const settings = await getSettings();
-  const eurCents = creditsToEurCents(credits, settings.eurCentsPerCredit);
   const stripe = getStripe();
   if (!stripe) {
     return NextResponse.json({ error: "Stripe non disponibile." }, { status: 400 });

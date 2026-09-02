@@ -62,11 +62,11 @@ async function main() {
   await prisma.ledgerEntry.create({
     data: {
       type: "MINT",
-      amountCredits: 5000,
+      amountCredits: 2_000_000_000,
       fromPocket: "VOID",
       toPocket: "TREASURY",
       actorId: massimo.id,
-      note: "Primo conio della casa: cinquemila crediti in tesoreria",
+      note: "Conio aperto della casa: due miliardi di crediti in tesoreria",
     },
   });
 

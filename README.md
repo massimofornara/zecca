@@ -6,8 +6,8 @@ Non è un e-commerce a punti. I crediti vivono in un **libro mastro** immutabile
 
 ## Idea
 
-1. **Conio** — Massimo crea un lotto. I crediti nascono in *tesoreria*.
-2. **Acquisto crediti** — Il cliente versa euro e riceve crediti dalla tesoreria. Se la tesoreria è corta, la vendita si ferma: bisogna coniare.
+1. **Conio** — Massimo batte i crediti in tesoreria. Non c’è un tetto di politica: un colpo può arrivare a oltre due miliardi. Se una vendita chiede più metallo di quanto c’è, la zecca conia il resto da sola.
+2. **Acquisto crediti** — Il cliente versa euro (demo o Stripe) e riceve crediti dalla tesoreria.
 3. **Bottega** — Si paga in crediti. Ogni spesa di **oggi** (confine di calendario `Europe/Rome`) scalda la forgia.
 4. **Forgia del Giorno** — La quota fondibile del portafoglio dipende da quanto hai comprato *nella giornata*, non da una fedeltà a vita. A mezzanotte romana il calore si azzera.
 5. **Fusione** — Il cliente chiede di convertire il *forgiato* in euro. Massimo segna pagato (in demo: chiude il movimento; nella vita: bonifico o PayPal). Lo zecchiere può sempre fondere la tesoreria.

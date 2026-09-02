@@ -7,7 +7,7 @@ import { ErrorBanner, OkBanner } from "@/components/ui/banners";
 import { Input } from "@/components/ui/input";
 import { formatEurFromCents } from "@/lib/format";
 
-const PACKS = [25, 50, 100, 150, 300];
+const PACKS = [50, 100, 1_000, 10_000, 100_000, 1_000_000];
 
 export function BuyCreditsForm({
   eurCentsPerCredit,
@@ -54,9 +54,8 @@ export function BuyCreditsForm({
         </p>
       )}
       <p className="mt-4 text-sm text-muted-foreground">
-        Tesoreria disponibile:{" "}
-        <span className="font-ledger text-foreground">{treasury.toLocaleString("it-IT")} cr</span>. Tasso: 1
-        credito = {formatEurFromCents(eurCentsPerCredit)}.
+        Tesoreria aperta: {treasury.toLocaleString("it-IT")} cr già battuti. Se non bastano, la zecca
+        conia il resto. Tasso: 1 credito = {formatEurFromCents(eurCentsPerCredit)}.
       </p>
       <div className="mt-4 flex flex-wrap gap-2">
         {PACKS.map((p) => (

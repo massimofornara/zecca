@@ -24,8 +24,9 @@ export default async function CreditiPage({
       <p className="text-xs uppercase tracking-[0.28em] text-primary/80">Dalla tesoreria</p>
       <h1 className="mt-1 font-display text-4xl text-primary">Compra crediti</h1>
       <p className="mt-3 max-w-2xl text-muted-foreground">
-        I crediti esistono già: il zecchiere li ha coniati. Con Stripe versi euro veri sul conto del
-        zecchiere; i crediti restano un registro. Senza chiavi Stripe il pagamento è solo dimostrativo.
+        La tesoreria è un conio aperto: se il metallo non basta, se ne batte altro. Con Stripe versi
+        euro veri sul conto del zecchiere; i crediti restano un registro. Senza chiavi Stripe il
+        pagamento è solo dimostrativo.
       </p>
       <div className="mt-6 space-y-3">
         {stripe === "ok" && (
