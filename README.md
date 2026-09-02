@@ -110,6 +110,10 @@ Senza queste variabili resta solo il pagamento dimostrativo: nessun euro si muov
 
 Non esiste un pulsante che “conia e manda” soldi a un IBAN.
 
+## Architettura (fattibilità, MiCA, riserve)
+
+Analisi della monetizzazione interna, on/off-ramp e rischi di conio scoperto: [`docs/architettura-monetizzazione.md`](docs/architettura-monetizzazione.md). In Tesoreria il riquadro **Copertura riserve** mostra il ratio euro Stripe / circolante.
+
 ## Libro mastro
 
 Ogni movimento è una riga: `MINT`, `PURCHASE_CREDITS`, `SPEND_ON_ORDER`, `CASHOUT_REQUEST`, `CASHOUT_PAID`, `CASHOUT_REJECTED`, `TREASURY_CASHOUT`, `RATE_CHANGE`. Tesoreria e portafogli si calcolano da lì.

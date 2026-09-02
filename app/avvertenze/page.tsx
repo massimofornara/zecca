@@ -22,6 +22,11 @@ export default function AvvertenzePage() {
           In modalità dimostrativa nessun pagamento si muove. Per i fondi veri servono le chiavi
           Stripe, un sito in HTTPS e il tuo home banking.
         </p>
+        <p>
+          Coniare crediti non crea una riserva. Il rapporto di copertura (euro Stripe sul circolante)
+          sta in Tesoreria. Un off-ramp verso wallet crypto o un token ERC-20 rimborsabile è un
+          prodotto regolamentato (AML, eventuale IMEL, MiCA): non è incluso in questo sito.
+        </p>
       </div>
     </PageShell>
   );

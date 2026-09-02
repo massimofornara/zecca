@@ -10,6 +10,7 @@ import { placeOrder } from "../lib/zecca/shop";
 import { getForgeState } from "../lib/zecca/forge";
 import { requestCustomerCashout, resolveCashout } from "../lib/zecca/cashout";
 import { pocketBalance, treasuryBalance } from "../lib/zecca/ledger";
+import { getReserveReport } from "../lib/zecca/reserves";
 import { DEFAULT_SETTINGS } from "../lib/zecca/settings";
 
 const dbPath = path.join(process.cwd(), "prisma", "test.db");
@@ -128,6 +129,11 @@ async function main() {
     for (const needed of ["MINT", "PURCHASE_CREDITS", "SPEND_ON_ORDER", "CASHOUT_REQUEST", "CASHOUT_PAID"]) {
       assert.equal(typeSet.has(needed as never), true, `manca ${needed} nel libro`);
     }
+
+    const reserve = await getReserveReport(db);
+    assert.equal(reserve.stripeEurCents, 0);
+    assert.equal(reserve.fullyReserved, false);
+    assert.equal(reserve.reserveRatio, 0);
 
     console.log("Flusso Zecca: conio → crediti → bottega → forgia → fusione. OK.");
   } finally {

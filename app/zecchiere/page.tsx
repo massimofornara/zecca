@@ -3,14 +3,16 @@ import { totals } from "@/lib/zecca/ledger";
 import { prisma } from "@/lib/db";
 import { loyalToday } from "@/lib/zecca/forge";
 import { getLiveReport } from "@/lib/live";
+import { formatReserveRatio, getReserveReport } from "@/lib/zecca/reserves";
 
 export const metadata = { title: "Tesoreria" };
 
 export default async function TesoreriaPage() {
-  const [flow, pending, loyal] = await Promise.all([
+  const [flow, pending, loyal, reserve] = await Promise.all([
     totals(),
     prisma.cashoutRequest.count({ where: { status: "PENDING" } }),
     loyalToday(),
+    getReserveReport(),
   ]);
   const live = getLiveReport();
 
@@ -42,6 +44,35 @@ export default async function TesoreriaPage() {
             </li>
           ))}
         </ul>
+      </section>
+
+      <section className="metal-frame mt-6 rounded-md bg-card p-5">
+        <p className="text-xs uppercase tracking-[0.2em] text-primary/80">Copertura riserve</p>
+        <p className="mt-1 font-display text-2xl text-primary">
+          {reserve.fullyReserved ? "Coperta" : "Scoperta"} · {formatReserveRatio(reserve.reserveRatio)}
+        </p>
+        <p className="mt-2 text-sm text-muted-foreground">
+          Rapporto tra euro incassati con Stripe e i crediti già nei portafogli (passività). Il conio in
+          tesoreria non è riserva: è inventario. Senza carte vere il ratio è zero. Analisi:{" "}
+          <a href="/avvertenze" className="underline hover:text-primary">
+            Avvertenze
+          </a>
+          .
+        </p>
+        <div className="mt-4 grid gap-3 sm:grid-cols-3">
+          <div>
+            <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">Circolante</p>
+            <p className="font-ledger">{formatCredits(reserve.outstandingCredits)}</p>
+          </div>
+          <div>
+            <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">Passività nominali</p>
+            <p className="font-ledger">{formatEurFromCents(reserve.liabilityCents)}</p>
+          </div>
+          <div>
+            <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">Riserva Stripe</p>
+            <p className="font-ledger">{formatEurFromCents(reserve.stripeEurCents)}</p>
+          </div>
+        </div>
       </section>
 
       <section className="paper mt-6 rounded-md p-6">
