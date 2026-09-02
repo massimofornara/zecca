@@ -25,14 +25,30 @@ Tasso iniziale: **1 credito = 1 EUR**.
 
 ## Avvio
 
+Serve **Node.js** (18 o successivo). I comandi vanno lanciati **nella cartella del progetto**, quella che contiene `package.json` — non sul Desktop e non in una cartella vuota.
+
+1. Crea il repository (pulsante **Create repo** nell’agente, se non l’hai ancora fatto) e copialo in locale:
+
 ```bash
+git clone <url-del-repo> zecca
+cd zecca
+```
+
+2. Copia l’ambiente e avvia:
+
+```bash
+copy .env.example .env
 npm install
 npx prisma db push
 npm run db:seed
 npm run dev
 ```
 
-L’app ascolta su [http://127.0.0.1:4731](http://127.0.0.1:4731). Copia `.env.example` in `.env` se non c’è già.
+Su macOS/Linux usa `cp .env.example .env` al posto di `copy`.
+
+Se `npm` risponde `Could not read package.json` / `ENOENT`, non sei nella cartella giusta: `cd` fino a vedere `package.json` (`dir package.json` su Windows, `ls package.json` altrove).
+
+L’app ascolta su [http://127.0.0.1:4731](http://127.0.0.1:4731).
 
 ### Conti dimostrativi
 
