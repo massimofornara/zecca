@@ -1,0 +1,157 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN
+  CUSTOMER
+}
+
+enum Pocket {
+  VOID
+  TREASURY
+  USER
+  ESCROW
+  BURN
+}
+
+enum LedgerType {
+  MINT
+  PURCHASE_CREDITS
+  SPEND_ON_ORDER
+  CASHOUT_REQUEST
+  CASHOUT_PAID
+  CASHOUT_REJECTED
+  TREASURY_CASHOUT
+  RATE_CHANGE
+}
+
+enum CashoutStatus {
+  PENDING
+  PAID
+  REJECTED
+}
+
+enum OrderStatus {
+  PAID
+  CANCELLED
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  name         String
+  passwordHash String
+  role         Role     @default(CUSTOMER)
+  createdAt    DateTime @default(now())
+
+  orders          Order[]
+  cashouts        CashoutRequest[]
+  creditPurchases CreditPurchase[]
+  ledgerFrom      LedgerEntry[]    @relation("FromUser")
+  ledgerTo        LedgerEntry[]    @relation("ToUser")
+  ledgerActor     LedgerEntry[]    @relation("Actor")
+}
+
+model Product {
+  id           String   @id @default(cuid())
+  slug         String   @unique
+  name         String
+  description  String
+  imageKey     String
+  priceCredits Int
+  stock        Int
+  active       Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  orderItems   OrderItem[]
+}
+
+model Order {
+  id           String      @id @default(cuid())
+  userId       String
+  user         User        @relation(fields: [userId], references: [id])
+  totalCredits Int
+  status       OrderStatus @default(PAID)
+  createdAt    DateTime    @default(now())
+  items        OrderItem[]
+  ledger       LedgerEntry[]
+}
+
+model OrderItem {
+  id          String  @id @default(cuid())
+  orderId     String
+  order       Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId   String
+  product     Product @relation(fields: [productId], references: [id])
+  quantity    Int
+  unitCredits Int
+}
+
+model LedgerEntry {
+  id             String     @id @default(cuid())
+  type           LedgerType
+  amountCredits  Int
+  eurCents       Int        @default(0)
+  eurDirection   String?
+  fromPocket     Pocket
+  toPocket       Pocket
+  fromUserId     String?
+  toUserId       String?
+  actorId        String?
+  orderId        String?
+  cashoutId      String?
+  creditPurchaseId String?
+  note           String?
+  metadata       String?
+  createdAt      DateTime   @default(now())
+
+  fromUser       User?           @relation("FromUser", fields: [fromUserId], references: [id])
+  toUser         User?           @relation("ToUser", fields: [toUserId], references: [id])
+  actor          User?           @relation("Actor", fields: [actorId], references: [id])
+  order          Order?          @relation(fields: [orderId], references: [id])
+  cashout        CashoutRequest? @relation(fields: [cashoutId], references: [id])
+  creditPurchase CreditPurchase? @relation(fields: [creditPurchaseId], references: [id])
+
+  @@index([createdAt])
+  @@index([type])
+  @@index([fromUserId])
+  @@index([toUserId])
+}
+
+model CashoutRequest {
+  id         String        @id @default(cuid())
+  userId     String?
+  user       User?         @relation(fields: [userId], references: [id])
+  credits    Int
+  eurCents   Int
+  status     CashoutStatus @default(PENDING)
+  isTreasury Boolean       @default(false)
+  adminNote  String?
+  createdAt  DateTime      @default(now())
+  resolvedAt DateTime?
+  ledger     LedgerEntry[]
+}
+
+model CreditPurchase {
+  id              String   @id @default(cuid())
+  userId          String
+  user            User     @relation(fields: [userId], references: [id])
+  credits         Int
+  eurCents        Int
+  method          String
+  stripeSessionId String?  @unique
+  status          String
+  createdAt       DateTime @default(now())
+  ledger          LedgerEntry[]
+}
+
+model Setting {
+  key   String @id
+  value String
+}

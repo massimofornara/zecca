@@ -1,0 +1,34 @@
+export function formatCredits(amount: number): string {
+  return `${amount.toLocaleString("it-IT")} cr`;
+}
+
+export function formatEurFromCents(cents: number): string {
+  return new Intl.NumberFormat("it-IT", {
+    style: "currency",
+    currency: "EUR",
+  }).format(cents / 100);
+}
+
+export function formatSignedCredits(amount: number): string {
+  const sign = amount > 0 ? "+" : "";
+  return `${sign}${amount.toLocaleString("it-IT")} cr`;
+}
+
+export const LEDGER_LABELS: Record<string, string> = {
+  MINT: "Conio",
+  PURCHASE_CREDITS: "Acquisto crediti",
+  SPEND_ON_ORDER: "Spesa in bottega",
+  CASHOUT_REQUEST: "Richiesta di fusione",
+  CASHOUT_PAID: "Fusione pagata",
+  CASHOUT_REJECTED: "Fusione rifiutata",
+  TREASURY_CASHOUT: "Fusione tesoreria",
+  RATE_CHANGE: "Cambio tasso",
+};
+
+export const POCKET_LABELS: Record<string, string> = {
+  VOID: "Vuoto (origine del conio)",
+  TREASURY: "Tesoreria",
+  USER: "Portafoglio",
+  ESCROW: "In fusione",
+  BURN: "Fuso / speso",
+};
