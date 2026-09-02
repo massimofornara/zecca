@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input";
 import { formatCredits, formatEurFromCents } from "@/lib/format";
 import { formatRomeDate } from "@/lib/rome-day";
 import { prisma } from "@/lib/db";
+import { formatIbanDisplay } from "@/lib/iban";
 import { treasuryBalance } from "@/lib/zecca/ledger";
 
 export const metadata = { title: "Fusioni" };
@@ -29,14 +30,15 @@ export default async function FusioniPage() {
     <div>
       <h1 className="font-display text-4xl text-primary">Fusioni</h1>
       <p className="mt-2 text-muted-foreground">
-        I clienti chiedono di convertire il forgiato. Tu segni pagato quando hai inviato i soldi. In demo
-        basta chiudere: i crediti si bruciano e gli euro escono dal conto.
+        I clienti chiedono di convertire il forgiato. Tu fai il bonifico <strong>dalla tua banca</strong> verso
+        l’IBAN indicato, poi confermi qui. Zecca non ha accesso ai conti e non dispone SEPA da sola.
       </p>
 
       <section className="metal-frame mt-8 rounded-md bg-card p-5">
         <h2 className="font-display text-2xl text-primary">Fusione tesoreria</h2>
         <p className="mt-1 text-sm text-muted-foreground">
-          Tu non sei soggetto alla forgia. Tesoreria attuale: {formatCredits(treasury)}.
+          Registra l’uscita di crediti dalla tesoreria. L’euro vero, se c’è, lo muovi tu dal conto della
+          casa. Tesoreria attuale: {formatCredits(treasury)}.
         </p>
         <form action={treasuryCashoutForm} className="mt-4 flex flex-wrap items-end gap-3">
           <label className="text-sm">
@@ -62,12 +64,21 @@ export default async function FusioniPage() {
               <p className="font-ledger text-ember">
                 {formatCredits(r.credits)} → {formatEurFromCents(r.eurCents)}
               </p>
+              {r.iban && (
+                <p className="mt-2 font-ledger text-sm">
+                  {r.ibanHolder} · {formatIbanDisplay(r.iban)}
+                </p>
+              )}
               <p className="text-xs text-muted-foreground">{formatRomeDate(r.createdAt)}</p>
-              <div className="mt-3 flex flex-wrap gap-2">
-                <form action={resolveCashoutForm}>
+              <div className="mt-3 flex flex-wrap items-end gap-2">
+                <form action={resolveCashoutForm} className="space-y-2">
                   <input type="hidden" name="cashoutId" value={r.id} />
                   <input type="hidden" name="action" value="pay" />
-                  <SubmitButton size="sm">Segna pagata</SubmitButton>
+                  <label className="flex items-start gap-2 text-xs text-muted-foreground">
+                    <input type="checkbox" name="sepaConfirm" value="on" className="mt-0.5" required />
+                    Ho disposto il bonifico SEPA da un conto a mio nome verso questo IBAN.
+                  </label>
+                  <SubmitButton size="sm">Conferma bonifico eseguito</SubmitButton>
                 </form>
                 <form action={resolveCashoutForm}>
                   <input type="hidden" name="cashoutId" value={r.id} />

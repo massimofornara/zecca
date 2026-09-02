@@ -19,8 +19,9 @@ export default async function HomePage() {
         <p className="text-xs uppercase tracking-[0.35em] text-primary/80">San Rocco al Forno · Liguria</p>
         <Wordmark size="lg" className="mt-4" />
         <p className="mt-6 max-w-2xl text-lg text-muted-foreground md:text-xl">
-          Massimo Fornara conia i crediti. Tu li compri in euro, li spendi in bottega, e — se oggi hai
-          nutrito la forgia — puoi fonderli di nuovo in denaro.
+          Massimo Fornara conia i crediti (non euro di banca). Tu li compri — in demo o, se Stripe è
+          acceso, in euro veri — li spendi in bottega, e se la forgia di oggi è calda puoi chiedere un
+          bonifico. Zecca non dispone i pagamenti: lo fa il zecchiere.
         </p>
         <div className="mt-8 flex flex-wrap gap-3">
           <Link href="/vetrina" className={cn(buttonVariants({ size: "lg" }), "px-5")}>

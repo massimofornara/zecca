@@ -132,6 +132,8 @@ model CashoutRequest {
   eurCents   Int
   status     CashoutStatus @default(PENDING)
   isTreasury Boolean       @default(false)
+  iban       String?
+  ibanHolder String?
   adminNote  String?
   createdAt  DateTime      @default(now())
   resolvedAt DateTime?

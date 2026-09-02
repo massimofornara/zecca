@@ -12,17 +12,21 @@ const PACKS = [25, 50, 100, 150, 300];
 export function BuyCreditsForm({
   eurCentsPerCredit,
   stripeEnabled,
+  demoEnabled,
   treasury,
 }: {
   eurCentsPerCredit: number;
   stripeEnabled: boolean;
+  demoEnabled: boolean;
   treasury: number;
 }) {
   const [state, action] = useActionState(demoBuyCreditsAction, null);
   const [credits, setCredits] = useState(50);
+  const [stripeError, setStripeError] = useState<string | null>(null);
   const eur = formatEurFromCents(credits * eurCentsPerCredit);
 
   async function stripePay() {
+    setStripeError(null);
     const res = await fetch("/api/stripe/checkout", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -30,14 +34,26 @@ export function BuyCreditsForm({
     });
     const data = (await res.json()) as { url?: string; error?: string };
     if (data.url) window.location.href = data.url;
-    else alert(data.error ?? "Stripe non disponibile.");
+    else setStripeError(data.error ?? "Stripe non disponibile.");
   }
 
   return (
     <div className="metal-frame rounded-md bg-card p-5 md:p-7">
-      <ErrorBanner message={state?.error} />
+      <ErrorBanner message={state?.error || stripeError} />
       <OkBanner message={state?.ok} />
-      <p className="text-sm text-muted-foreground">
+      {stripeEnabled ? (
+        <p className="rounded-md border border-primary/30 bg-primary/10 px-3 py-2 text-sm">
+          Pagamenti veri attivi: gli euro entrano sul conto Stripe della zecca. I crediti restano un
+          registro interno.
+        </p>
+      ) : (
+        <p className="rounded-md border border-ember/40 bg-ember/10 px-3 py-2 text-sm">
+          Ora sei in modalità dimostrativa: nessun euro reale si muove. Per i fondi veri il zecchiere
+          imposta <span className="font-ledger">STRIPE_SECRET_KEY</span> e il webhook nel{" "}
+          <span className="font-ledger">.env</span>.
+        </p>
+      )}
+      <p className="mt-4 text-sm text-muted-foreground">
         Tesoreria disponibile:{" "}
         <span className="font-ledger text-foreground">{treasury.toLocaleString("it-IT")} cr</span>. Tasso: 1
         credito = {formatEurFromCents(eurCentsPerCredit)}.
@@ -56,7 +72,7 @@ export function BuyCreditsForm({
           </button>
         ))}
       </div>
-      <form action={action} className="mt-5 space-y-4">
+      <div className="mt-5 space-y-4">
         <label className="block text-sm">
           Crediti da comprare
           <Input
@@ -66,22 +82,30 @@ export function BuyCreditsForm({
             value={credits}
             onChange={(e) => setCredits(Number(e.target.value))}
             className="mt-1 max-w-xs"
+            form="buy-credits-demo"
           />
         </label>
         <p className="font-ledger text-xl text-ember">{eur}</p>
         <div className="flex flex-wrap gap-3">
-          <SubmitButton>Paga in demo (subito)</SubmitButton>
           {stripeEnabled && (
             <button
               type="button"
               onClick={stripePay}
-              className="h-9 rounded-lg border border-border px-3 text-sm hover:bg-muted"
+              className="h-9 rounded-lg bg-primary px-4 text-sm text-primary-foreground"
             >
-              Paga con Stripe
+              Paga in euro veri (Stripe)
             </button>
           )}
+          {demoEnabled && (
+            <form id="buy-credits-demo" action={action}>
+              <input type="hidden" name="credits" value={credits} />
+              <SubmitButton variant={stripeEnabled ? "outline" : "default"}>
+                {stripeEnabled ? "Paga in demo" : "Paga in demo (subito)"}
+              </SubmitButton>
+            </form>
+          )}
         </div>
-      </form>
+      </div>
     </div>
   );
 }

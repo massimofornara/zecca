@@ -94,6 +94,8 @@ async function main() {
       userId: customer.id,
       role: "CUSTOMER",
       credits: 30,
+      iban: "IT60X0542811101000000123456",
+      ibanHolder: "Chiara Test",
       db,
     });
     assert.equal(await pocketBalance("USER", customer.id, db), 120);

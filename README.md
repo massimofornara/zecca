@@ -69,15 +69,28 @@ Chiara ha già speso oggi in bottega: la sua forgia è tiepida. Luca ha crediti 
 5. In **Fusione** chiedi di convertire.
 6. Torna come Massimo: la richiesta è in **Fusioni**. Segna pagata. Il libro mastro registra tutto.
 
-## Stripe (opzionale)
+## Fondi reali
 
-Il checkout demo non richiede chiavi. Per i pagamenti veri:
+Zecca **non è una banca** e **non dispone bonifici**. I crediti sono un libro mastro.
 
-1. Imposta `STRIPE_SECRET_KEY` e `STRIPE_WEBHOOK_SECRET` nel `.env`.
-2. Espone `/api/stripe/webhook` al webhook `checkout.session.completed`.
-3. Riavvia. In **Crediti** compare *Paga con Stripe*.
+**Euro in ingresso (veri):** Stripe Checkout.
 
-Senza queste variabili resta solo il pagamento dimostrativo.
+1. Crea un account Stripe e le chiavi.
+2. Nel `.env`:
+
+```
+STRIPE_SECRET_KEY="sk_live_..."
+STRIPE_WEBHOOK_SECRET="whsec_..."
+```
+
+3. Webhook su `/api/stripe/webhook` per `checkout.session.completed`.
+4. Riavvia. In **Crediti** compare *Paga in euro veri (Stripe)*. Il pagamento demo si nasconde (per riaverlo: `ZECCA_ALLOW_DEMO_PAY=1`).
+
+Senza queste variabili resta solo il pagamento dimostrativo: nessun euro si muove.
+
+**Euro in uscita (veri):** il cliente indica IBAN e intestatario. Il zecchiere fa il SEPA **dal proprio home banking**, poi conferma in **Fusioni**. L’app non ha accesso ai conti.
+
+Non esiste un pulsante che “conia e manda” soldi a un IBAN.
 
 ## Libro mastro
 

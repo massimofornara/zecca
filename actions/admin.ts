@@ -54,8 +54,16 @@ export async function resolveCashoutAction(
   const action = String(formData.get("action") ?? "") as "pay" | "reject";
   const adminNote = String(formData.get("adminNote") ?? "");
   if (action !== "pay" && action !== "reject") return { error: "Azione non valida." };
+  if (action === "pay" && formData.get("sepaConfirm") !== "on") {
+    return { error: "Conferma di aver disposto il bonifico SEPA dal tuo conto. Zecca non invia i soldi." };
+  }
   try {
-    await resolveCashout({ cashoutId, actorId: admin.id, action, adminNote });
+    await resolveCashout({
+      cashoutId,
+      actorId: admin.id,
+      action,
+      adminNote: adminNote || (action === "pay" ? "Bonifico SEPA disposto dal zecchiere" : undefined),
+    });
     revalidatePath("/zecchiere/fusioni");
     revalidatePath("/zecchiere/libro-mastro");
     revalidatePath("/portafoglio");

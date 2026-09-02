@@ -29,8 +29,8 @@ export default async function FusionePage() {
       <p className="text-xs uppercase tracking-[0.28em] text-primary/80">Fusione</p>
       <h1 className="mt-1 font-display text-4xl text-primary">Fondi i crediti</h1>
       <p className="mt-3 max-w-2xl text-muted-foreground">
-        Solo il metallo forgiato oggi può tornare euro. La richiesta va al zecchiere, che segna il
-        pagamento (bonifico o PayPal, nella vita reale). In demo chiude il movimento nel libro mastro.
+        Solo il metallo forgiato oggi può tornare euro. Indica l’IBAN: Massimo farà il bonifico dal suo
+        conto. L’app non è una banca e non invia denaro.
       </p>
       <div className="mt-8">
         <CashoutForm
@@ -52,6 +52,7 @@ export default async function FusionePage() {
                 <div>
                   <p className="font-ledger">
                     {formatCredits(r.credits)} → {formatEurFromCents(r.eurCents)}
+                    {r.iban ? ` · ${r.iban}` : ""}
                   </p>
                   <p className="text-xs text-muted-foreground">{formatRomeDate(r.createdAt)}</p>
                 </div>

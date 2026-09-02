@@ -79,16 +79,22 @@ export async function requestCashoutAction(
   const user = await requireUser();
   if (!user) return { error: "Devi entrare per chiedere una fusione." };
   const credits = Number(formData.get("credits"));
+  const iban = String(formData.get("iban") ?? "");
+  const ibanHolder = String(formData.get("ibanHolder") ?? "");
   try {
     await requestCustomerCashout({
       userId: user.id,
       role: user.role,
       credits,
+      iban,
+      ibanHolder,
     });
     revalidatePath("/fusione");
     revalidatePath("/portafoglio");
     revalidatePath("/zecchiere/fusioni");
-    return { ok: "Richiesta inviata al zecchiere. I crediti restano in fusione fino al pagamento." };
+    return {
+      ok: "Richiesta inviata. Massimo vedrà il tuo IBAN e, se accetta, disporrà un bonifico dalla sua banca. Zecca non invia i soldi da sola.",
+    };
   } catch (error) {
     return { error: isZeccaError(error) ? error.message : "Richiesta non riuscita." };
   }

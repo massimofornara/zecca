@@ -17,7 +17,8 @@ export default async function TesoreriaPage() {
       <p className="text-xs uppercase tracking-[0.28em] text-primary/80">Casa della zecca</p>
       <h1 className="mt-1 font-display text-4xl text-primary">Tesoreria</h1>
       <p className="mt-2 text-muted-foreground">
-        Massimo, qui vedi il metallo e il denaro: quanto è stato coniato, dove sta, quanto è tornato euro.
+        Massimo, qui vedi il metallo e il registro: conio, portafogli, fusioni. Gli euro veri (Stripe in
+        ingresso, bonifico SEPA in uscita) passano dai tuoi conti, non da un motore interno.
       </p>
 
       <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">

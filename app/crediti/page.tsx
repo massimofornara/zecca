@@ -5,7 +5,7 @@ import { BuyCreditsForm } from "@/components/shop/BuyCreditsForm";
 import { OkBanner, ErrorBanner } from "@/components/ui/banners";
 import { getSettings } from "@/lib/zecca/settings";
 import { treasuryBalance } from "@/lib/zecca/ledger";
-import { isStripeEnabled } from "@/lib/stripe";
+import { isDemoPayEnabled, isStripeEnabled } from "@/lib/stripe";
 
 export const metadata = { title: "Compra crediti" };
 
@@ -24,8 +24,8 @@ export default async function CreditiPage({
       <p className="text-xs uppercase tracking-[0.28em] text-primary/80">Dalla tesoreria</p>
       <h1 className="mt-1 font-display text-4xl text-primary">Compra crediti</h1>
       <p className="mt-3 max-w-2xl text-muted-foreground">
-        I crediti esistono già: il zecchiere li ha coniati. Tu versi euro e la tesoreria te li passa. Se
-        la cassa di metallo è vuota, bisogna aspettare un nuovo conio.
+        I crediti esistono già: il zecchiere li ha coniati. Con Stripe versi euro veri sul conto del
+        zecchiere; i crediti restano un registro. Senza chiavi Stripe il pagamento è solo dimostrativo.
       </p>
       <div className="mt-6 space-y-3">
         {stripe === "ok" && (
@@ -37,6 +37,7 @@ export default async function CreditiPage({
         <BuyCreditsForm
           eurCentsPerCredit={settings.eurCentsPerCredit}
           stripeEnabled={isStripeEnabled()}
+          demoEnabled={isDemoPayEnabled()}
           treasury={treasury}
         />
       </div>

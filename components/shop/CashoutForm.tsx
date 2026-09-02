@@ -25,7 +25,8 @@ export function CashoutForm({
       <OkBanner message={state?.ok} />
       <p className="text-sm text-muted-foreground">
         Oggi è forgiato il {percent}% del portafoglio: puoi chiedere fino a {formatCredits(forged)} (
-        {formatEurFromCents(forged * eurCentsPerCredit)}).
+        {formatEurFromCents(forged * eurCentsPerCredit)}). Il bonifico lo fa il zecchiere dal suo conto:
+        Zecca registra la richiesta, non muove i soldi.
       </p>
       <label className="block text-sm">
         Crediti da fondere
@@ -39,8 +40,23 @@ export function CashoutForm({
           className="mt-1 max-w-xs"
         />
       </label>
+      <label className="block text-sm">
+        Intestatario del conto
+        <Input name="ibanHolder" required disabled={disabled} className="mt-1 max-w-md" placeholder="Nome e cognome" />
+      </label>
+      <label className="block text-sm">
+        IBAN
+        <Input
+          name="iban"
+          required
+          disabled={disabled}
+          className="mt-1 max-w-md font-ledger"
+          placeholder="IT00 X000 0000 0000 0000 0000 000"
+          autoComplete="off"
+        />
+      </label>
       <SubmitButton disabled={disabled}>
-        {disabled ? "Forgia ancora fredda" : "Invia al zecchiere"}
+        {disabled ? "Forgia ancora fredda" : "Chiedi il bonifico al zecchiere"}
       </SubmitButton>
     </form>
   );

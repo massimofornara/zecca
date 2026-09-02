@@ -1,6 +1,7 @@
 import type { PrismaClient, Role } from "@prisma/client";
 import { prisma as defaultPrisma } from "@/lib/db";
 import { ZeccaError } from "@/lib/errors";
+import { isValidIban, normalizeIban } from "@/lib/iban";
 import { appendLedger, pocketBalance } from "@/lib/zecca/ledger";
 import { getForgeState } from "@/lib/zecca/forge";
 import { creditsToEurCents, getSettings } from "@/lib/zecca/settings";
@@ -9,6 +10,8 @@ export async function requestCustomerCashout(input: {
   userId: string;
   role: Role;
   credits: number;
+  iban: string;
+  ibanHolder: string;
   db?: PrismaClient;
 }) {
   const db = input.db ?? defaultPrisma;
@@ -31,6 +34,18 @@ export async function requestCustomerCashout(input: {
     );
   }
 
+  const holder = input.ibanHolder.trim();
+  if (holder.length < 2) {
+    throw new ZeccaError("Indica l’intestatario del conto che riceverà il bonifico.", "INVALID_IBAN");
+  }
+  if (!isValidIban(input.iban)) {
+    throw new ZeccaError(
+      "IBAN non valido. Usa un IBAN italiano (27 caratteri). Zecca non dispone il bonifico: lo fa il zecchiere dalla sua banca.",
+      "INVALID_IBAN",
+    );
+  }
+  const iban = normalizeIban(input.iban);
+
   const settings = await getSettings(db);
   const eurCents = creditsToEurCents(credits, settings.eurCentsPerCredit);
 
@@ -47,6 +62,8 @@ export async function requestCustomerCashout(input: {
         eurCents,
         status: "PENDING",
         isTreasury: false,
+        iban,
+        ibanHolder: holder,
       },
     });
 
@@ -61,7 +78,7 @@ export async function requestCustomerCashout(input: {
         actorId: input.userId,
         cashoutId: cashout.id,
         eurCents,
-        note: `Richiesta di fusione: ${credits} cr → ${(eurCents / 100).toFixed(2)} EUR`,
+        note: `Richiesta di fusione: ${credits} cr → ${(eurCents / 100).toFixed(2)} EUR verso ${iban}`,
       },
       tx,
     );
