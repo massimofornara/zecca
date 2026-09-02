@@ -30,6 +30,7 @@ export async function mintAction(
 }
 
 export async function treasuryCashoutAction(
+  _prev: { error?: string; ok?: string } | null,
   formData: FormData,
 ): Promise<{ error?: string; ok?: string }> {
   const admin = await requireAdmin();
@@ -46,6 +47,7 @@ export async function treasuryCashoutAction(
 }
 
 export async function resolveCashoutAction(
+  _prev: { error?: string; ok?: string } | null,
   formData: FormData,
 ): Promise<{ error?: string; ok?: string }> {
   const admin = await requireAdmin();
@@ -153,14 +155,6 @@ export async function upsertProductAction(
   revalidatePath("/zecchiere/prodotti");
   revalidatePath("/vetrina");
   return { ok: "Prodotto salvato." };
-}
-
-export async function treasuryCashoutForm(formData: FormData): Promise<void> {
-  await treasuryCashoutAction(formData);
-}
-
-export async function resolveCashoutForm(formData: FormData): Promise<void> {
-  await resolveCashoutAction(formData);
 }
 
 export async function saveForgeSettingsForm(formData: FormData): Promise<void> {

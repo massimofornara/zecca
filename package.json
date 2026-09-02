@@ -10,7 +10,8 @@
     "postinstall": "prisma generate",
     "db:seed": "tsx prisma/seed.ts",
     "db:reset": "prisma db push --force-reset && tsx prisma/seed.ts",
-    "test:flow": "tsx scripts/test-flow.ts"
+    "test:flow": "tsx scripts/test-flow.ts",
+    "check:live": "tsx scripts/check-live.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

@@ -9,12 +9,17 @@ export async function purchaseCredits(input: {
   credits: number;
   method: "demo" | "stripe";
   stripeSessionId?: string | null;
+  /** Importo già verificato (es. da Stripe). Se assente, si calcola dal tasso corrente. */
+  eurCents?: number;
   db?: PrismaClient;
 }) {
   const db = input.db ?? defaultPrisma;
   const credits = Math.floor(input.credits);
   if (!Number.isFinite(credits) || credits <= 0) {
     throw new ZeccaError("Scegli un numero di crediti da acquistare.", "INVALID_AMOUNT");
+  }
+  if (credits > 10_000) {
+    throw new ZeccaError("Al massimo 10.000 crediti per acquisto.", "INVALID_AMOUNT");
   }
 
   return db.$transaction(async (tx) => {
@@ -27,7 +32,10 @@ export async function purchaseCredits(input: {
     }
 
     const settings = await getSettings(db);
-    const eurCents = creditsToEurCents(credits, settings.eurCentsPerCredit);
+    const eurCents =
+      input.eurCents != null && Number.isFinite(input.eurCents) && input.eurCents > 0
+        ? Math.floor(input.eurCents)
+        : creditsToEurCents(credits, settings.eurCentsPerCredit);
 
     const purchase = await tx.creditPurchase.create({
       data: {

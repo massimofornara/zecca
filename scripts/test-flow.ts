@@ -101,6 +101,21 @@ async function main() {
     assert.equal(await pocketBalance("USER", customer.id, db), 120);
     assert.equal(await pocketBalance("ESCROW", customer.id, db), 30);
 
+    let badIban = false;
+    try {
+      await requestCustomerCashout({
+        userId: customer.id,
+        role: "CUSTOMER",
+        credits: 1,
+        iban: "IT00INVALID",
+        ibanHolder: "Chiara Test",
+        db,
+      });
+    } catch (error) {
+      badIban = error instanceof Error && error.message.includes("IBAN non valido");
+    }
+    assert.equal(badIban, true, "IBAN invalido deve fallire");
+
     const pending = await db.cashoutRequest.findMany({ where: { status: "PENDING" } });
     assert.equal(pending.length, 1);
     assert.equal(pending[0].id, cashout.id);

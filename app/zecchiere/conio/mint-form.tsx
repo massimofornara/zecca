@@ -16,7 +16,7 @@ export function MintForm() {
       <OkBanner message={state?.ok} />
       <div className="space-y-1.5">
         <Label htmlFor="amount">Crediti da coniare</Label>
-        <Input id="amount" name="amount" type="number" min={1} defaultValue={500} required />
+        <Input id="amount" name="amount" type="number" min={1} max={1000000} defaultValue={500} required />
       </div>
       <div className="space-y-1.5">
         <Label htmlFor="note">Nota sul lotto</Label>

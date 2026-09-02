@@ -9,7 +9,13 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Wordmark } from "@/components/brand/Wordmark";
 
-export function LoginForm({ callbackUrl }: { callbackUrl?: string }) {
+export function LoginForm({
+  callbackUrl,
+  showDemo = true,
+}: {
+  callbackUrl?: string;
+  showDemo?: boolean;
+}) {
   const [state, action] = useActionState(loginAction, null);
   return (
     <AuthCard
@@ -24,7 +30,7 @@ export function LoginForm({ callbackUrl }: { callbackUrl?: string }) {
         <Field id="password" name="password" label="Password" type="password" autoComplete="off" />
         <SubmitButton className="w-full">Entra</SubmitButton>
       </form>
-      <DemoLogins />
+      {showDemo ? <DemoLogins /> : null}
     </AuthCard>
   );
 }

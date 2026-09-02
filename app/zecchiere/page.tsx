@@ -2,6 +2,7 @@ import { formatCredits, formatEurFromCents } from "@/lib/format";
 import { totals } from "@/lib/zecca/ledger";
 import { prisma } from "@/lib/db";
 import { loyalToday } from "@/lib/zecca/forge";
+import { getLiveReport } from "@/lib/live";
 
 export const metadata = { title: "Tesoreria" };
 
@@ -11,6 +12,7 @@ export default async function TesoreriaPage() {
     prisma.cashoutRequest.count({ where: { status: "PENDING" } }),
     loyalToday(),
   ]);
+  const live = getLiveReport();
 
   return (
     <div>
@@ -20,6 +22,56 @@ export default async function TesoreriaPage() {
         Massimo, qui vedi il metallo e il registro: conio, portafogli, fusioni. Gli euro veri (Stripe in
         ingresso, bonifico SEPA in uscita) passano dai tuoi conti, non da un motore interno.
       </p>
+
+      <section className="metal-frame mt-6 rounded-md bg-card p-5">
+        <p className="text-xs uppercase tracking-[0.2em] text-primary/80">Stato fondi</p>
+        <p className="mt-1 font-display text-2xl text-primary">
+          {live.readyForLive
+            ? "Carte live (Stripe)"
+            : live.readyForCardPayments
+              ? "Carte in test Stripe"
+              : "Dimostrativo"}
+        </p>
+        <ul className="mt-4 space-y-2 text-sm">
+          {live.checks.map((c) => (
+            <li key={c.id}>
+              <span className={c.ok ? "text-ember" : "text-muted-foreground"}>{c.ok ? "●" : "○"}</span>{" "}
+              <span className="font-medium">{c.title}</span>
+              <span className="block pl-4 text-muted-foreground">{c.detail}</span>
+            </li>
+          ))}
+        </ul>
+      </section>
+
+      <section className="paper mt-6 rounded-md p-6">
+        <h2 className="font-display text-2xl">Da fittizio a reale — cosa resta a te</h2>
+        <ol className="mt-4 list-decimal space-y-3 pl-5 text-sm leading-relaxed">
+          <li>
+            Apri un account su <strong>stripe.com</strong>, verifica l’identità e collega il conto
+            bancario su cui vuoi ricevere i pagamenti con carta.
+          </li>
+          <li>
+            Copia nel <span className="font-ledger">.env</span> (mai in chat){" "}
+            <span className="font-ledger">STRIPE_SECRET_KEY</span> e{" "}
+            <span className="font-ledger">STRIPE_WEBHOOK_SECRET</span>. Prima <span className="font-ledger">sk_test_</span>,
+            poi <span className="font-ledger">sk_live_</span>.
+          </li>
+          <li>
+            Pubblica il sito in HTTPS e imposta <span className="font-ledger">AUTH_URL</span> e un{" "}
+            <span className="font-ledger">AUTH_SECRET</span> nuovo. Webhook:{" "}
+            <span className="font-ledger">/api/stripe/webhook</span> → evento{" "}
+            <span className="font-ledger">checkout.session.completed</span>.
+          </li>
+          <li>
+            Le fusioni: apri <strong>Fusioni</strong>, copia IBAN e importo, disponi il SEPA dal tuo
+            home banking, poi spunta «Ho disposto il bonifico».
+          </li>
+          <li>
+            Se vendi in Italia, parla col commercialista (Partita IVA, scontrini, privacy). I crediti
+            non sono euro di banca: coniare non crea denaro.
+          </li>
+        </ol>
+      </section>
 
       <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         <Coin label="Coniati" value={formatCredits(flow.minted)} />

@@ -1,8 +1,11 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { getStripe, isStripeEnabled } from "@/lib/stripe";
+import { publicOrigin } from "@/lib/public-url";
 import { getSettings, creditsToEurCents } from "@/lib/zecca/settings";
 import { treasuryBalance } from "@/lib/zecca/ledger";
+
+const MAX_CREDITS = 10_000;
 
 export async function POST(request: Request) {
   if (!isStripeEnabled()) {
@@ -21,6 +24,12 @@ export async function POST(request: Request) {
   const credits = Math.floor(Number(body.credits ?? 0));
   if (credits <= 0) {
     return NextResponse.json({ error: "Importo non valido." }, { status: 400 });
+  }
+  if (credits > MAX_CREDITS) {
+    return NextResponse.json(
+      { error: `Al massimo ${MAX_CREDITS.toLocaleString("it-IT")} crediti per pagamento.` },
+      { status: 400 },
+    );
   }
 
   const treasury = await treasuryBalance();
@@ -41,10 +50,13 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Stripe non disponibile." }, { status: 400 });
   }
 
-  const origin = new URL(request.url).origin;
+  const origin = publicOrigin(request.url);
   const checkout = await stripe.checkout.sessions.create({
     mode: "payment",
-    customer_email: session.user.email,
+    locale: "it",
+    customer_email: session.user.email ?? undefined,
+    client_reference_id: session.user.id,
+    payment_method_types: ["card"],
     line_items: [
       {
         quantity: 1,
@@ -53,7 +65,7 @@ export async function POST(request: Request) {
           unit_amount: eurCents,
           product_data: {
             name: `${credits} crediti Zecca`,
-            description: "Acquisto crediti dalla tesoreria della zecca",
+            description: "Acquisto crediti dalla tesoreria. Non sono moneta a corso legale.",
           },
         },
       },
@@ -61,6 +73,14 @@ export async function POST(request: Request) {
     metadata: {
       userId: session.user.id,
       credits: String(credits),
+      eurCents: String(eurCents),
+    },
+    payment_intent_data: {
+      description: `Zecca: ${credits} crediti`,
+      metadata: {
+        userId: session.user.id,
+        credits: String(credits),
+      },
     },
     success_url: `${origin}/crediti?stripe=ok`,
     cancel_url: `${origin}/crediti?stripe=annullato`,

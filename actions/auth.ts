@@ -6,6 +6,7 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { signIn, signOut } from "@/auth";
 import { prisma } from "@/lib/db";
+import { isDemoAccount, isDemoLoginAllowed } from "@/lib/live";
 
 const credentialsSchema = z.object({
   email: z.string().min(3),
@@ -19,6 +20,9 @@ export async function loginAction(_prev: { error?: string } | null, formData: Fo
   });
   if (!parsed.success) {
     return { error: "Email o password non validi." };
+  }
+  if (isDemoAccount(parsed.data.email) && !isDemoLoginAllowed()) {
+    return { error: "I conti dimostrativi sono spenti in modalità live." };
   }
   try {
     await signIn("credentials", {

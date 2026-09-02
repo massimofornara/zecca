@@ -67,11 +67,27 @@ Chiara ha già speso oggi in bottega: la sua forgia è tiepida. Luca ha crediti 
 3. Metti in cesta un pezzo dalla **Vetrina** e paga in crediti.
 4. Guarda la **Forgia** nel portafoglio: il calore sale, una quota diventa fondibile.
 5. In **Fusione** chiedi di convertire.
-6. Torna come Massimo: la richiesta è in **Fusioni**. Segna pagata. Il libro mastro registra tutto.
+6. Torna come Massimo: in **Fusioni** copia IBAN e importo, poi conferma il bonifico.
 
-## Fondi reali
+## Da fittizio a reale
 
-Zecca **non è una banca** e **non dispone bonifici**. I crediti sono un libro mastro.
+Zecca **non diventa una banca**. I crediti restano un libro mastro. Per muovere euro veri servono Stripe (ingresso) e il tuo home banking (uscita). Nessun agente, me compreso, può inventare le chiavi o disporre un SEPA.
+
+Cosa serve, e chi lo può fare:
+
+| Passo | Chi |
+| --- | --- |
+| Account Stripe, verifica identità, conto collegato | Tu, su stripe.com |
+| `STRIPE_SECRET_KEY` (`sk_test_` poi `sk_live_`) e `STRIPE_WEBHOOK_SECRET` nel `.env` | Tu (non inviarle in chat) |
+| Webhook `checkout.session.completed` → `https://tuo-dominio/api/stripe/webhook` | Tu |
+| Sito in HTTPS + `AUTH_URL` + `AUTH_SECRET` nuovo | Tu (hosting / Publish) |
+| Partita IVA / inquadramento se vendi in Italia | Tu (commercialista) |
+| Bonifici ai clienti (fusioni) | Tu, dal home banking |
+| Codice (Checkout, webhook firmato, IBAN, blocco demo, checklist, blocco SEPA copiabile) | Questo repo |
+
+Controlla lo stato: `npm run check:live`. In **Zecchiere → Tesoreria** vedi la stessa lista.
+
+Senza le chiavi Stripe **nessuno**, me compreso, può far entrare euro veri.
 
 **Euro in ingresso (veri):** Stripe Checkout.
 
@@ -79,16 +95,18 @@ Zecca **non è una banca** e **non dispone bonifici**. I crediti sono un libro m
 2. Nel `.env`:
 
 ```
+AUTH_URL="https://tuo-dominio"
+AUTH_SECRET="…generato da npm run check:live"
 STRIPE_SECRET_KEY="sk_live_..."
 STRIPE_WEBHOOK_SECRET="whsec_..."
 ```
 
 3. Webhook su `/api/stripe/webhook` per `checkout.session.completed`.
-4. Riavvia. In **Crediti** compare *Paga in euro veri (Stripe)*. Il pagamento demo si nasconde (per riaverlo: `ZECCA_ALLOW_DEMO_PAY=1`).
+4. Riavvia. In **Crediti** compare *Paga in euro veri (Stripe)*. Il pagamento demo e i conti `@zecca.local` si spengono con la chiave live.
 
 Senza queste variabili resta solo il pagamento dimostrativo: nessun euro si muove.
 
-**Euro in uscita (veri):** il cliente indica IBAN e intestatario. Il zecchiere fa il SEPA **dal proprio home banking**, poi conferma in **Fusioni**. L’app non ha accesso ai conti.
+**Euro in uscita (veri):** il cliente indica IBAN e intestatario. In **Fusioni** compare un blocco da incollare in banca (beneficiario, IBAN, importo, causale). Il zecchiere fa il SEPA **dal proprio home banking**, poi conferma. L’app non ha accesso ai conti.
 
 Non esiste un pulsante che “conia e manda” soldi a un IBAN.
 

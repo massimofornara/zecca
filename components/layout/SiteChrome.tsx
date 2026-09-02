@@ -94,6 +94,12 @@ export function SiteFooter() {
       <p className="mt-2">
         Conio di Massimo Fornara. I crediti vivono nel libro mastro, non su una catena.
       </p>
+      <p className="mt-2">
+        <Link href="/avvertenze" className="underline hover:text-primary">
+          Avvertenze
+        </Link>
+        : i crediti non sono euro di banca.
+      </p>
     </footer>
   );
 }

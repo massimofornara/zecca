@@ -8,6 +8,7 @@ import { isZeccaError } from "@/lib/errors";
 import { purchaseCredits } from "@/lib/zecca/credits";
 import { placeOrder } from "@/lib/zecca/shop";
 import { requestCustomerCashout } from "@/lib/zecca/cashout";
+import { isDemoPayEnabled } from "@/lib/stripe";
 
 export async function addToCartAction(formData: FormData) {
   const productId = String(formData.get("productId") ?? "");
@@ -31,6 +32,9 @@ export async function demoBuyCreditsAction(
 ): Promise<{ error?: string; ok?: string }> {
   const user = await requireUser();
   if (!user) return { error: "Devi entrare per comprare crediti." };
+  if (!isDemoPayEnabled()) {
+    return { error: "Il pagamento demo è spento. Usa Stripe per versare euro veri." };
+  }
   const credits = Number(formData.get("credits"));
   try {
     const result = await purchaseCredits({
