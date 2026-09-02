@@ -8,12 +8,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 
-async function wrapped(_prev: { error?: string; ok?: string } | null, formData: FormData) {
-  return mintAction(formData);
-}
-
 export function MintForm() {
-  const [state, action] = useActionState(wrapped, null);
+  const [state, action] = useActionState(mintAction, null);
   return (
     <form action={action} className="metal-frame space-y-4 rounded-md bg-card p-5 md:p-7">
       <ErrorBanner message={state?.error} />

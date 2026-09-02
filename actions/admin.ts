@@ -9,7 +9,10 @@ import { saveSettings, type ForgeTier } from "@/lib/zecca/settings";
 import { prisma } from "@/lib/db";
 import { CATALOG_SEED } from "@/lib/catalog";
 
-export async function mintAction(formData: FormData): Promise<{ error?: string; ok?: string }> {
+export async function mintAction(
+  _prev: { error?: string; ok?: string } | null,
+  formData: FormData,
+): Promise<{ error?: string; ok?: string }> {
   const admin = await requireAdmin();
   if (!admin) return { error: "Solo il zecchiere può coniare." };
   const amount = Number(formData.get("amount"));

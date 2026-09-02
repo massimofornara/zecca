@@ -50,7 +50,10 @@ export async function demoBuyCreditsAction(
   }
 }
 
-export async function checkoutCartAction(): Promise<{ error?: string }> {
+export async function checkoutCartAction(
+  _prev: { error?: string } | null,
+  _formData?: FormData,
+): Promise<{ error?: string }> {
   const user = await requireUser();
   if (!user) return { error: "Devi entrare per pagare in crediti." };
   const items = await getCart();

@@ -1,7 +1,8 @@
 "use client";
 
 import { useFormStatus } from "react-dom";
-import { Button } from "@/components/ui/button";
+import { buttonVariants } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 
 export function SubmitButton({
   children,
@@ -20,8 +21,12 @@ export function SubmitButton({
 }) {
   const { pending } = useFormStatus();
   return (
-    <Button type="submit" disabled={pending || disabled} variant={variant} size={size} className={className}>
+    <button
+      type="submit"
+      disabled={pending || disabled}
+      className={cn(buttonVariants({ variant, size }), "px-4", className)}
+    >
       {pending ? pendingLabel : children}
-    </Button>
+    </button>
   );
 }
