@@ -5,6 +5,7 @@ import { PageShell } from "@/components/layout/SiteChrome";
 import { EmptyState, OkBanner } from "@/components/ui/banners";
 import { formatCredits } from "@/lib/format";
 import { formatRomeDate } from "@/lib/rome-day";
+import { formatShipping } from "@/lib/shipping";
 import { prisma } from "@/lib/db";
 import { buttonVariants } from "@/components/ui/button";
 
@@ -28,7 +29,9 @@ export default async function OrdiniPage({
     <PageShell>
       <h1 className="font-display text-4xl text-primary">Ordini</h1>
       <div className="mt-4">
-        {ok && <OkBanner message="Ordine pagato in crediti. La forgia di oggi ha preso calore." />}
+        {ok && (
+          <OkBanner message="Ordine pagato in crediti. Il collo è in coda di spedizione." />
+        )}
       </div>
       {orders.length === 0 ? (
         <div className="mt-8">
@@ -40,23 +43,33 @@ export default async function OrdiniPage({
         </div>
       ) : (
         <ul className="mt-8 space-y-4">
-          {orders.map((order) => (
-            <li key={order.id} className="metal-frame rounded-md bg-card p-5">
-              <div className="flex items-baseline justify-between gap-3">
-                <p className="font-ledger text-sm text-muted-foreground">
-                  #{order.id.slice(-6).toUpperCase()} · {formatRomeDate(order.createdAt)}
+          {orders.map((order) => {
+            const dest = formatShipping(order);
+            return (
+              <li key={order.id} className="metal-frame rounded-md bg-card p-5">
+                <div className="flex items-baseline justify-between gap-3">
+                  <p className="font-ledger text-sm text-muted-foreground">
+                    #{order.id.slice(-6).toUpperCase()} · {formatRomeDate(order.createdAt)}
+                  </p>
+                  <p className="font-ledger text-ember">{formatCredits(order.totalCredits)}</p>
+                </div>
+                <ul className="mt-3 text-sm text-muted-foreground">
+                  {order.items.map((item) => (
+                    <li key={item.id}>
+                      {item.quantity} × {item.product.name} ({formatCredits(item.unitCredits)})
+                    </li>
+                  ))}
+                </ul>
+                <p className="mt-3 text-sm">
+                  {dest.who}
+                  {dest.lines ? <span className="block text-muted-foreground">{dest.lines}</span> : null}
                 </p>
-                <p className="font-ledger text-ember">{formatCredits(order.totalCredits)}</p>
-              </div>
-              <ul className="mt-3 text-sm text-muted-foreground">
-                {order.items.map((item) => (
-                  <li key={item.id}>
-                    {item.quantity} × {item.product.name} ({formatCredits(item.unitCredits)})
-                  </li>
-                ))}
-              </ul>
-            </li>
-          ))}
+                <p className="mt-1 text-xs uppercase tracking-wider text-primary">
+                  {order.shipStatus === "SHIPPED" ? "Spedito" : "Da imballare"}
+                </p>
+              </li>
+            );
+          })}
         </ul>
       )}
     </PageShell>

@@ -7,6 +7,7 @@ import { addToCart, clearCart, getCart, updateCartQuantity } from "@/lib/cart";
 import { isZeccaError } from "@/lib/errors";
 import { purchaseCredits } from "@/lib/zecca/credits";
 import { placeOrder } from "@/lib/zecca/shop";
+import { parseShipping } from "@/lib/shipping";
 import { requestCustomerCashout } from "@/lib/zecca/cashout";
 import { isDemoPayEnabled } from "@/lib/stripe";
 
@@ -56,14 +57,15 @@ export async function demoBuyCreditsAction(
 
 export async function checkoutCartAction(
   _prev: { error?: string } | null,
-  _formData?: FormData,
+  formData?: FormData,
 ): Promise<{ error?: string }> {
   const user = await requireUser();
   if (!user) return { error: "Devi entrare per pagare in crediti." };
   const items = await getCart();
+  const shipping = parseShipping(formData ?? new FormData());
   let orderId = "";
   try {
-    const order = await placeOrder({ userId: user.id, items });
+    const order = await placeOrder({ userId: user.id, items, shipping });
     orderId = order.id;
     await clearCart();
   } catch (error) {

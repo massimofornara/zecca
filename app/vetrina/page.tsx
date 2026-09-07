@@ -16,8 +16,9 @@ export default async function VetrinaPage() {
       <p className="text-xs uppercase tracking-[0.28em] text-primary/80">Bottega della Zecca</p>
       <h1 className="mt-1 font-display text-4xl text-primary md:text-5xl">La vetrina</h1>
       <p className="mt-3 max-w-2xl text-muted-foreground">
-        Oggetti veri della casa: olio, miele, caffè, sapone, cera, lana. Si pagano in crediti. Ogni
-        acquisto di oggi alimenta la tua forgia.
+        Pezzi di massima fattura: olio cru, argento, lino, seta, vino della costa. Si pagano in
+        crediti e si spediscono a casa tua o a casa di Massimo. Ogni acquisto di oggi alimenta la
+        tua forgia.
       </p>
       {products.length === 0 ? (
         <div className="mt-10">

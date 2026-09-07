@@ -8,7 +8,7 @@ Non è un e-commerce a punti. I crediti vivono in un **libro mastro** immutabile
 
 1. **Conio** — Massimo scrive **qualsiasi quantità positiva**: i crediti nascono in tesoreria. Non sono euro di banca.
 2. **Acquisto crediti** — Il cliente versa euro (demo o Stripe) e riceve crediti dalla tesoreria.
-3. **Bottega** — Si paga in crediti. Ogni spesa di **oggi** (confine di calendario `Europe/Rome`) scalda la forgia.
+3. **Bottega** — Pezzi di massima fattura, pagati in crediti. Si spediscono a casa del cliente o a casa di Massimo (San Rocco al Forno). Ogni spesa di **oggi** (confine di calendario `Europe/Rome`) scalda la forgia.
 4. **Forgia del Giorno** — Il calore di oggi dipende da quanto hai comprato *nella giornata*. A mezzanotte romana si azzera. Non blocca più il prelievo.
 5. **Prelievo clienti** — Chiunque abbia crediti può chiedere euro verso **IBAN** o **wallet**. Massimo segna pagato dopo il bonifico o l’invio dal suo wallet (in demo: chiude il movimento). L’app non spedisce da sola.
 6. **Conversione tesoreria** — Massimo converte crediti ancora in casa in **euro e/o dollari della cassa negozio**. È un movimento contabile: non è un prelievo personale e non accredita un conto bancario.
@@ -65,7 +65,7 @@ Chiara ha già speso oggi in bottega. Luca ha crediti e può già chiedere un pr
 
 1. Entra come Massimo, coni un lotto in **Zecchiere → Conio**.
 2. Esci, entra come Luca, compra crediti in **Crediti** (pagamento demo: accredito immediato).
-3. Metti in cesta un pezzo dalla **Vetrina** e paga in crediti.
+3. Metti in cesta un pezzo dalla **Vetrina**, scegli se spedirlo a casa tua o a casa di Massimo, e paga in crediti.
 4. In **Prelievo** chiedi euro verso IBAN o wallet (anche senza aver comprato oggi).
 5. Torna come Massimo: in **Fusioni** copia IBAN/indirizzo e importo, poi conferma l’invio.
 

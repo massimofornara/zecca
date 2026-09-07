@@ -7,92 +7,136 @@ export const PRODUCT_ART = [
   "caffe",
   "sciarpa",
   "sapone",
+  "lino",
+  "argento",
+  "vino",
+  "seta",
 ] as const;
 
 export type ProductArtKey = (typeof PRODUCT_ART)[number];
 
 export const PRODUCT_ART_LABELS: Record<ProductArtKey, string> = {
-  olio: "Olio",
-  miele: "Miele",
+  olio: "Olio cru",
+  miele: "Miele millesimo",
   taccuino: "Taccuino",
   inchiostro: "Inchiostro",
   candele: "Candele",
   caffe: "Caffè",
   sciarpa: "Sciarpa",
   sapone: "Sapone",
+  lino: "Lino",
+  argento: "Argento",
+  vino: "Vino",
+  seta: "Seta",
 };
 
 export const CATALOG_SEED = [
   {
     slug: "olio-del-frantoio-vecchio",
-    name: "Olio del Frantoio Vecchio",
+    name: "Olio Cru Taggiasca — Riserva del Crinale",
     imageKey: "olio",
-    priceCredits: 18,
-    stock: 24,
+    priceCredits: 86,
+    stock: 18,
     description:
-      "Prima spremitura delle olive taggiasche raccolte a mano sul crinale. Bottiglia da 500 ml, sapore verde e un po’ piccante, come l’aria di novembre.",
+      "Monovarietale taggiasca, olive raccolte a mano sul crinale e molite a freddo il giorno stesso. Bottiglia da 500 ml in vetro scuro, collo sigillato a cera, numerata. Piccante pulito, erba e mandorla amara.",
   },
   {
     slug: "miele-di-castagno",
-    name: "Miele di Castagno",
+    name: "Miele di Castagno — Millesimo",
     imageKey: "miele",
-    priceCredits: 12,
-    stock: 30,
+    priceCredits: 48,
+    stock: 22,
     description:
-      "Miele scuro, amaro in modo nobile. Lo smeliamo a giugno dalle arnie dietro la zecca. Vaso da 250 g, tappo in sughero.",
+      "Un solo raccolto, arnie dietro la zecca. Miele scuro, amaro nobile, non pastorizzato. Vaso in cristallo da 250 g, cucchiaio d’argento a parte se lo chiedi.",
   },
   {
     slug: "taccuino-in-pelle",
-    name: "Taccuino in Pelle di Capra",
+    name: "Taccuino in Pelle di Capra — Edizione cucita",
     imageKey: "taccuino",
-    priceCredits: 28,
-    stock: 14,
+    priceCredits: 120,
+    stock: 10,
     description:
-      "Carta di cotone cucita a filo, copertina in pelle conciata in bottega. Cento fogli. Per conti, ricette, o il primo verso che non vuoi perdere.",
+      "Carta di cotone a filo, copertina in pelle conciata in bottega, taglio in oro. Cento fogli. Ogni esemplare porta il segno del coltello di casa.",
   },
   {
     slug: "inchiostro-di-noce",
-    name: "Inchiostro di Noce",
+    name: "Inchiostro di Noce — Flacone soffiato",
     imageKey: "inchiostro",
-    priceCredits: 9,
-    stock: 36,
+    priceCredits: 36,
+    stock: 24,
     description:
-      "Decotto di mallo, ferro e gomma arabica. Si ossida sul foglio in un bruno profondo. Flacone da 30 ml con contagocce in vetro.",
+      "Decotto di mallo, ferro e gomma arabica in flacone di vetro soffiato da 30 ml, collo dorato. Si ossida sul foglio in un bruno da archivio.",
   },
   {
     slug: "candele-dape",
-    name: "Candele d’Ape",
+    name: "Candele d’Ape — Cera vergine",
     imageKey: "candele",
-    priceCredits: 14,
-    stock: 20,
+    priceCredits: 54,
+    stock: 16,
     description:
-      "Coppia di candele in cera d’api della stessa famiglia del miele. Bruciano lente, profumano di favo. Stoppino di lino.",
+      "Coppia colata a mano in cera d’api della stessa famiglia del miele, stoppino di lino, base in bronzo. Bruciano lente, senza profumo aggiunto.",
   },
   {
     slug: "caffe-della-macina",
-    name: "Caffè della Macina",
+    name: "Caffè della Macina — Tostatura in padella",
     imageKey: "caffe",
-    priceCredits: 11,
-    stock: 40,
+    priceCredits: 42,
+    stock: 28,
     description:
-      "Miscela tostata in padella di ferro, macinata al momento del confezionamento. 250 g. Corpo medio, chiusura di cacao e scorza.",
+      "Lotto singolo tostato in padella di ferro e chiuso in latta nera da 250 g. Corpo denso, cacao e scorza. Macinato solo se lo chiedi in nota.",
   },
   {
     slug: "sciarpa-cardata",
-    name: "Sciarpa di Lana Cardata",
+    name: "Sciarpa di Lana e Cachemire — Telaio",
     imageKey: "sciarpa",
-    priceCredits: 42,
-    stock: 8,
+    priceCredits: 180,
+    stock: 6,
     description:
-      "Lana delle pecore di Costa, cardata e tessuta al telaio. Colore bronzo naturale, non tinto. Calda senza essere pesante.",
+      "Lana delle pecore di Costa e cachemire cardati, tessuti al telaio, non tinti. Colore bronzo naturale. Un capo per inverno, non una serie.",
   },
   {
     slug: "sapone-alloro",
-    name: "Sapone all’Alloro",
+    name: "Sapone all’Alloro — Saponificio di casa",
     imageKey: "sapone",
-    priceCredits: 8,
-    stock: 32,
+    priceCredits: 28,
+    stock: 20,
     description:
-      "Saponetta all’olio d’oliva e foglie d’alloro pestate. Per le mani dopo il lavoro in bottega. Forma irregolare, come deve essere.",
+      "Saponetta all’olio cru e foglie d’alloro pestate, stagionata tre mesi. Forma irregolare, su piattino di alabastro se lo prendi in coppia.",
+  },
+  {
+    slug: "lino-della-casa",
+    name: "Tovaglia di Lino — Orlo a giorno",
+    imageKey: "lino",
+    priceCredits: 160,
+    stock: 8,
+    description:
+      "Lino avorio tessuto a mano, orlo a giorno, nastro di seta. Per la tavola di festa, non per il cassetto. Misura 180 × 140.",
+  },
+  {
+    slug: "argento-da-tavola",
+    name: "Cucchiaio d’Argento 925 — Argenteria",
+    imageKey: "argento",
+    priceCredits: 95,
+    stock: 12,
+    description:
+      "Un cucchiaio da tavola in argento 925, fuso e limato in bottega, patina calda. Marchio di casa sotto il manico. Si vende a pezzo, non a servizio.",
+  },
+  {
+    slug: "vino-della-costa",
+    name: "Rossese della Costa — Annata della casa",
+    imageKey: "vino",
+    priceCredits: 72,
+    stock: 14,
+    description:
+      "Bottiglia da 750 ml, collo a cera. Vino della costa: ciliegia, macchia, sale. Da bere, non da esporre. Una sola annata in cantina.",
+  },
+  {
+    slug: "seta-di-ventimiglia",
+    name: "Foulard di Seta — Telaio ligure",
+    imageKey: "seta",
+    priceCredits: 140,
+    stock: 7,
+    description:
+      "Seta bronzo e verde, telaio stretto, orli a mano. Un metro quadro. Per il collo o per coprire un pane, come si usava.",
   },
 ] as const;

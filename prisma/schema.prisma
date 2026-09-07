@@ -80,6 +80,14 @@ model Order {
   user         User        @relation(fields: [userId], references: [id])
   totalCredits Int
   status       OrderStatus @default(PAID)
+  shipTo       String      @default("CUSTOMER")
+  shipName     String?
+  shipStreet   String?
+  shipCity     String?
+  shipPostal   String?
+  shipNote     String?
+  shipStatus   String      @default("TO_PACK")
+  shippedAt    DateTime?
   createdAt    DateTime    @default(now())
   items        OrderItem[]
   ledger       LedgerEntry[]

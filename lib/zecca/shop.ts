@@ -2,12 +2,14 @@ import type { PrismaClient } from "@prisma/client";
 import { prisma as defaultPrisma } from "@/lib/db";
 import { ZeccaError } from "@/lib/errors";
 import { appendLedger, pocketBalance } from "@/lib/zecca/ledger";
+import { assertShipping, type ShippingInput } from "@/lib/shipping";
 
 export type CartLine = { productId: string; quantity: number };
 
 export async function placeOrder(input: {
   userId: string;
   items: CartLine[];
+  shipping: ShippingInput;
   db?: PrismaClient;
 }) {
   const db = input.db ?? defaultPrisma;
@@ -18,6 +20,7 @@ export async function placeOrder(input: {
   if (cleaned.length === 0) {
     throw new ZeccaError("Il carrello è vuoto.", "EMPTY_CART");
   }
+  assertShipping(input.shipping);
 
   return db.$transaction(async (tx) => {
     const products = await tx.product.findMany({
@@ -57,11 +60,23 @@ export async function placeOrder(input: {
       );
     }
 
+    const destNote =
+      input.shipping.shipTo === "MASSIMO"
+        ? "Spedizione a casa di Massimo, San Rocco al Forno"
+        : `Spedizione a ${input.shipping.shipName}, ${input.shipping.shipCity}`;
+
     const order = await tx.order.create({
       data: {
         userId: input.userId,
         totalCredits: total,
         status: "PAID",
+        shipTo: input.shipping.shipTo,
+        shipName: input.shipping.shipName,
+        shipStreet: input.shipping.shipStreet,
+        shipCity: input.shipping.shipCity,
+        shipPostal: input.shipping.shipPostal,
+        shipNote: input.shipping.shipNote,
+        shipStatus: "TO_PACK",
         items: {
           create: lines.map((l) => ({
             productId: l.productId,
@@ -88,7 +103,7 @@ export async function placeOrder(input: {
         fromUserId: input.userId,
         actorId: input.userId,
         orderId: order.id,
-        note: `Ordine ${order.id.slice(-6).toUpperCase()}: ${lines.map((l) => `${l.quantity}× ${l.name}`).join(", ")}`,
+        note: `Ordine ${order.id.slice(-6).toUpperCase()}: ${lines.map((l) => `${l.quantity}× ${l.name}`).join(", ")}. ${destNote}`,
       },
       tx,
     );

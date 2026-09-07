@@ -80,6 +80,13 @@ async function main() {
     await placeOrder({
       userId: customer.id,
       items: [{ productId: product.id, quantity: 1 }],
+      shipping: {
+        shipTo: "CUSTOMER",
+        shipName: "Chiara Test",
+        shipStreet: "Via Roma 12",
+        shipCity: "Genova",
+        shipPostal: "16121",
+      },
       db,
     });
     assert.equal(await pocketBalance("USER", customer.id, db), 150);

@@ -41,7 +41,9 @@ export default async function CarrelloPage({
   return (
     <PageShell>
       <h1 className="font-display text-4xl text-primary">Cesta</h1>
-      <p className="mt-2 text-muted-foreground">Si paga in crediti, dalla tesoreria che hai comprato.</p>
+      <p className="mt-2 text-muted-foreground">
+        Si paga in crediti. Il pezzo parte verso casa tua o verso casa di Massimo.
+      </p>
       <div className="mt-6">
         <ErrorBanner message={error} />
       </div>
@@ -90,21 +92,19 @@ export default async function CarrelloPage({
               </form>
             </div>
           ))}
-          <div className="flex flex-col items-start justify-between gap-4 border-t border-primary/20 pt-6 sm:flex-row sm:items-center">
-            <div>
-              <p className="font-ledger text-2xl text-ember">{formatCredits(total)}</p>
-              {wallet && (
-                <p className="text-sm text-muted-foreground">
-                  Nel portafoglio: {formatCredits(wallet.available)}
-                  {wallet.available < total ? " — non bastano. Compra crediti." : ""}
-                </p>
-              )}
-            </div>
+          <div className="border-t border-primary/20 pt-6">
+            <p className="font-ledger text-2xl text-ember">{formatCredits(total)}</p>
+            {wallet && (
+              <p className="text-sm text-muted-foreground">
+                Nel portafoglio: {formatCredits(wallet.available)}
+                {wallet.available < total ? " — non bastano. Compra crediti." : ""}
+              </p>
+            )}
             {session?.user ? (
               <CheckoutForm />
             ) : (
-              <Link href="/accedi?callbackUrl=/carrello" className={cn(buttonVariants({ size: "lg" }))}>
-                Entra per pagare
+              <Link href="/accedi?callbackUrl=/carrello" className={cn(buttonVariants({ size: "lg" }), "mt-4")}>
+                Entra per pagare e spedire
               </Link>
             )}
           </div>

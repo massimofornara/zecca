@@ -74,8 +74,8 @@ async function main() {
   const chiaraBuy = await prisma.creditPurchase.create({
     data: {
       userId: chiara.id,
-      credits: 200,
-      eurCents: 20000,
+      credits: 400,
+      eurCents: 40000,
       method: "demo",
       status: "completed",
     },
@@ -84,7 +84,7 @@ async function main() {
   await prisma.ledgerEntry.create({
     data: {
       type: "PURCHASE_CREDITS",
-      amountCredits: 200,
+      amountCredits: 400,
       fromPocket: "TREASURY",
       toPocket: "USER",
       toUserId: chiara.id,
@@ -92,7 +92,7 @@ async function main() {
       creditPurchaseId: chiaraBuy.id,
       eurCents: 20000,
       eurDirection: "IN",
-      note: "Acquisto dimostrativo di 200 crediti",
+      note: "Acquisto dimostrativo di 400 crediti",
     },
   });
 
@@ -138,14 +138,20 @@ async function main() {
   const chiaraOrder = await prisma.order.create({
     data: {
       userId: chiara.id,
-      totalCredits: 18 + 12 + 9 + 9 + 8,
+      totalCredits: 86 + 48 + 36 + 36 + 28,
       status: "PAID",
+      shipTo: "CUSTOMER",
+      shipName: "Chiara Viale",
+      shipStreet: "Via delle Rose 8",
+      shipCity: "Genova",
+      shipPostal: "16121",
+      shipStatus: "TO_PACK",
       items: {
         create: [
-          { productId: olio.id, quantity: 1, unitCredits: 18 },
-          { productId: miele.id, quantity: 1, unitCredits: 12 },
-          { productId: inchiostro.id, quantity: 2, unitCredits: 9 },
-          { productId: sapone.id, quantity: 1, unitCredits: 8 },
+          { productId: olio.id, quantity: 1, unitCredits: 86 },
+          { productId: miele.id, quantity: 1, unitCredits: 48 },
+          { productId: inchiostro.id, quantity: 2, unitCredits: 36 },
+          { productId: sapone.id, quantity: 1, unitCredits: 28 },
         ],
       },
     },
@@ -171,7 +177,7 @@ async function main() {
   await prisma.ledgerEntry.create({
     data: {
       type: "SPEND_ON_ORDER",
-      amountCredits: 56,
+      amountCredits: 234,
       fromPocket: "USER",
       toPocket: "BURN",
       fromUserId: chiara.id,

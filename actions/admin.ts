@@ -211,6 +211,19 @@ export async function upsertProductForm(formData: FormData): Promise<void> {
   await upsertProductAction(formData);
 }
 
+export async function markOrderShippedAction(formData: FormData) {
+  const admin = await requireAdmin();
+  if (!admin) return;
+  const id = String(formData.get("id") ?? "");
+  if (!id) return;
+  await prisma.order.update({
+    where: { id },
+    data: { shipStatus: "SHIPPED", shippedAt: new Date() },
+  });
+  revalidatePath("/zecchiere/ordini");
+  revalidatePath("/ordini");
+}
+
 export async function toggleProductAction(formData: FormData) {
   const admin = await requireAdmin();
   if (!admin) return;
