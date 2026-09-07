@@ -9,11 +9,13 @@ export type ForgeTier = {
 
 export type ZeccaSettings = {
   eurCentsPerCredit: number;
+  usdCentsPerCredit: number;
   forgeTiers: ForgeTier[];
 };
 
 export const DEFAULT_SETTINGS: ZeccaSettings = {
   eurCentsPerCredit: 100,
+  usdCentsPerCredit: 108,
   forgeTiers: [
     { minSpent: 0, maxSpent: 49, percent: 0 },
     { minSpent: 50, maxSpent: 149, percent: 20 },
@@ -31,6 +33,9 @@ export async function getSettings(
     eurCentsPerCredit: map.eurCentsPerCredit
       ? Number(map.eurCentsPerCredit)
       : DEFAULT_SETTINGS.eurCentsPerCredit,
+    usdCentsPerCredit: map.usdCentsPerCredit
+      ? Number(map.usdCentsPerCredit)
+      : DEFAULT_SETTINGS.usdCentsPerCredit,
     forgeTiers: map.forgeTiers
       ? (JSON.parse(map.forgeTiers) as ForgeTier[])
       : DEFAULT_SETTINGS.forgeTiers,
@@ -43,14 +48,20 @@ export async function saveSettings(
   actorId: string | null,
   db: PrismaClient = defaultPrisma,
 ) {
-  if (next.eurCentsPerCredit != null) {
-    const current = await getSettings(db);
+  const current = await getSettings(db);
+
+  async function writeRate(
+    key: "eurCentsPerCredit" | "usdCentsPerCredit",
+    nextCents: number | undefined,
+    label: string,
+  ) {
+    if (nextCents == null) return;
     await db.setting.upsert({
-      where: { key: "eurCentsPerCredit" },
-      create: { key: "eurCentsPerCredit", value: String(next.eurCentsPerCredit) },
-      update: { value: String(next.eurCentsPerCredit) },
+      where: { key },
+      create: { key, value: String(nextCents) },
+      update: { value: String(nextCents) },
     });
-    if (current.eurCentsPerCredit !== next.eurCentsPerCredit) {
+    if (current[key] !== nextCents) {
       await db.ledgerEntry.create({
         data: {
           type: "RATE_CHANGE",
@@ -58,15 +69,15 @@ export async function saveSettings(
           fromPocket: "VOID",
           toPocket: "VOID",
           actorId,
-          note: `Tasso aggiornato: 1 credito = ${(next.eurCentsPerCredit / 100).toLocaleString("it-IT")} EUR (prima ${(current.eurCentsPerCredit / 100).toLocaleString("it-IT")} EUR)`,
-          metadata: JSON.stringify({
-            from: current.eurCentsPerCredit,
-            to: next.eurCentsPerCredit,
-          }),
+          note: `Tasso aggiornato: 1 credito = ${(nextCents / 100).toLocaleString("it-IT")} ${label} (prima ${(current[key] / 100).toLocaleString("it-IT")} ${label})`,
+          metadata: JSON.stringify({ key, from: current[key], to: nextCents }),
         },
       });
     }
   }
+
+  await writeRate("eurCentsPerCredit", next.eurCentsPerCredit, "EUR");
+  await writeRate("usdCentsPerCredit", next.usdCentsPerCredit, "USD");
   if (next.forgeTiers) {
     await db.setting.upsert({
       where: { key: "forgeTiers" },

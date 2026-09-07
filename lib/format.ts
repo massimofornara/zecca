@@ -3,9 +3,17 @@ export function formatCredits(amount: number): string {
 }
 
 export function formatEurFromCents(cents: number): string {
+  return formatFiatFromCents(cents, "EUR");
+}
+
+export function formatUsdFromCents(cents: number): string {
+  return formatFiatFromCents(cents, "USD");
+}
+
+export function formatFiatFromCents(cents: number, currency: "EUR" | "USD"): string {
   return new Intl.NumberFormat("it-IT", {
     style: "currency",
-    currency: "EUR",
+    currency,
   }).format(cents / 100);
 }
 

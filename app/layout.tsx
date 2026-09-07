@@ -36,7 +36,7 @@ export const metadata: Metadata = {
     "La zecca conia i crediti. Tu li compri, li spendi in bottega, e — se la forgia del giorno è calda — li fondi di nuovo in euro.",
 };
 
-export default function RootLayout({ children }: LayoutProps<"/">) {
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html
       lang="it"

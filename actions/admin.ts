@@ -36,11 +36,19 @@ export async function treasuryCashoutAction(
   const admin = await requireAdmin();
   if (!admin) return { error: "Solo il zecchiere può fondere la tesoreria." };
   const credits = Number(formData.get("credits"));
+  const currency = String(formData.get("currency") ?? "EUR");
   try {
-    await requestTreasuryCashout({ actorId: admin.id, credits });
+    const cashout = await requestTreasuryCashout({ actorId: admin.id, credits, currency });
     revalidatePath("/zecchiere");
     revalidatePath("/zecchiere/fusioni");
-    return { ok: "Fusione di tesoreria registrata." };
+    revalidatePath("/zecchiere/libro-mastro");
+    const fiat =
+      cashout.currency === "USD"
+        ? `${(cashout.usdCents / 100).toLocaleString("it-IT", { style: "currency", currency: "USD" })}`
+        : `${(cashout.eurCents / 100).toLocaleString("it-IT", { style: "currency", currency: "EUR" })}`;
+    return {
+      ok: `Fusione tesoreria segnata: ${credits.toLocaleString("it-IT")} cr → ${fiat}. Il bonifico, se lo fai, parte dal tuo conto.`,
+    };
   } catch (error) {
     return { error: isZeccaError(error) ? error.message : "Fusione non riuscita." };
   }
@@ -82,8 +90,12 @@ export async function saveForgeSettingsAction(
   if (!admin) return { error: "Solo il zecchiere può regolare la forgia." };
 
   const eur = Number(formData.get("eurPerCredit"));
+  const usd = Number(formData.get("usdPerCredit"));
   if (!Number.isFinite(eur) || eur <= 0) {
-    return { error: "Il tasso deve essere un numero positivo." };
+    return { error: "Il tasso in euro deve essere un numero positivo." };
+  }
+  if (!Number.isFinite(usd) || usd <= 0) {
+    return { error: "Il tasso in dollari deve essere un numero positivo." };
   }
 
   const tiers: ForgeTier[] = [0, 1, 2, 3].map((i) => {
@@ -102,12 +114,18 @@ export async function saveForgeSettingsAction(
   }
 
   await saveSettings(
-    { eurCentsPerCredit: Math.round(eur * 100), forgeTiers: tiers },
+    {
+      eurCentsPerCredit: Math.round(eur * 100),
+      usdCentsPerCredit: Math.round(usd * 100),
+      forgeTiers: tiers,
+    },
     admin.id,
   );
   revalidatePath("/zecchiere/forgia");
+  revalidatePath("/zecchiere/fusioni");
+  revalidatePath("/zecchiere");
   revalidatePath("/portafoglio");
-  return { ok: "Impostazioni della forgia e del tasso salvate." };
+  return { ok: "Impostazioni della forgia e dei tassi salvate." };
 }
 
 export async function upsertProductAction(

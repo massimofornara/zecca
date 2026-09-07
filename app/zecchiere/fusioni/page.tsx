@@ -1,14 +1,15 @@
 import { PendingCashoutCard, TreasuryCashoutForm } from "@/components/zecchiere/FusioniForms";
 import { EmptyState } from "@/components/ui/banners";
-import { formatCredits, formatEurFromCents } from "@/lib/format";
+import { formatCredits, formatEurFromCents, formatFiatFromCents } from "@/lib/format";
 import { formatRomeDate } from "@/lib/rome-day";
 import { prisma } from "@/lib/db";
 import { treasuryBalance } from "@/lib/zecca/ledger";
+import { getSettings } from "@/lib/zecca/settings";
 
 export const metadata = { title: "Fusioni" };
 
 export default async function FusioniPage() {
-  const [pending, closed, treasury] = await Promise.all([
+  const [pending, closed, treasury, settings] = await Promise.all([
     prisma.cashoutRequest.findMany({
       where: { status: "PENDING" },
       orderBy: { createdAt: "asc" },
@@ -21,6 +22,7 @@ export default async function FusioniPage() {
       include: { user: true },
     }),
     treasuryBalance(),
+    getSettings(),
   ]);
 
   return (
@@ -35,10 +37,15 @@ export default async function FusioniPage() {
       <section className="metal-frame mt-8 rounded-md bg-card p-5">
         <h2 className="font-display text-2xl text-primary">Fusione tesoreria</h2>
         <p className="mt-1 text-sm text-muted-foreground">
-          Registra l’uscita di crediti dalla tesoreria. L’euro vero, se c’è, lo muovi tu dal conto
-          della casa. Tesoreria attuale: {formatCredits(treasury)}.
+          Scegli i crediti ancora in casa e la valuta (EUR o USD). Tesoreria attuale:{" "}
+          {formatCredits(treasury)}. Coniare non riempie il conto in banca: qui segni solo il ritiro
+          dalla cassa reale.
         </p>
-        <TreasuryCashoutForm treasury={treasury} />
+        <TreasuryCashoutForm
+          treasury={treasury}
+          eurCentsPerCredit={settings.eurCentsPerCredit}
+          usdCentsPerCredit={settings.usdCentsPerCredit}
+        />
       </section>
 
       <h2 className="mt-10 font-display text-2xl text-primary">Coda clienti</h2>
@@ -70,7 +77,11 @@ export default async function FusioniPage() {
           <li key={r.id} className="flex items-center justify-between px-4 py-3 text-sm">
             <span>
               {r.isTreasury ? "Tesoreria" : r.user?.name} · {formatCredits(r.credits)}
-              {r.status === "PAID" ? ` → ${formatEurFromCents(r.eurCents)}` : ""}
+              {r.status === "PAID"
+                ? r.currency === "USD"
+                  ? ` → ${formatFiatFromCents(r.usdCents, "USD")}`
+                  : ` → ${formatEurFromCents(r.eurCents)}`
+                : ""}
             </span>
             <span className="uppercase tracking-wider text-primary">
               {r.status === "PAID" ? "Pagata" : "Rifiutata"}

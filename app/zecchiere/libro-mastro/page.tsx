@@ -1,4 +1,4 @@
-import { LEDGER_LABELS, POCKET_LABELS, formatCredits, formatEurFromCents } from "@/lib/format";
+import { LEDGER_LABELS, POCKET_LABELS, formatCredits, formatEurFromCents, formatFiatFromCents } from "@/lib/format";
 import { formatRomeDate } from "@/lib/rome-day";
 import { prisma } from "@/lib/db";
 import type { LedgerType } from "@prisma/client";
@@ -80,7 +80,7 @@ export default async function LibroMastroPage({
               <th className="px-3 py-2">Da</th>
               <th className="px-3 py-2">A</th>
               <th className="px-3 py-2">Crediti</th>
-              <th className="px-3 py-2">EUR</th>
+              <th className="px-3 py-2">Fiat</th>
               <th className="px-3 py-2">Nota</th>
             </tr>
           </thead>
@@ -97,9 +97,11 @@ export default async function LibroMastroPage({
                 <td className="px-3 py-2 text-xs">{pocket(e.toPocket, e.toUser?.email)}</td>
                 <td className="px-3 py-2 font-ledger">{formatCredits(e.amountCredits)}</td>
                 <td className="px-3 py-2 font-ledger">
-                  {e.eurCents
-                    ? `${e.eurDirection === "OUT" ? "−" : "+"}${formatEurFromCents(e.eurCents)}`
-                    : "—"}
+                  {e.fiatCurrency === "USD" && e.usdCents
+                    ? `${e.type === "TREASURY_CASHOUT" || e.type === "CASHOUT_PAID" ? "−" : "+"}${formatFiatFromCents(e.usdCents, "USD")}`
+                    : e.eurCents
+                      ? `${e.eurDirection === "OUT" ? "−" : "+"}${formatEurFromCents(e.eurCents)}`
+                      : "—"}
                 </td>
                 <td className="px-3 py-2 text-muted-foreground">{e.note}</td>
               </tr>

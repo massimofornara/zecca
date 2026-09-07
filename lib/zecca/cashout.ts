@@ -5,6 +5,7 @@ import { isValidIban, normalizeIban } from "@/lib/iban";
 import { appendLedger, pocketBalance } from "@/lib/zecca/ledger";
 import { getForgeState } from "@/lib/zecca/forge";
 import { creditsToEurCents, getSettings } from "@/lib/zecca/settings";
+import { creditsToFiatCents, parseFiatCurrency, type FiatCurrency } from "@/lib/zecca/fiat";
 
 export async function requestCustomerCashout(input: {
   userId: string;
@@ -60,6 +61,8 @@ export async function requestCustomerCashout(input: {
         userId: input.userId,
         credits,
         eurCents,
+        usdCents: 0,
+        currency: "EUR",
         status: "PENDING",
         isTreasury: false,
         iban,
@@ -78,6 +81,7 @@ export async function requestCustomerCashout(input: {
         actorId: input.userId,
         cashoutId: cashout.id,
         eurCents,
+        fiatCurrency: "EUR",
         note: `Richiesta di fusione: ${credits} cr → ${(eurCents / 100).toFixed(2)} EUR verso ${iban}`,
       },
       tx,
@@ -90,6 +94,7 @@ export async function requestCustomerCashout(input: {
 export async function requestTreasuryCashout(input: {
   actorId: string;
   credits: number;
+  currency?: FiatCurrency | string;
   db?: PrismaClient;
 }) {
   const db = input.db ?? defaultPrisma;
@@ -98,8 +103,16 @@ export async function requestTreasuryCashout(input: {
     throw new ZeccaError("Indica i crediti di tesoreria da fondere.", "INVALID_AMOUNT");
   }
 
+  const currency = parseFiatCurrency(input.currency);
   const settings = await getSettings(db);
-  const eurCents = creditsToEurCents(credits, settings.eurCentsPerCredit);
+  const eurCents =
+    currency === "EUR" ? creditsToFiatCents(credits, settings.eurCentsPerCredit) : 0;
+  const usdCents =
+    currency === "USD" ? creditsToFiatCents(credits, settings.usdCentsPerCredit) : 0;
+  const fiatLabel =
+    currency === "USD"
+      ? `${(usdCents / 100).toFixed(2)} USD`
+      : `${(eurCents / 100).toFixed(2)} EUR`;
 
   return db.$transaction(async (tx) => {
     const treasury = await pocketBalance("TREASURY", null, tx);
@@ -115,10 +128,12 @@ export async function requestTreasuryCashout(input: {
         userId: null,
         credits,
         eurCents,
+        usdCents,
+        currency,
         status: "PAID",
         isTreasury: true,
         resolvedAt: new Date(),
-        adminNote: "Fusione tesoreria eseguita dal zecchiere",
+        adminNote: `Fusione tesoreria in ${currency} (demo: pagamento segnato, non disposto dalla zecca)`,
       },
     });
 
@@ -131,8 +146,11 @@ export async function requestTreasuryCashout(input: {
         actorId: input.actorId,
         cashoutId: cashout.id,
         eurCents,
-        eurDirection: "OUT",
-        note: `Fusione tesoreria: ${credits} cr → ${(eurCents / 100).toFixed(2)} EUR`,
+        usdCents,
+        fiatCurrency: currency,
+        eurDirection: currency === "EUR" ? "OUT" : null,
+        note: `Fusione tesoreria: ${credits} cr → ${fiatLabel}`,
+        metadata: { currency, eurCents, usdCents },
       },
       tx,
     );
@@ -184,7 +202,9 @@ export async function resolveCashout(input: {
           actorId: input.actorId,
           cashoutId: cashout.id,
           eurCents: cashout.eurCents,
-          eurDirection: "OUT",
+          usdCents: cashout.usdCents,
+          fiatCurrency: (cashout.currency === "USD" ? "USD" : "EUR") as "EUR" | "USD",
+          eurDirection: cashout.currency === "USD" ? null : "OUT",
           note: `Fusione pagata: ${cashout.credits} cr`,
         },
         tx,

@@ -55,6 +55,7 @@ async function main() {
   await prisma.setting.createMany({
     data: [
       { key: "eurCentsPerCredit", value: String(DEFAULT_SETTINGS.eurCentsPerCredit) },
+      { key: "usdCentsPerCredit", value: String(DEFAULT_SETTINGS.usdCentsPerCredit) },
       { key: "forgeTiers", value: JSON.stringify(DEFAULT_SETTINGS.forgeTiers) },
     ],
   });

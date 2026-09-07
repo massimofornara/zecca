@@ -14,8 +14,8 @@ export default async function ForgiaSettingsPage() {
     <div className="max-w-xl">
       <h1 className="font-display text-4xl text-primary">Regola la forgia</h1>
       <p className="mt-2 text-muted-foreground">
-        Il tasso cambia quanto vale un credito in euro. Le soglie decidono, giorno per giorno, quanto del
-        portafoglio è fondibile.
+        Il tasso in euro e quello in dollari sono indipendenti (1 cr = X EUR, 1 cr = Y USD). Le
+        soglie della forgia restano in crediti.
       </p>
       <form action={saveForgeSettingsForm} className="mt-8 space-y-6">
         <div className="space-y-1.5">
@@ -29,6 +29,22 @@ export default async function ForgiaSettingsPage() {
             defaultValue={(settings.eurCentsPerCredit / 100).toFixed(2)}
             required
           />
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="usdPerCredit">Dollari USA per un credito</Label>
+          <Input
+            id="usdPerCredit"
+            name="usdPerCredit"
+            type="number"
+            step="0.01"
+            min={0.01}
+            defaultValue={(settings.usdCentsPerCredit / 100).toFixed(2)}
+            required
+          />
+          <p className="text-xs text-muted-foreground">
+            Predefinito: 1 cr = 1,00 EUR e 1 cr = 1,08 USD. Non è un cambio EUR/USD derivato: li
+            imposti tu.
+          </p>
         </div>
         <div className="space-y-4">
           <p className="text-sm uppercase tracking-[0.2em] text-primary/80">Soglie (spesa odierna)</p>

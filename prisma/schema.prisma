@@ -98,6 +98,8 @@ model LedgerEntry {
   type           LedgerType
   amountCredits  Int
   eurCents       Int        @default(0)
+  usdCents       Int        @default(0)
+  fiatCurrency   String?
   eurDirection   String?
   fromPocket     Pocket
   toPocket       Pocket
@@ -130,6 +132,8 @@ model CashoutRequest {
   user       User?         @relation(fields: [userId], references: [id])
   credits    Int
   eurCents   Int
+  usdCents   Int           @default(0)
+  currency   String        @default("EUR")
   status     CashoutStatus @default(PENDING)
   isTreasury Boolean       @default(false)
   iban       String?

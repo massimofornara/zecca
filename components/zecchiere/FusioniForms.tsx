@@ -1,29 +1,81 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useMemo, useState } from "react";
 import { resolveCashoutAction, treasuryCashoutAction } from "@/actions/admin";
 import { CopyField } from "@/components/copy/CopyField";
 import { SubmitButton } from "@/components/forms/SubmitButton";
 import { ErrorBanner, OkBanner } from "@/components/ui/banners";
 import { Input } from "@/components/ui/input";
-import { formatCredits, formatEurFromCents } from "@/lib/format";
+import { formatCredits, formatEurFromCents, formatFiatFromCents } from "@/lib/format";
 import { formatIbanDisplay } from "@/lib/iban";
 import { sepaInstruction } from "@/lib/sepa";
+import type { FiatCurrency } from "@/lib/zecca/fiat";
 
-export function TreasuryCashoutForm({ treasury }: { treasury: number }) {
+export function TreasuryCashoutForm({
+  treasury,
+  eurCentsPerCredit,
+  usdCentsPerCredit,
+}: {
+  treasury: number;
+  eurCentsPerCredit: number;
+  usdCentsPerCredit: number;
+}) {
   const [state, action] = useActionState(treasuryCashoutAction, null);
+  const [credits, setCredits] = useState(Math.min(50, Math.max(treasury, 1)));
+  const [currency, setCurrency] = useState<FiatCurrency>("EUR");
+
+  const preview = useMemo(() => {
+    const amount = Number.isFinite(credits) && credits > 0 ? Math.floor(credits) : 0;
+    const cents = amount * (currency === "USD" ? usdCentsPerCredit : eurCentsPerCredit);
+    return formatFiatFromCents(cents, currency);
+  }, [credits, currency, eurCentsPerCredit, usdCentsPerCredit]);
 
   return (
-    <form action={action} className="mt-4 space-y-3">
+    <form action={action} className="mt-4 space-y-4">
       <ErrorBanner message={state?.error} />
       <OkBanner message={state?.ok} />
+      <p className="text-sm text-muted-foreground">
+        Il ritiro brucia crediti di tesoreria e <strong>segna</strong> un pagamento in {currency}. In
+        demo si chiude sul libro mastro; l’euro o il dollaro vero, se c’è, lo muovi tu dal conto della
+        casa.
+      </p>
+      <div className="flex flex-wrap gap-2" role="group" aria-label="Valuta di fusione">
+        {(["EUR", "USD"] as const).map((code) => (
+          <button
+            key={code}
+            type="button"
+            onClick={() => setCurrency(code)}
+            className={`rounded-md px-3 py-1.5 text-sm ring-1 ${
+              currency === code
+                ? "bg-primary/20 text-primary ring-primary"
+                : "ring-primary/30 text-muted-foreground"
+            }`}
+          >
+            {code}
+          </button>
+        ))}
+      </div>
+      <input type="hidden" name="currency" value={currency} />
       <div className="flex flex-wrap items-end gap-3">
         <label className="text-sm">
-          Crediti
-          <Input name="credits" type="number" min={1} max={treasury} defaultValue={50} className="mt-1 w-36" />
+          Crediti da fondere
+          <Input
+            name="credits"
+            type="number"
+            min={1}
+            max={treasury > 0 ? treasury : undefined}
+            value={credits}
+            onChange={(e) => setCredits(Number(e.target.value))}
+            className="mt-1 w-40 font-ledger"
+          />
         </label>
-        <SubmitButton>Registra fusione tesoreria</SubmitButton>
+        <SubmitButton>Segna fusione tesoreria</SubmitButton>
       </div>
+      <p className="font-ledger text-xl text-ember">{preview}</p>
+      <p className="text-xs text-muted-foreground">
+        Tasso: 1 cr = {formatEurFromCents(eurCentsPerCredit)} · 1 cr ={" "}
+        {formatFiatFromCents(usdCentsPerCredit, "USD")}
+      </p>
     </form>
   );
 }

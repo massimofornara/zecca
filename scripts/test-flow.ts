@@ -8,7 +8,7 @@ import { mintCredits, ensureTreasury } from "../lib/zecca/mint";
 import { purchaseCredits } from "../lib/zecca/credits";
 import { placeOrder } from "../lib/zecca/shop";
 import { getForgeState } from "../lib/zecca/forge";
-import { requestCustomerCashout, resolveCashout } from "../lib/zecca/cashout";
+import { requestCustomerCashout, resolveCashout, requestTreasuryCashout } from "../lib/zecca/cashout";
 import { pocketBalance, treasuryBalance } from "../lib/zecca/ledger";
 import { getReserveReport } from "../lib/zecca/reserves";
 import { DEFAULT_SETTINGS } from "../lib/zecca/settings";
@@ -46,6 +46,7 @@ async function main() {
     await db.setting.createMany({
       data: [
         { key: "eurCentsPerCredit", value: String(DEFAULT_SETTINGS.eurCentsPerCredit) },
+        { key: "usdCentsPerCredit", value: String(DEFAULT_SETTINGS.usdCentsPerCredit) },
         { key: "forgeTiers", value: JSON.stringify(DEFAULT_SETTINGS.forgeTiers) },
       ],
     });
@@ -135,7 +136,41 @@ async function main() {
     assert.equal(reserve.fullyReserved, false);
     assert.equal(reserve.reserveRatio, 0);
 
+    const beforeMelt = await treasuryBalance(db);
+    const meltEur = await requestTreasuryCashout({
+      actorId: admin.id,
+      credits: 100,
+      currency: "EUR",
+      db,
+    });
+    assert.equal(meltEur.currency, "EUR");
+    assert.equal(meltEur.eurCents, 10000);
+    assert.equal(meltEur.usdCents, 0);
+    const meltUsd = await requestTreasuryCashout({
+      actorId: admin.id,
+      credits: 50,
+      currency: "USD",
+      db,
+    });
+    assert.equal(meltUsd.currency, "USD");
+    assert.equal(meltUsd.usdCents, 5400);
+    assert.equal(meltUsd.eurCents, 0);
+    assert.equal(await treasuryBalance(db), beforeMelt - 150);
+
+    const treasuryRows = await db.ledgerEntry.findMany({
+      where: { type: "TREASURY_CASHOUT" },
+      orderBy: { createdAt: "asc" },
+    });
+    assert.equal(treasuryRows.length, 2);
+    assert.equal(treasuryRows[0].fiatCurrency, "EUR");
+    assert.equal(treasuryRows[0].eurCents, 10000);
+    assert.equal(treasuryRows[1].fiatCurrency, "USD");
+    assert.equal(treasuryRows[1].usdCents, 5400);
+    assert.match(treasuryRows[0].note ?? "", /EUR/);
+    assert.match(treasuryRows[1].note ?? "", /USD/);
+
     console.log("Flusso Zecca: conio → crediti → bottega → forgia → fusione. OK.");
+    console.log("Fusione tesoreria EUR + USD sul libro mastro. OK.");
   } finally {
     await db.$disconnect();
   }

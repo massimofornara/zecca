@@ -13,6 +13,8 @@ export type LedgerWrite = {
   cashoutId?: string | null;
   creditPurchaseId?: string | null;
   eurCents?: number;
+  usdCents?: number;
+  fiatCurrency?: "EUR" | "USD" | null;
   eurDirection?: "IN" | "OUT" | null;
   note?: string | null;
   metadata?: Record<string, unknown> | null;
@@ -38,6 +40,8 @@ export async function appendLedger(
       cashoutId: entry.cashoutId ?? null,
       creditPurchaseId: entry.creditPurchaseId ?? null,
       eurCents: entry.eurCents ?? 0,
+      usdCents: entry.usdCents ?? 0,
+      fiatCurrency: entry.fiatCurrency ?? null,
       eurDirection: entry.eurDirection ?? null,
       note: entry.note ?? null,
       metadata: entry.metadata ? JSON.stringify(entry.metadata) : null,
@@ -91,7 +95,7 @@ export async function treasuryBalance(
 }
 
 export async function totals(db: PrismaClient = defaultPrisma) {
-  const [minted, burned, treasury, walletsIn, walletsOut, escrowIn, escrowOut, eurIn, eurOut] =
+  const [minted, burned, treasury, walletsIn, walletsOut, escrowIn, escrowOut, eurIn, eurOut, usdOut] =
     await Promise.all([
       db.ledgerEntry.aggregate({
         where: { type: "MINT" },
@@ -126,6 +130,10 @@ export async function totals(db: PrismaClient = defaultPrisma) {
         where: { eurDirection: "OUT" },
         _sum: { eurCents: true },
       }),
+      db.ledgerEntry.aggregate({
+        where: { type: { in: ["CASHOUT_PAID", "TREASURY_CASHOUT"] }, fiatCurrency: "USD" },
+        _sum: { usdCents: true },
+      }),
     ]);
 
   const spentOnGoods = await db.ledgerEntry.aggregate({
@@ -153,5 +161,6 @@ export async function totals(db: PrismaClient = defaultPrisma) {
     eurInCents: eurIn._sum.eurCents ?? 0,
     eurOutCents: eurOut._sum.eurCents ?? 0,
     eurNetCents: (eurIn._sum.eurCents ?? 0) - (eurOut._sum.eurCents ?? 0),
+    usdOutCents: usdOut._sum.usdCents ?? 0,
   };
 }

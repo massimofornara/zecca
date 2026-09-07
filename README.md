@@ -6,11 +6,12 @@ Non è un e-commerce a punti. I crediti vivono in un **libro mastro** immutabile
 
 ## Idea
 
-1. **Conio** — Massimo batte i crediti in tesoreria. Non c’è un tetto di politica: un colpo può arrivare a oltre due miliardi. Se una vendita chiede più metallo di quanto c’è, la zecca conia il resto da sola.
+1. **Conio** — Massimo scrive **qualsiasi quantità positiva**: i crediti nascono in tesoreria. Non sono euro di banca.
 2. **Acquisto crediti** — Il cliente versa euro (demo o Stripe) e riceve crediti dalla tesoreria.
 3. **Bottega** — Si paga in crediti. Ogni spesa di **oggi** (confine di calendario `Europe/Rome`) scalda la forgia.
 4. **Forgia del Giorno** — La quota fondibile del portafoglio dipende da quanto hai comprato *nella giornata*, non da una fedeltà a vita. A mezzanotte romana il calore si azzera.
-5. **Fusione** — Il cliente chiede di convertire il *forgiato* in euro. Massimo segna pagato (in demo: chiude il movimento; nella vita: bonifico o PayPal). Lo zecchiere può sempre fondere la tesoreria.
+5. **Fusione clienti** — Il cliente chiede di convertire il *forgiato* in **euro**. Massimo segna pagato dopo il bonifico (in demo: chiude il movimento).
+6. **Fusione tesoreria** — Massimo fonde crediti ancora in casa in **EUR o USD**, al tasso impostato. In demo il libro mastro registra il ritiro; il bonifico resta sul suo conto.
 
 Soglie predefinite (modificabili da Massimo):
 
@@ -21,7 +22,7 @@ Soglie predefinite (modificabili da Massimo):
 | 150–299 cr | 40% |
 | 300+ cr | 70% |
 
-Tasso iniziale: **1 credito = 1 EUR**.
+Tassi iniziali (modificabili in **Zecchiere → Forgia**): **1 credito = 1,00 EUR** e **1 credito = 1,08 USD**. Sono due prezzi indipendenti, non un cambio EUR/USD derivato.
 
 ## Avvio
 
@@ -110,6 +111,15 @@ Senza queste variabili resta solo il pagamento dimostrativo: nessun euro si muov
 
 Non esiste un pulsante che “conia e manda” soldi a un IBAN.
 
+## Conio admin e fusione tesoreria (EUR / USD)
+
+1. **Zecchiere → Conio**: campo quantità libero, nota facoltativa. I crediti vanno in tesoreria. Coniare **non** crea saldo bancario.
+2. **Zecchiere → Forgia**: imposta 1 cr in EUR e 1 cr in USD.
+3. **Zecchiere → Fusioni**: fusione tesoreria con interruttore EUR | USD, anteprima in valuta, poi «Segna fusione». In demo il movimento è `TREASURY_CASHOUT` sul libro (crediti bruciati, valuta e importo fiat). Il payout reale resta un bonifico fatto da te.
+4. I clienti restano sulla fusione forgiata in **EUR**.
+
+Percorso di prova automatico: `npm run test:flow` include conio → fusione tesoreria 100 cr in EUR → 50 cr in USD e controlla le due righe sul libro.
+
 ## Architettura (fattibilità, MiCA, riserve)
 
 Analisi della monetizzazione interna, on/off-ramp e rischi di conio scoperto: [`docs/architettura-monetizzazione.md`](docs/architettura-monetizzazione.md). In Tesoreria il riquadro **Copertura riserve** mostra il ratio euro Stripe / circolante.
@@ -124,7 +134,7 @@ Ogni movimento è una riga: `MINT`, `PURCHASE_CREDITS`, `SPEND_ON_ORDER`, `CASHO
 npm run test:flow
 ```
 
-Prova in isolamento (SQLite temporaneo): conio → acquisto crediti → ordine → sblocco forgia → richiesta di fusione visibile all’admin → pagamento.
+Prova in isolamento (SQLite temporaneo): conio → acquisto crediti → ordine → sblocco forgia → fusione cliente → fusione tesoreria EUR e USD sul libro.
 
 ## Stack
 

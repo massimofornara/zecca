@@ -20,8 +20,8 @@ export default async function ConioPage() {
     <div>
       <h1 className="font-display text-4xl text-primary">Conio</h1>
       <p className="mt-2 text-muted-foreground">
-        Solo tu fai nascere i crediti. Il conio è aperto: la tesoreria batte anche da sola il metallo
-        che manca alle vendite. Non sono euro: coniare non accredita un conto bancario.
+        Solo tu fai nascere i crediti. Scrivi la quantità che vuoi: entra in tesoreria, non sul
+        conto in banca. Coniare non crea euro né dollari spendibili.
       </p>
       <p className="mt-4 font-ledger text-ember">Tesoreria: {formatCredits(treasury)}</p>
       <div className="mt-8 max-w-lg">

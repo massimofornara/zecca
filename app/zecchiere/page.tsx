@@ -1,4 +1,4 @@
-import { formatCredits, formatEurFromCents } from "@/lib/format";
+import { formatCredits, formatEurFromCents, formatFiatFromCents } from "@/lib/format";
 import { totals } from "@/lib/zecca/ledger";
 import { prisma } from "@/lib/db";
 import { loyalToday } from "@/lib/zecca/forge";
@@ -21,9 +21,9 @@ export default async function TesoreriaPage() {
       <p className="text-xs uppercase tracking-[0.28em] text-primary/80">Casa della zecca</p>
       <h1 className="mt-1 font-display text-4xl text-primary">Tesoreria</h1>
       <p className="mt-2 text-muted-foreground">
-        Massimo, qui vedi il metallo e il registro. Il conio è aperto: la tesoreria batte i crediti
-        che servono. Gli euro veri (Stripe in ingresso, bonifico SEPA in uscita) passano dai tuoi
-        conti, non da un motore interno.
+        Crediti in tesoreria: metallo ancora in casa, non venduto. Coniare <strong>non</strong> crea
+        soldi in banca. Il ritiro admin brucia crediti e <strong>segna</strong> un prelievo dalla
+        cassa reale (euro o dollari): il bonifico lo fai tu.
       </p>
 
       <section className="metal-frame mt-6 rounded-md bg-card p-5">
@@ -106,18 +106,25 @@ export default async function TesoreriaPage() {
       </section>
 
       <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <Coin label="Crediti in tesoreria" value={formatCredits(flow.treasury)} accent />
+        <Coin label="Euro stimati in cassa" value={formatEurFromCents(flow.eurNetCents)} />
+        <Coin label="USD segnati in uscita" value={formatFiatFromCents(flow.usdOutCents, "USD")} />
         <Coin label="Coniati" value={formatCredits(flow.minted)} />
-        <Coin label="Tesoreria" value={formatCredits(flow.treasury)} accent />
         <Coin label="Nei portafogli" value={formatCredits(flow.inWallets)} />
-        <Coin label="Spesi in bottega" value={formatCredits(flow.spentOnGoods)} />
-        <Coin label="Fusi in euro" value={formatCredits(flow.cashedOut)} />
-        <Coin label="In fusione (attesa)" value={formatCredits(flow.inEscrow)} />
+        <Coin label="Fusi (crediti)" value={formatCredits(flow.cashedOut)} />
       </div>
+      <p className="mt-3 text-xs text-muted-foreground">
+        Cassa EUR = vendite di crediti (EUR in) meno fusioni in euro. Non è il saldo del conto
+        corrente. I crediti in tesoreria non sono depositi bancari.
+      </p>
 
       <section className="paper mt-10 rounded-md p-6">
         <h2 className="font-display text-2xl">Flusso di denaro</h2>
-        <p className="mt-1 text-sm opacity-75">Euro entrati dalla vendita di crediti, euro usciti dalle fusioni.</p>
-        <div className="mt-6 grid gap-6 sm:grid-cols-3">
+        <p className="mt-1 text-sm opacity-75">
+          Euro stimati dalle vendite di crediti meno le fusioni in EUR. I ritiri tesoreria in USD
+          stanno a parte.
+        </p>
+        <div className="mt-6 grid gap-6 sm:grid-cols-4">
           <div>
             <p className="text-xs uppercase tracking-widest opacity-60">EUR in</p>
             <p className="font-ledger text-2xl">{formatEurFromCents(flow.eurInCents)}</p>
@@ -127,8 +134,12 @@ export default async function TesoreriaPage() {
             <p className="font-ledger text-2xl">{formatEurFromCents(flow.eurOutCents)}</p>
           </div>
           <div>
-            <p className="text-xs uppercase tracking-widest opacity-60">Saldo cassa</p>
+            <p className="text-xs uppercase tracking-widest opacity-60">Saldo cassa EUR</p>
             <p className="font-ledger text-2xl">{formatEurFromCents(flow.eurNetCents)}</p>
+          </div>
+          <div>
+            <p className="text-xs uppercase tracking-widest opacity-60">USD out</p>
+            <p className="font-ledger text-2xl">{formatFiatFromCents(flow.usdOutCents, "USD")}</p>
           </div>
         </div>
         <Bar inCents={flow.eurInCents} outCents={flow.eurOutCents} />
