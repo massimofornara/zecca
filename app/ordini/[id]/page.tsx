@@ -8,19 +8,29 @@ import { PrintButton } from "@/components/shop/PrintButton";
 import { buttonVariants } from "@/components/ui/button";
 import { prisma } from "@/lib/db";
 
-export const metadata = { title: "Ricevuta ordine" };
+const receiptInclude = {
+  items: { include: { product: { include: { supplier: true } } } },
+  shipments: { include: { items: { include: { product: true } } } },
+} as const;
+
+async function findOrderReceipt(id: string) {
+  const exact = await prisma.order.findUnique({
+    where: { id },
+    include: receiptInclude,
+  });
+  if (exact) return exact;
+  const suffix = id.trim().toLowerCase();
+  if (suffix.length < 6) return null;
+  const matches = await prisma.order.findMany({ include: receiptInclude });
+  const hit = matches.filter((row) => row.id.slice(-suffix.length).toLowerCase() === suffix);
+  return hit.length === 1 ? hit[0] : null;
+}
 
 export default async function OrdinePage({ params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
   if (!session?.user) redirect("/accedi?callbackUrl=/ordini");
   const { id } = await params;
-  const order = await prisma.order.findUnique({
-    where: { id },
-    include: {
-      items: { include: { product: { include: { supplier: true } } } },
-      shipments: { include: { items: { include: { product: true } } } },
-    },
-  });
+  const order = await findOrderReceipt(id);
   if (!order || (order.userId !== session.user.id && session.user.role !== "ADMIN")) {
     notFound();
   }
