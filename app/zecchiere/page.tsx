@@ -4,15 +4,18 @@ import { prisma } from "@/lib/db";
 import { loyalToday } from "@/lib/zecca/forge";
 import { getLiveReport } from "@/lib/live";
 import { formatReserveRatio, getReserveReport } from "@/lib/zecca/reserves";
+import { getSettings } from "@/lib/zecca/settings";
+import { TreasuryConvertForm } from "@/components/zecchiere/FusioniForms";
 
 export const metadata = { title: "Tesoreria" };
 
 export default async function TesoreriaPage() {
-  const [flow, pending, loyal, reserve] = await Promise.all([
+  const [flow, pending, loyal, reserve, settings] = await Promise.all([
     totals(),
     prisma.cashoutRequest.count({ where: { status: "PENDING" } }),
     loyalToday(),
     getReserveReport(),
+    getSettings(),
   ]);
   const live = getLiveReport();
 
@@ -21,9 +24,9 @@ export default async function TesoreriaPage() {
       <p className="text-xs uppercase tracking-[0.28em] text-primary/80">Casa della zecca</p>
       <h1 className="mt-1 font-display text-4xl text-primary">Tesoreria</h1>
       <p className="mt-2 text-muted-foreground">
-        Crediti in tesoreria: metallo ancora in casa, non venduto. Coniare <strong>non</strong> crea
-        soldi in banca. Il ritiro admin brucia crediti e <strong>segna</strong> un prelievo dalla
-        cassa reale (euro o dollari): il bonifico lo fai tu.
+        Tre pentolini: crediti ancora da vendere, euro della cassa negozio, dollari della cassa
+        negozio. Coniare e convertire aggiornano il libro mastro: <strong>non</strong> accreditano un
+        conto in banca. Bonifici e Stripe restano un passo a parte.
       </p>
 
       <section className="metal-frame mt-6 rounded-md bg-card p-5">
@@ -107,39 +110,47 @@ export default async function TesoreriaPage() {
 
       <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         <Coin label="Crediti in tesoreria" value={formatCredits(flow.treasury)} accent />
-        <Coin label="Euro stimati in cassa" value={formatEurFromCents(flow.eurNetCents)} />
-        <Coin label="USD segnati in uscita" value={formatFiatFromCents(flow.usdOutCents, "USD")} />
+        <Coin label="Euro in tesoreria (negozio)" value={formatEurFromCents(flow.treasuryEurCents)} />
+        <Coin label="Dollari in tesoreria (negozio)" value={formatFiatFromCents(flow.treasuryUsdCents, "USD")} />
         <Coin label="Coniati" value={formatCredits(flow.minted)} />
         <Coin label="Nei portafogli" value={formatCredits(flow.inWallets)} />
-        <Coin label="Fusi (crediti)" value={formatCredits(flow.cashedOut)} />
+        <Coin label="Euro da vendite (stima)" value={formatEurFromCents(flow.eurNetCents)} />
       </div>
       <p className="mt-3 text-xs text-muted-foreground">
-        Cassa EUR = vendite di crediti (EUR in) meno fusioni in euro. Non è il saldo del conto
-        corrente. I crediti in tesoreria non sono depositi bancari.
+        La cassa negozio EUR/USD cresce solo con la conversione dei crediti di tesoreria. La stima
+        da vendite è un flusso a parte (carte/demo meno fusioni clienti).
       </p>
+
+      <section className="metal-frame mt-8 rounded-md bg-card p-5">
+        <h2 className="font-display text-2xl text-primary">Converti crediti in cassa</h2>
+        <TreasuryConvertForm
+          treasury={flow.treasury}
+          eurCentsPerCredit={settings.eurCentsPerCredit}
+          usdCentsPerCredit={settings.usdCentsPerCredit}
+        />
+      </section>
 
       <section className="paper mt-10 rounded-md p-6">
         <h2 className="font-display text-2xl">Flusso di denaro</h2>
         <p className="mt-1 text-sm opacity-75">
-          Euro stimati dalle vendite di crediti meno le fusioni in EUR. I ritiri tesoreria in USD
-          stanno a parte.
+          Cassa negozio (da conversione) e flusso vendite/fusioni clienti restano distinti.
         </p>
-        <div className="mt-6 grid gap-6 sm:grid-cols-4">
+        <div className="mt-6 grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
           <div>
-            <p className="text-xs uppercase tracking-widest opacity-60">EUR in</p>
-            <p className="font-ledger text-2xl">{formatEurFromCents(flow.eurInCents)}</p>
+            <p className="text-xs uppercase tracking-widest opacity-60">Cassa negozio EUR</p>
+            <p className="font-ledger text-2xl">{formatEurFromCents(flow.treasuryEurCents)}</p>
           </div>
           <div>
-            <p className="text-xs uppercase tracking-widest opacity-60">EUR out</p>
-            <p className="font-ledger text-2xl">{formatEurFromCents(flow.eurOutCents)}</p>
+            <p className="text-xs uppercase tracking-widest opacity-60">Cassa negozio USD</p>
+            <p className="font-ledger text-2xl">{formatFiatFromCents(flow.treasuryUsdCents, "USD")}</p>
           </div>
           <div>
-            <p className="text-xs uppercase tracking-widest opacity-60">Saldo cassa EUR</p>
+            <p className="text-xs uppercase tracking-widest opacity-60">Vendite EUR (stima)</p>
             <p className="font-ledger text-2xl">{formatEurFromCents(flow.eurNetCents)}</p>
           </div>
           <div>
-            <p className="text-xs uppercase tracking-widest opacity-60">USD out</p>
-            <p className="font-ledger text-2xl">{formatFiatFromCents(flow.usdOutCents, "USD")}</p>
+            <p className="text-xs uppercase tracking-widest opacity-60">Crediti in tesoreria</p>
+            <p className="font-ledger text-2xl">{formatCredits(flow.treasury)}</p>
           </div>
         </div>
         <Bar inCents={flow.eurInCents} outCents={flow.eurOutCents} />

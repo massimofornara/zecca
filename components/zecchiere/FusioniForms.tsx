@@ -1,7 +1,7 @@
 "use client";
 
 import { useActionState, useMemo, useState } from "react";
-import { resolveCashoutAction, treasuryCashoutAction } from "@/actions/admin";
+import { resolveCashoutAction, treasuryConvertAction } from "@/actions/admin";
 import { CopyField } from "@/components/copy/CopyField";
 import { SubmitButton } from "@/components/forms/SubmitButton";
 import { ErrorBanner, OkBanner } from "@/components/ui/banners";
@@ -9,9 +9,8 @@ import { Input } from "@/components/ui/input";
 import { formatCredits, formatEurFromCents, formatFiatFromCents } from "@/lib/format";
 import { formatIbanDisplay } from "@/lib/iban";
 import { sepaInstruction } from "@/lib/sepa";
-import type { FiatCurrency } from "@/lib/zecca/fiat";
 
-export function TreasuryCashoutForm({
+export function TreasuryConvertForm({
   treasury,
   eurCentsPerCredit,
   usdCentsPerCredit,
@@ -20,62 +19,62 @@ export function TreasuryCashoutForm({
   eurCentsPerCredit: number;
   usdCentsPerCredit: number;
 }) {
-  const [state, action] = useActionState(treasuryCashoutAction, null);
-  const [credits, setCredits] = useState(Math.min(50, Math.max(treasury, 1)));
-  const [currency, setCurrency] = useState<FiatCurrency>("EUR");
+  const [state, action] = useActionState(treasuryConvertAction, null);
+  const [creditsEur, setCreditsEur] = useState(0);
+  const [creditsUsd, setCreditsUsd] = useState(0);
 
-  const preview = useMemo(() => {
-    const amount = Number.isFinite(credits) && credits > 0 ? Math.floor(credits) : 0;
-    const cents = amount * (currency === "USD" ? usdCentsPerCredit : eurCentsPerCredit);
-    return formatFiatFromCents(cents, currency);
-  }, [credits, currency, eurCentsPerCredit, usdCentsPerCredit]);
+  const previewEur = useMemo(() => {
+    const amount = creditsEur > 0 ? Math.floor(creditsEur) : 0;
+    return formatFiatFromCents(amount * eurCentsPerCredit, "EUR");
+  }, [creditsEur, eurCentsPerCredit]);
+
+  const previewUsd = useMemo(() => {
+    const amount = creditsUsd > 0 ? Math.floor(creditsUsd) : 0;
+    return formatFiatFromCents(amount * usdCentsPerCredit, "USD");
+  }, [creditsUsd, usdCentsPerCredit]);
 
   return (
     <form action={action} className="mt-4 space-y-4">
       <ErrorBanner message={state?.error} />
       <OkBanner message={state?.ok} />
       <p className="text-sm text-muted-foreground">
-        Il ritiro brucia crediti di tesoreria e <strong>segna</strong> un pagamento in {currency}. In
-        demo si chiude sul libro mastro; l’euro o il dollaro vero, se c’è, lo muovi tu dal conto della
-        casa.
+        Questa conversione aggiorna la <strong>cassa contabile del negozio</strong>: i crediti escono
+        dalla tesoreria, euro e dollari entrano nei rispettivi pentolini. Non accredita
+        automaticamente un conto bancario. Bonifici e Stripe restano un passo a parte.
       </p>
-      <div className="flex flex-wrap gap-2" role="group" aria-label="Valuta di fusione">
-        {(["EUR", "USD"] as const).map((code) => (
-          <button
-            key={code}
-            type="button"
-            onClick={() => setCurrency(code)}
-            className={`rounded-md px-3 py-1.5 text-sm ring-1 ${
-              currency === code
-                ? "bg-primary/20 text-primary ring-primary"
-                : "ring-primary/30 text-muted-foreground"
-            }`}
-          >
-            {code}
-          </button>
-        ))}
-      </div>
-      <input type="hidden" name="currency" value={currency} />
-      <div className="flex flex-wrap items-end gap-3">
+      <div className="grid gap-4 sm:grid-cols-2">
         <label className="text-sm">
-          Crediti da fondere
+          Crediti → euro (negozio)
           <Input
-            name="credits"
+            name="creditsEur"
             type="number"
-            min={1}
-            max={treasury > 0 ? treasury : undefined}
-            value={credits}
-            onChange={(e) => setCredits(Number(e.target.value))}
-            className="mt-1 w-40 font-ledger"
+            min={0}
+            value={creditsEur || ""}
+            onChange={(e) => setCreditsEur(Number(e.target.value))}
+            className="mt-1 font-ledger"
+            placeholder="0"
           />
+          <span className="mt-1 block font-ledger text-ember">{previewEur}</span>
         </label>
-        <SubmitButton>Segna fusione tesoreria</SubmitButton>
+        <label className="text-sm">
+          Crediti → dollari (negozio)
+          <Input
+            name="creditsUsd"
+            type="number"
+            min={0}
+            value={creditsUsd || ""}
+            onChange={(e) => setCreditsUsd(Number(e.target.value))}
+            className="mt-1 font-ledger"
+            placeholder="0"
+          />
+          <span className="mt-1 block font-ledger text-ember">{previewUsd}</span>
+        </label>
       </div>
-      <p className="font-ledger text-xl text-ember">{preview}</p>
       <p className="text-xs text-muted-foreground">
-        Tasso: 1 cr = {formatEurFromCents(eurCentsPerCredit)} · 1 cr ={" "}
-        {formatFiatFromCents(usdCentsPerCredit, "USD")}
+        Disponibili: {formatCredits(treasury)}. Tasso: 1 cr = {formatEurFromCents(eurCentsPerCredit)}{" "}
+        · 1 cr = {formatFiatFromCents(usdCentsPerCredit, "USD")}
       </p>
+      <SubmitButton>Converti in cassa negozio</SubmitButton>
     </form>
   );
 }

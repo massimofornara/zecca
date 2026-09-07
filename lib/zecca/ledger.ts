@@ -95,7 +95,7 @@ export async function treasuryBalance(
 }
 
 export async function totals(db: PrismaClient = defaultPrisma) {
-  const [minted, burned, treasury, walletsIn, walletsOut, escrowIn, escrowOut, eurIn, eurOut, usdOut] =
+  const [minted, burned, treasury, walletsIn, walletsOut, escrowIn, escrowOut, eurIn, eurOut, usdOut, shopEur, shopUsd] =
     await Promise.all([
       db.ledgerEntry.aggregate({
         where: { type: "MINT" },
@@ -131,7 +131,15 @@ export async function totals(db: PrismaClient = defaultPrisma) {
         _sum: { eurCents: true },
       }),
       db.ledgerEntry.aggregate({
-        where: { type: { in: ["CASHOUT_PAID", "TREASURY_CASHOUT"] }, fiatCurrency: "USD" },
+        where: { type: { in: ["CASHOUT_PAID"] }, fiatCurrency: "USD" },
+        _sum: { usdCents: true },
+      }),
+      db.ledgerEntry.aggregate({
+        where: { type: "TREASURY_CONVERT_TO_EUR" },
+        _sum: { eurCents: true },
+      }),
+      db.ledgerEntry.aggregate({
+        where: { type: "TREASURY_CONVERT_TO_USD" },
         _sum: { usdCents: true },
       }),
     ]);
@@ -141,7 +149,7 @@ export async function totals(db: PrismaClient = defaultPrisma) {
     _sum: { amountCredits: true },
   });
   const cashedOut = await db.ledgerEntry.aggregate({
-    where: { type: { in: ["CASHOUT_PAID", "TREASURY_CASHOUT"] } },
+    where: { type: { in: ["CASHOUT_PAID", "TREASURY_CASHOUT", "TREASURY_CONVERT_TO_EUR", "TREASURY_CONVERT_TO_USD"] } },
     _sum: { amountCredits: true },
   });
 
@@ -162,5 +170,7 @@ export async function totals(db: PrismaClient = defaultPrisma) {
     eurOutCents: eurOut._sum.eurCents ?? 0,
     eurNetCents: (eurIn._sum.eurCents ?? 0) - (eurOut._sum.eurCents ?? 0),
     usdOutCents: usdOut._sum.usdCents ?? 0,
+    treasuryEurCents: shopEur._sum.eurCents ?? 0,
+    treasuryUsdCents: shopUsd._sum.usdCents ?? 0,
   };
 }

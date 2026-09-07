@@ -8,7 +8,8 @@ import { mintCredits, ensureTreasury } from "../lib/zecca/mint";
 import { purchaseCredits } from "../lib/zecca/credits";
 import { placeOrder } from "../lib/zecca/shop";
 import { getForgeState } from "../lib/zecca/forge";
-import { requestCustomerCashout, resolveCashout, requestTreasuryCashout } from "../lib/zecca/cashout";
+import { requestCustomerCashout, resolveCashout } from "../lib/zecca/cashout";
+import { convertTreasuryToShopFiat, shopFiatBalances } from "../lib/zecca/convert";
 import { pocketBalance, treasuryBalance } from "../lib/zecca/ledger";
 import { getReserveReport } from "../lib/zecca/reserves";
 import { DEFAULT_SETTINGS } from "../lib/zecca/settings";
@@ -136,41 +137,36 @@ async function main() {
     assert.equal(reserve.fullyReserved, false);
     assert.equal(reserve.reserveRatio, 0);
 
-    const beforeMelt = await treasuryBalance(db);
-    const meltEur = await requestTreasuryCashout({
+    const beforeConvert = await treasuryBalance(db);
+    const converted = await convertTreasuryToShopFiat({
       actorId: admin.id,
-      credits: 100,
-      currency: "EUR",
+      creditsEur: 3000,
+      creditsUsd: 2000,
       db,
     });
-    assert.equal(meltEur.currency, "EUR");
-    assert.equal(meltEur.eurCents, 10000);
-    assert.equal(meltEur.usdCents, 0);
-    const meltUsd = await requestTreasuryCashout({
-      actorId: admin.id,
-      credits: 50,
-      currency: "USD",
-      db,
-    });
-    assert.equal(meltUsd.currency, "USD");
-    assert.equal(meltUsd.usdCents, 5400);
-    assert.equal(meltUsd.eurCents, 0);
-    assert.equal(await treasuryBalance(db), beforeMelt - 150);
+    assert.equal(converted.creditsEur, 3000);
+    assert.equal(converted.eurCents, 300000);
+    assert.equal(converted.creditsUsd, 2000);
+    assert.equal(converted.usdCents, 216000);
+    assert.equal(await treasuryBalance(db), beforeConvert - 5000);
+    const shop = await shopFiatBalances(db);
+    assert.equal(shop.treasuryEurCents, 300000);
+    assert.equal(shop.treasuryUsdCents, 216000);
 
-    const treasuryRows = await db.ledgerEntry.findMany({
-      where: { type: "TREASURY_CASHOUT" },
+    const convertRows = await db.ledgerEntry.findMany({
+      where: { type: { in: ["TREASURY_CONVERT_TO_EUR", "TREASURY_CONVERT_TO_USD"] } },
       orderBy: { createdAt: "asc" },
     });
-    assert.equal(treasuryRows.length, 2);
-    assert.equal(treasuryRows[0].fiatCurrency, "EUR");
-    assert.equal(treasuryRows[0].eurCents, 10000);
-    assert.equal(treasuryRows[1].fiatCurrency, "USD");
-    assert.equal(treasuryRows[1].usdCents, 5400);
-    assert.match(treasuryRows[0].note ?? "", /EUR/);
-    assert.match(treasuryRows[1].note ?? "", /USD/);
+    assert.equal(convertRows.length, 2);
+    assert.equal(convertRows[0].type, "TREASURY_CONVERT_TO_EUR");
+    assert.equal(convertRows[0].amountCredits, 3000);
+    assert.equal(convertRows[0].eurCents, 300000);
+    assert.equal(convertRows[1].type, "TREASURY_CONVERT_TO_USD");
+    assert.equal(convertRows[1].amountCredits, 2000);
+    assert.equal(convertRows[1].usdCents, 216000);
 
     console.log("Flusso Zecca: conio → crediti → bottega → forgia → fusione. OK.");
-    console.log("Fusione tesoreria EUR + USD sul libro mastro. OK.");
+    console.log("Conversione tesoreria 3000 cr→EUR e 2000 cr→USD in cassa negozio. OK.");
   } finally {
     await db.$disconnect();
   }

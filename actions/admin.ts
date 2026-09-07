@@ -4,7 +4,8 @@ import { revalidatePath } from "next/cache";
 import { requireAdmin } from "@/auth";
 import { isZeccaError } from "@/lib/errors";
 import { mintCredits } from "@/lib/zecca/mint";
-import { requestTreasuryCashout, resolveCashout } from "@/lib/zecca/cashout";
+import { resolveCashout } from "@/lib/zecca/cashout";
+import { convertTreasuryToShopFiat } from "@/lib/zecca/convert";
 import { saveSettings, type ForgeTier } from "@/lib/zecca/settings";
 import { prisma } from "@/lib/db";
 import { CATALOG_SEED } from "@/lib/catalog";
@@ -29,28 +30,39 @@ export async function mintAction(
   }
 }
 
-export async function treasuryCashoutAction(
+export async function treasuryConvertAction(
   _prev: { error?: string; ok?: string } | null,
   formData: FormData,
 ): Promise<{ error?: string; ok?: string }> {
   const admin = await requireAdmin();
-  if (!admin) return { error: "Solo il zecchiere può fondere la tesoreria." };
-  const credits = Number(formData.get("credits"));
-  const currency = String(formData.get("currency") ?? "EUR");
+  if (!admin) return { error: "Solo il zecchiere può convertire la tesoreria." };
+  const creditsEur = Number(formData.get("creditsEur") ?? 0);
+  const creditsUsd = Number(formData.get("creditsUsd") ?? 0);
   try {
-    const cashout = await requestTreasuryCashout({ actorId: admin.id, credits, currency });
+    const result = await convertTreasuryToShopFiat({
+      actorId: admin.id,
+      creditsEur,
+      creditsUsd,
+    });
     revalidatePath("/zecchiere");
     revalidatePath("/zecchiere/fusioni");
     revalidatePath("/zecchiere/libro-mastro");
-    const fiat =
-      cashout.currency === "USD"
-        ? `${(cashout.usdCents / 100).toLocaleString("it-IT", { style: "currency", currency: "USD" })}`
-        : `${(cashout.eurCents / 100).toLocaleString("it-IT", { style: "currency", currency: "EUR" })}`;
+    const parts = [];
+    if (result.creditsEur > 0) {
+      parts.push(
+        `${result.creditsEur.toLocaleString("it-IT")} cr → ${(result.eurCents / 100).toLocaleString("it-IT", { style: "currency", currency: "EUR" })} in cassa negozio`,
+      );
+    }
+    if (result.creditsUsd > 0) {
+      parts.push(
+        `${result.creditsUsd.toLocaleString("it-IT")} cr → ${(result.usdCents / 100).toLocaleString("it-IT", { style: "currency", currency: "USD" })} in cassa negozio`,
+      );
+    }
     return {
-      ok: `Fusione tesoreria segnata: ${credits.toLocaleString("it-IT")} cr → ${fiat}. Il bonifico, se lo fai, parte dal tuo conto.`,
+      ok: `Conversione registrata: ${parts.join(" · ")}. Non è un accredito bancario.`,
     };
   } catch (error) {
-    return { error: isZeccaError(error) ? error.message : "Fusione non riuscita." };
+    return { error: isZeccaError(error) ? error.message : "Conversione non riuscita." };
   }
 }
 

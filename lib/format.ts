@@ -30,6 +30,8 @@ export const LEDGER_LABELS: Record<string, string> = {
   CASHOUT_PAID: "Fusione pagata",
   CASHOUT_REJECTED: "Fusione rifiutata",
   TREASURY_CASHOUT: "Fusione tesoreria",
+  TREASURY_CONVERT_TO_EUR: "Conversione tesoreria → EUR",
+  TREASURY_CONVERT_TO_USD: "Conversione tesoreria → USD",
   RATE_CHANGE: "Cambio tasso",
 };
 

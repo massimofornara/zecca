@@ -1,4 +1,4 @@
-import { PendingCashoutCard, TreasuryCashoutForm } from "@/components/zecchiere/FusioniForms";
+import { PendingCashoutCard, TreasuryConvertForm } from "@/components/zecchiere/FusioniForms";
 import { EmptyState } from "@/components/ui/banners";
 import { formatCredits, formatEurFromCents, formatFiatFromCents } from "@/lib/format";
 import { formatRomeDate } from "@/lib/rome-day";
@@ -16,7 +16,7 @@ export default async function FusioniPage() {
       include: { user: true },
     }),
     prisma.cashoutRequest.findMany({
-      where: { status: { not: "PENDING" } },
+      where: { status: { not: "PENDING" }, isTreasury: false },
       orderBy: { createdAt: "desc" },
       take: 20,
       include: { user: true },
@@ -35,13 +35,12 @@ export default async function FusioniPage() {
       </p>
 
       <section className="metal-frame mt-8 rounded-md bg-card p-5">
-        <h2 className="font-display text-2xl text-primary">Fusione tesoreria</h2>
+        <h2 className="font-display text-2xl text-primary">Conversione in cassa negozio</h2>
         <p className="mt-1 text-sm text-muted-foreground">
-          Scegli i crediti ancora in casa e la valuta (EUR o USD). Tesoreria attuale:{" "}
-          {formatCredits(treasury)}. Coniare non riempie il conto in banca: qui segni solo il ritiro
-          dalla cassa reale.
+          I crediti ancora in tesoreria ({formatCredits(treasury)}) possono diventare euro e/o
+          dollari della cassa contabile. Non è un prelievo personale e non è un bonifico.
         </p>
-        <TreasuryCashoutForm
+        <TreasuryConvertForm
           treasury={treasury}
           eurCentsPerCredit={settings.eurCentsPerCredit}
           usdCentsPerCredit={settings.usdCentsPerCredit}
