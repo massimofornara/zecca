@@ -72,7 +72,12 @@ export function assertShipping(shipping: ShippingInput) {
 
 export function shippingQuote(shipTo: ShipTo) {
   if (shipTo === "MASSIMO") {
-    return { carrier: "HAND", service: "RITIRO", credits: 0, label: "Consegna in casa di Massimo" };
+    return {
+      carrier: "HAND",
+      service: "FORNITORE_A_MASSIMO",
+      credits: 0,
+      label: "I fornitori spediscono a casa di Massimo",
+    };
   }
   return {
     carrier: "DHL_EXPRESS",

@@ -33,6 +33,7 @@ export const PRODUCT_ART_LABELS: Record<ProductArtKey, string> = {
 export const CATALOG_SEED = [
   {
     slug: "olio-del-frantoio-vecchio",
+    supplierSlug: "frantoio-del-crinale",
     name: "Olio Cru Taggiasca — Riserva del Crinale",
     imageKey: "olio",
     priceCredits: 86,
@@ -42,6 +43,7 @@ export const CATALOG_SEED = [
   },
   {
     slug: "miele-di-castagno",
+    supplierSlug: "apicoltura-millesimo",
     name: "Miele di Castagno — Millesimo",
     imageKey: "miele",
     priceCredits: 48,
@@ -51,6 +53,7 @@ export const CATALOG_SEED = [
   },
   {
     slug: "taccuino-in-pelle",
+    supplierSlug: "legatoria-costa",
     name: "Taccuino in Pelle di Capra — Edizione cucita",
     imageKey: "taccuino",
     priceCredits: 120,
@@ -60,6 +63,7 @@ export const CATALOG_SEED = [
   },
   {
     slug: "inchiostro-di-noce",
+    supplierSlug: "officina-del-mallo",
     name: "Inchiostro di Noce — Flacone soffiato",
     imageKey: "inchiostro",
     priceCredits: 36,
@@ -69,6 +73,7 @@ export const CATALOG_SEED = [
   },
   {
     slug: "candele-dape",
+    supplierSlug: "cereria-delle-arnie",
     name: "Candele d’Ape — Cera vergine",
     imageKey: "candele",
     priceCredits: 54,
@@ -78,6 +83,7 @@ export const CATALOG_SEED = [
   },
   {
     slug: "caffe-della-macina",
+    supplierSlug: "torrefazione-della-macina",
     name: "Caffè della Macina — Tostatura in padella",
     imageKey: "caffe",
     priceCredits: 42,
@@ -87,6 +93,7 @@ export const CATALOG_SEED = [
   },
   {
     slug: "sciarpa-cardata",
+    supplierSlug: "lanificio-di-costa",
     name: "Sciarpa di Lana e Cachemire — Telaio",
     imageKey: "sciarpa",
     priceCredits: 180,
@@ -96,6 +103,7 @@ export const CATALOG_SEED = [
   },
   {
     slug: "sapone-alloro",
+    supplierSlug: "saponificio-alloro",
     name: "Sapone all’Alloro — Saponificio di casa",
     imageKey: "sapone",
     priceCredits: 28,
@@ -105,6 +113,7 @@ export const CATALOG_SEED = [
   },
   {
     slug: "lino-della-casa",
+    supplierSlug: "tessitura-dellorlo",
     name: "Tovaglia di Lino — Orlo a giorno",
     imageKey: "lino",
     priceCredits: 160,
@@ -114,6 +123,7 @@ export const CATALOG_SEED = [
   },
   {
     slug: "argento-da-tavola",
+    supplierSlug: "argenteria-sanremo",
     name: "Cucchiaio d’Argento 925 — Argenteria",
     imageKey: "argento",
     priceCredits: 95,
@@ -123,6 +133,7 @@ export const CATALOG_SEED = [
   },
   {
     slug: "vino-della-costa",
+    supplierSlug: "cantina-della-costa",
     name: "Rossese della Costa — Annata della casa",
     imageKey: "vino",
     priceCredits: 72,
@@ -132,6 +143,7 @@ export const CATALOG_SEED = [
   },
   {
     slug: "seta-di-ventimiglia",
+    supplierSlug: "setificio-ventimiglia",
     name: "Foulard di Seta — Telaio ligure",
     imageKey: "seta",
     priceCredits: 140,
@@ -140,3 +152,8 @@ export const CATALOG_SEED = [
       "Seta bronzo e verde, telaio stretto, orli a mano. Un metro quadro. Per il collo o per coprire un pane, come si usava.",
   },
 ] as const;
+
+export function catalogProductFields(product: (typeof CATALOG_SEED)[number]) {
+  const { supplierSlug: _supplierSlug, ...fields } = product;
+  return fields;
+}

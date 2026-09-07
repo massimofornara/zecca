@@ -10,14 +10,19 @@ import { cn } from "@/lib/utils";
 export const metadata = { title: "Prodotti" };
 
 export default async function ProdottiPage() {
-  const products = await prisma.product.findMany({ orderBy: { name: "asc" } });
+  const products = await prisma.product.findMany({
+    orderBy: { name: "asc" },
+    include: { supplier: true },
+  });
 
   return (
     <div>
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="font-display text-4xl text-primary">Vetrina</h1>
-          <p className="mt-2 text-muted-foreground">Pezzi della bottega: prezzo in crediti, scorte, impronta.</p>
+          <p className="mt-2 text-muted-foreground">
+            Pezzi in vetrina, ciascuno legato al fornitore che lo produce e lo spedisce.
+          </p>
         </div>
         <Link href="/zecchiere/prodotti/nuovo" className={cn(buttonVariants(), "px-4")}>
           Nuovo pezzo
@@ -32,7 +37,8 @@ export default async function ProdottiPage() {
             <div className="min-w-0 flex-1">
               <p className="font-display text-lg text-primary">{p.name}</p>
               <p className="font-ledger text-xs text-muted-foreground">
-                {formatCredits(p.priceCredits)} · scorte {p.stock} · {p.active ? "in vetrina" : "nascosto"}
+                {formatCredits(p.priceCredits)} · scorte {p.stock} ·{" "}
+                {p.supplier ? p.supplier.name : "senza fornitore"} · {p.active ? "in vetrina" : "nascosto"}
               </p>
             </div>
             <Link href={`/zecchiere/prodotti/${p.id}`} className="text-sm text-primary underline">

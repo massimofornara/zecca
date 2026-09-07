@@ -45,8 +45,8 @@ export default async function CarrelloPage({
     <PageShell>
       <h1 className="font-display text-4xl text-primary">Cesta</h1>
       <p className="mt-2 text-muted-foreground">
-        E-commerce della bottega: paghi in crediti. A casa tua arriva DHL Express 24h; oppure
-        consegna in casa di Massimo.
+        Paghi in crediti. Il fornitore imballa e DHL ritira dalla sua sede. «A casa di Massimo» è
+        solo dove arriva il collo.
       </p>
       <div className="mt-6">
         <ErrorBanner message={error} />

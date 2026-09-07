@@ -16,6 +16,7 @@ export function ProductCard({
     imageKey: string;
     priceCredits: number;
     stock: number;
+    supplier?: { name: string; city: string } | null;
   };
 }) {
   return (
@@ -30,14 +31,16 @@ export function ProductCard({
           </Link>
           <p className="mt-1 line-clamp-2 text-sm text-muted-foreground">{product.description}</p>
           <p className="mt-2 text-[11px] uppercase tracking-[0.16em] text-primary/80">
-            DHL Express 24h
+            {product.supplier
+              ? `Spedisce ${product.supplier.name} · ${product.supplier.city}`
+              : "DHL Express 24h dal fornitore"}
           </p>
         </div>
         <div className="mt-auto flex items-end justify-between gap-3">
           <div>
             <p className="font-ledger text-lg text-ember">{formatCredits(product.priceCredits)}</p>
             <p className="text-xs text-muted-foreground">
-              {product.stock > 0 ? `${product.stock} in bottega` : "Esaurito"}
+              {product.stock > 0 ? `${product.stock} presso il fornitore` : "Esaurito"}
             </p>
           </div>
           {product.stock > 0 ? (

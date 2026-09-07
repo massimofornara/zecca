@@ -21,8 +21,8 @@ export default async function HomePage() {
         <p className="mt-6 max-w-2xl text-lg text-muted-foreground md:text-xl">
           Massimo Fornara conia i crediti (non euro di banca). Tu li compri — in demo o, se Stripe è
           acceso, in euro veri — li spendi in bottega su pezzi di massima fattura, te li fai
-          spedire a casa o a San Rocco al Forno, e puoi prelevare i crediti verso un conto o un
-          wallet. Zecca non dispone i pagamenti: lo fa il zecchiere.
+          spedire a casa — il produttore imballa, non Massimo — e puoi prelevare i crediti verso un
+          conto o un wallet. Zecca non dispone i pagamenti: lo fa il zecchiere.
         </p>
         <div className="mt-8 flex flex-wrap gap-3">
           <Link href="/vetrina" className={cn(buttonVariants({ size: "lg" }), "px-5")}>
@@ -36,7 +36,7 @@ export default async function HomePage() {
 
       <section className="mt-6 grid gap-4 md:grid-cols-3">
         <Step n="01" title="Il conio" body="Solo il zecchiere può far nascere i crediti. Entrano in tesoreria, non in un portafoglio a caso." />
-        <Step n="02" title="Il negozio" body="Pezzi di fattura alta, cesta, ricevuta, DHL Express 24h a casa tua o consegna in casa di Massimo. Ogni spesa di oggi scalda la Forgia del Giorno. Conio e prelievo restano." />
+        <Step n="02" title="Il negozio" body="Pezzi di fattura alta. Chi li produce imballa; DHL ritira dalla sede del fornitore. Massimo non tocca i colli. Ogni spesa di oggi scalda la Forgia del Giorno." />
         <Step n="03" title="Il prelievo" body="Chiunque abbia crediti può chiedere euro verso IBAN o wallet. Massimo invia dalla sua banca o dal suo wallet." />
       </section>
 

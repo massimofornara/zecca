@@ -15,7 +15,10 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
 
 export default async function ProductPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
-  const product = await prisma.product.findUnique({ where: { slug } });
+  const product = await prisma.product.findUnique({
+    where: { slug },
+    include: { supplier: true },
+  });
   if (!product || !product.active) notFound();
 
   return (
@@ -35,12 +38,18 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
           <p className="mt-4 text-muted-foreground">{product.description}</p>
           <p className="mt-6 font-ledger text-3xl text-ember">{formatCredits(product.priceCredits)}</p>
           <p className="mt-1 text-sm text-muted-foreground">
-            {product.stock > 0 ? `${product.stock} pezzi in bottega` : "Esaurito"}
+            {product.stock > 0 ? `${product.stock} pezzi presso il fornitore` : "Esaurito"}
           </p>
-          <p className="mt-3 text-sm text-primary">
-            Spedizione DHL Express 24h in Italia · ritiro da San Rocco al Forno. Oppure consegna in
-            casa di Massimo, senza corriere.
-          </p>
+          {product.supplier ? (
+            <p className="mt-3 text-sm text-primary">
+              Lo produce e lo spedisce {product.supplier.name}, {product.supplier.city}. DHL Express
+              24h ritira dalla loro sede. Massimo non imballa.
+            </p>
+          ) : (
+            <p className="mt-3 text-sm text-primary">
+              Spedizione DHL Express 24h dal fornitore. Massimo non imballa.
+            </p>
+          )}
           {product.stock > 0 && (
             <form action={addToCartAction} className="mt-6 flex items-end gap-3">
               <input type="hidden" name="productId" value={product.id} />

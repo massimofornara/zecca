@@ -8,28 +8,31 @@ import { buttonVariants } from "@/components/ui/button";
 import { prisma } from "@/lib/db";
 import { isDhlConfigured } from "@/lib/dhl";
 
-export const metadata = { title: "Banco imballo" };
+export const metadata = { title: "Ordine ai fornitori" };
 
 export default async function AdminOrdinePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const order = await prisma.order.findUnique({
     where: { id },
-    include: { items: { include: { product: true } }, user: true },
+    include: {
+      items: { include: { product: { include: { supplier: true } } } },
+      shipments: { include: { supplier: true, items: { include: { product: true } } } },
+      user: true,
+    },
   });
   if (!order) notFound();
   const dhl = isDhlConfigured();
 
   return (
     <div>
-      <p className="text-xs uppercase tracking-[0.28em] text-primary/80">Banco imballo</p>
+      <p className="text-xs uppercase tracking-[0.28em] text-primary/80">Fornitori</p>
       <h1 className="mt-1 font-display text-4xl text-primary">
         Ordine #{order.id.slice(-6).toUpperCase()}
       </h1>
       <p className="mt-2 text-muted-foreground">
-        Azioni del negozio, in più rispetto a conio, fusioni e tesoreria.{" "}
-        {dhl
-          ? "Contratto DHL collegato: puoi ripetere la prenotazione e aggiornare il tracking."
-          : "Senza chiavi DHL la lettera resta locale: imballa, copia l’indirizzo, segna il ritiro."}
+        Tu non imballi. Ogni produttore prepara il collo nella sua sede; tu mandi l’ordine e, se c’è
+        il contratto, prenoti il ritiro DHL da lì.{" "}
+        {dhl ? "Contratto DHL collegato." : "Senza chiavi DHL la lettera resta locale."}
       </p>
 
       <div className="mt-8 max-w-2xl">
@@ -37,15 +40,15 @@ export default async function AdminOrdinePage({ params }: { params: Promise<{ id
       </div>
 
       <div className="no-print mt-6 flex flex-wrap gap-2">
-        {order.carrier === "DHL_EXPRESS" && order.shipStatus !== "SHIPPED" && (
+        {order.shipStatus !== "SHIPPED" && (
           <form action={bookDhlAction}>
             <input type="hidden" name="id" value={order.id} />
             <SubmitButton size="sm" variant="outline">
-              Prenota / ripeti DHL
+              Invia / ripeti DHL ai fornitori
             </SubmitButton>
           </form>
         )}
-        {order.carrier === "DHL_EXPRESS" && order.trackingNumber && (
+        {order.shipments.some((s) => s.trackingNumber) && (
           <form action={refreshDhlTrackingAction}>
             <input type="hidden" name="id" value={order.id} />
             <SubmitButton size="sm" variant="outline">
@@ -56,10 +59,10 @@ export default async function AdminOrdinePage({ params }: { params: Promise<{ id
         {order.shipStatus !== "SHIPPED" && (
           <form action={markOrderShippedAction}>
             <input type="hidden" name="id" value={order.id} />
-            <SubmitButton size="sm">Segna ritiro avvenuto</SubmitButton>
+            <SubmitButton size="sm">I fornitori hanno consegnato a DHL</SubmitButton>
           </form>
         )}
-        <PrintButton>Stampa bolla</PrintButton>
+        <PrintButton>Stampa ordine per i fornitori</PrintButton>
         <Link href="/zecchiere/ordini" className={buttonVariants({ variant: "ghost", size: "sm" })}>
           Tutti gli ordini
         </Link>

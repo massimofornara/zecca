@@ -101,7 +101,7 @@ export function SiteFooter() {
         </Link>
         : i crediti non sono euro di banca.{" "}
         <Link href="/spedizione" className="underline hover:text-primary">
-          Spedizione DHL 24h
+          Spedizione dai fornitori
         </Link>
         .
       </p>

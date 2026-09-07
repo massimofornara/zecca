@@ -8,7 +8,7 @@ Non è un e-commerce a punti. I crediti vivono in un **libro mastro** immutabile
 
 1. **Conio** — Massimo scrive **qualsiasi quantità positiva**: i crediti nascono in tesoreria. Non sono euro di banca.
 2. **Acquisto crediti** — Il cliente versa euro (demo o Stripe) e riceve crediti dalla tesoreria.
-3. **Negozio** — Pezzi di massima fattura, pagati in crediti. Resta tutto il resto (conio, crediti, forgia, prelievo, tesoreria). In più: ricevuta, bolla di imballo, tracking pubblico, ultimo indirizzo in cesta. **DHL Express 24h** a casa del cliente (18 cr) oppure consegna in casa di Massimo. Con `DHL_API_KEY` + account si prenota il ritiro e si chiede l’etichetta; senza, la lettera di vettura resta locale.
+3. **Negozio** — Pezzi di massima fattura, pagati in crediti. Resta tutto il resto (conio, crediti, forgia, prelievo, tesoreria). **Massimo non imballa**: ogni pezzo lo produce e lo spedisce il fornitore; DHL Express 24h ritira dalla sede di quell’azienda (18 cr a casa del cliente, 0 cr se la destinazione è casa di Massimo). Ricevuta, ordine ai fornitori, tracking pubblico. Con `DHL_API_KEY` + account si prenota il ritiro vero; senza, la lettera resta locale.
 4. **Forgia del Giorno** — Il calore di oggi dipende da quanto hai comprato *nella giornata*. A mezzanotte romana si azzera. Non blocca più il prelievo.
 5. **Prelievo clienti** — Chiunque abbia crediti può chiedere euro verso **IBAN** o **wallet**. Massimo segna pagato dopo il bonifico o l’invio dal suo wallet (in demo: chiude il movimento). L’app non spedisce da sola.
 6. **Conversione tesoreria** — Massimo converte crediti ancora in casa in **euro e/o dollari della cassa negozio**. È un movimento contabile: non è un prelievo personale e non accredita un conto bancario.
@@ -67,7 +67,7 @@ Chiara ha già speso oggi in bottega. Luca ha crediti e può già chiedere un pr
 2. Esci, entra come Luca, compra crediti in **Crediti** (pagamento demo: accredito immediato).
 3. Metti in cesta un pezzo dalla **Vetrina**, scegli se spedirlo a casa tua o a casa di Massimo, e paga in crediti. Si apre la **ricevuta** con tracking.
 4. In **Prelievo** chiedi euro verso IBAN o wallet (anche senza aver comprato oggi).
-5. Torna come Massimo: in **Ordini** apri il banco imballo (bolla, copia indirizzo, prenota DHL, aggiorna tracking). In **Fusioni** copia IBAN/indirizzo e importo, poi conferma l’invio.
+5. Torna come Massimo: in **Ordini** apri l’ordine ai fornitori (non imballi: copi i dati e prenoti DHL dalla loro sede). In **Fusioni** copia IBAN/indirizzo e importo, poi conferma l’invio.
 
 ## Da fittizio a reale
 

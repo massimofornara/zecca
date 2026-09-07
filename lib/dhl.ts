@@ -1,4 +1,12 @@
-import { CASA_MASSIMO } from "@/lib/shipping";
+export type DhlShipper = {
+  name: string;
+  company: string;
+  street: string;
+  city: string;
+  postal: string;
+  phone?: string | null;
+  email?: string | null;
+};
 
 const TEST_BASE = "https://express.api.dhl.com/mydhlapi/test";
 const LIVE_BASE = "https://express.api.dhl.com/mydhlapi";
@@ -76,6 +84,7 @@ function plannedPickup() {
 export async function bookDhlExpress24h(input: {
   orderRef: string;
   receiver: DhlAddress;
+  shipper: DhlShipper;
   description: string;
 }): Promise<DhlBooking> {
   if (!isDhlConfigured()) {
@@ -86,15 +95,14 @@ export async function bookDhlExpress24h(input: {
       trackingUrl: dhlTrackingUrl(trackingNumber),
       shipmentId: null,
       pickupRequested: false,
-      message:
-        "Lettera di vettura DHL Express 24h preparata in locale. Manca il contratto DHL (DHL_API_KEY, DHL_API_SECRET, DHL_ACCOUNT_NUMBER) per il ritiro vero.",
+      message: `Lettera di vettura DHL Express 24h preparata per ${input.shipper.company}. Manca il contratto DHL per il ritiro vero dalla sede del fornitore.`,
       labelPath: null,
-      trackStatus: "In preparazione",
-      trackDetail: "Massimo sta imballando in bottega. Il ritiro DHL parte quando c’è il contratto.",
+      trackStatus: "In preparazione dal fornitore",
+      trackDetail: `${input.shipper.name} imballa a ${input.shipper.city}. Massimo non tocca il collo.`,
     };
   }
 
-  const shipperStreet = splitStreet(CASA_MASSIMO.street);
+  const shipperStreet = splitStreet(input.shipper.street);
   const receiverStreet = splitStreet(input.receiver.street);
   const body = {
     plannedShippingDateAndTime: plannedPickup(),
@@ -108,17 +116,17 @@ export async function bookDhlExpress24h(input: {
     customerDetails: {
       shipperDetails: {
         postalAddress: {
-          postalCode: CASA_MASSIMO.postal,
-          cityName: CASA_MASSIMO.city,
+          postalCode: input.shipper.postal,
+          cityName: input.shipper.city,
           countryCode: "IT",
           addressLine1: shipperStreet.addressLine1,
           addressLine2: shipperStreet.addressLine2,
         },
         contactInformation: {
-          fullName: CASA_MASSIMO.name,
-          companyName: "Zecca",
-          phone: process.env.DHL_SHIPPER_PHONE || "+390184000000",
-          email: process.env.DHL_SHIPPER_EMAIL || "massimo@zecca.local",
+          fullName: input.shipper.name,
+          companyName: input.shipper.company,
+          phone: input.shipper.phone || process.env.DHL_SHIPPER_PHONE || "+390184000000",
+          email: input.shipper.email || process.env.DHL_SHIPPER_EMAIL || "massimo@zecca.local",
         },
       },
       receiverDetails: {
@@ -204,13 +212,13 @@ export async function bookDhlExpress24h(input: {
     shipmentId: trackingNumber,
     pickupRequested: true,
     message: isDhlLive()
-      ? "Ritiro DHL Express 24h prenotato. Massimo deve avere il collo pronto."
+      ? `Ritiro DHL Express 24h prenotato presso ${input.shipper.company}. Il fornitore deve avere il collo pronto.`
       : "Spedizione creata sull’ambiente di test DHL (non è un ritiro sul serio).",
     labelPath,
-    trackStatus: isDhlLive() ? "Ritiro prenotato" : "Prenotata in test DHL",
+    trackStatus: isDhlLive() ? "Ritiro prenotato dal fornitore" : "Prenotata in test DHL",
     trackDetail: isDhlLive()
-      ? "DHL deve passare in bottega. Massimo imballa; tu segui il tracking."
-      : "Ambiente di test: nessuna furgone arriva in via del Frantoio.",
+      ? `DHL passa da ${input.shipper.city}. Massimo non imballa.`
+      : `Ambiente di test: nessuna furgone arriva da ${input.shipper.city}.`,
   };
 }
 
@@ -234,7 +242,7 @@ export async function fetchDhlTracking(trackingNumber: string): Promise<DhlTrack
     return {
       live: false,
       status: "In preparazione",
-      detail: "Senza contratto DHL lo stato resta quello del banco di imballo.",
+      detail: "Senza contratto DHL lo stato resta quello del fornitore.",
     };
   }
 
@@ -276,26 +284,30 @@ export async function fetchDhlTracking(trackingNumber: string): Promise<DhlTrack
 export function shipProgress(order: {
   carrier: string;
   shipStatus: string;
+  shipTo?: string;
   dhlTrackStatus?: string | null;
   dhlTrackDetail?: string | null;
 }) {
-  if (order.carrier === "HAND") {
-    return {
-      status: order.shipStatus === "SHIPPED" ? "Pronto in sede" : "Da consegnare in sede",
-      detail: "Niente corriere: ritiro in casa di Massimo, San Rocco al Forno.",
-    };
-  }
   if (order.dhlTrackStatus) {
     return {
       status: order.dhlTrackStatus,
-      detail: order.dhlTrackDetail || "Stato dal banco di imballo o da DHL.",
+      detail: order.dhlTrackDetail || "Stato dal fornitore o da DHL.",
     };
   }
   if (order.shipStatus === "SHIPPED") {
-    return { status: "In viaggio", detail: "Massimo ha segnato il ritiro DHL." };
+    return {
+      status: "In viaggio",
+      detail:
+        order.shipTo === "MASSIMO"
+          ? "Il fornitore ha spedito verso casa di Massimo."
+          : "Il fornitore ha consegnato il collo a DHL.",
+    };
   }
   if (order.shipStatus === "BOOKED") {
-    return { status: "Ritiro prenotato", detail: "DHL deve passare in bottega." };
+    return { status: "Ritiro prenotato", detail: "DHL passa dalla sede del fornitore." };
   }
-  return { status: "In preparazione", detail: "Massimo sta imballando il collo." };
+  return {
+    status: "In preparazione dal fornitore",
+    detail: "Chi produce il pezzo imballa. Massimo non tocca il collo.",
+  };
 }

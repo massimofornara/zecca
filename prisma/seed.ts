@@ -1,17 +1,20 @@
 import { hash } from "bcryptjs";
 import { PrismaClient } from "@prisma/client";
-import { CATALOG_SEED } from "../lib/catalog";
+import { CATALOG_SEED, catalogProductFields } from "../lib/catalog";
 import { DEFAULT_SETTINGS } from "../lib/zecca/settings";
+import { attachCatalogSuppliers } from "../lib/suppliers";
 
 const prisma = new PrismaClient();
 
 async function main() {
   await prisma.orderItem.deleteMany();
+  await prisma.shipment.deleteMany();
   await prisma.ledgerEntry.deleteMany();
   await prisma.cashoutRequest.deleteMany();
   await prisma.creditPurchase.deleteMany();
   await prisma.order.deleteMany();
   await prisma.product.deleteMany();
+  await prisma.supplier.deleteMany();
   await prisma.setting.deleteMany();
   await prisma.user.deleteMany();
 
@@ -48,8 +51,15 @@ async function main() {
     },
   });
 
+  const suppliers = await attachCatalogSuppliers(prisma);
   for (const product of CATALOG_SEED) {
-    await prisma.product.create({ data: { ...product, active: true } });
+    await prisma.product.create({
+      data: {
+        ...catalogProductFields(product),
+        active: true,
+        supplierId: suppliers.get(product.supplierSlug)?.id,
+      },
+    });
   }
 
   await prisma.setting.createMany({
@@ -152,10 +162,9 @@ async function main() {
       shipStatus: "TO_PACK",
       trackingNumber: "JD14ZECCA0001",
       trackingUrl: "https://www.dhl.com/it-it/home/tracking.html?tracking-id=JD14ZECCA0001",
-      dhlMessage:
-        "Lettera di vettura locale. Il ritiro vero parte quando Massimo mette le chiavi DHL nel .env.",
-      dhlTrackStatus: "In preparazione",
-      dhlTrackDetail: "Massimo sta imballando in bottega.",
+      dhlMessage: "I fornitori preparano i colli. Massimo non imballa.",
+      dhlTrackStatus: "In preparazione dal fornitore",
+      dhlTrackDetail: "Chi produce imballa. DHL ritira dalla sede del fornitore.",
       dhlTrackedAt: new Date(),
       items: {
         create: [
@@ -166,7 +175,42 @@ async function main() {
         ],
       },
     },
+    include: { items: { include: { product: { include: { supplier: true } } } } },
   });
+
+  let firstTracking = true;
+  const bySupplier = new Map<string, typeof chiaraOrder.items>();
+  for (const item of chiaraOrder.items) {
+    if (!item.product.supplierId || !item.product.supplier) continue;
+    const list = bySupplier.get(item.product.supplierId) ?? [];
+    list.push(item);
+    bySupplier.set(item.product.supplierId, list);
+  }
+  for (const [supplierId, items] of bySupplier) {
+    const supplier = items[0].product.supplier!;
+    const tracking = firstTracking ? "JD14ZECCA0001" : `JD14${supplier.slug.slice(0, 6).toUpperCase()}01`;
+    firstTracking = false;
+    await prisma.shipment.create({
+      data: {
+        orderId: chiaraOrder.id,
+        supplierId,
+        supplierName: supplier.name,
+        supplierStreet: supplier.street,
+        supplierCity: supplier.city,
+        supplierPostal: supplier.postal,
+        supplierPhone: supplier.phone,
+        supplierEmail: supplier.email,
+        trackingNumber: tracking,
+        trackingUrl: `https://www.dhl.com/it-it/home/tracking.html?tracking-id=${tracking}`,
+        dhlMessage: `Collo di ${supplier.name}. Massimo non imballa.`,
+        dhlTrackStatus: "In preparazione dal fornitore",
+        dhlTrackDetail: `${supplier.name} imballa a ${supplier.city}.`,
+        dhlTrackedAt: new Date(),
+        shipStatus: "AWAITING_SUPPLIER",
+        items: { connect: items.map((item) => ({ id: item.id })) },
+      },
+    });
+  }
 
   await prisma.product.update({
     where: { id: olio.id },

@@ -9,6 +9,7 @@ export const metadata = { title: "Vetrina" };
 export default async function VetrinaPage() {
   const products = await prisma.product.findMany({
     where: { active: true },
+    include: { supplier: true },
     orderBy: { priceCredits: "asc" },
   });
 
@@ -17,11 +18,12 @@ export default async function VetrinaPage() {
       <p className="text-xs uppercase tracking-[0.28em] text-primary/80">Bottega della Zecca</p>
       <h1 className="mt-1 font-display text-4xl text-primary md:text-5xl">La vetrina</h1>
       <p className="mt-3 max-w-2xl text-muted-foreground">
-        E-commerce della bottega: pezzi di massima fattura, pagamento in crediti,{" "}
+        E-commerce della bottega: pezzi di massima fattura, pagamento in crediti. Chi li produce
+        imballa e{" "}
         <Link href="/spedizione" className="underline hover:text-primary">
           DHL Express 24h
         </Link>{" "}
-        a casa tua oppure consegna in casa di Massimo.
+        ritira dalla sede del fornitore. Massimo non tocca i colli.
       </p>
       {products.length === 0 ? (
         <div className="mt-10">

@@ -11,6 +11,7 @@ const ITEMS = [
   { href: "/zecchiere", label: "Tesoreria" },
   { href: "/zecchiere/conio", label: "Conio" },
   { href: "/zecchiere/prodotti", label: "Vetrina" },
+  { href: "/zecchiere/fornitori", label: "Fornitori" },
   { href: "/zecchiere/ordini", label: "Ordini" },
   { href: "/zecchiere/libro-mastro", label: "Libro mastro" },
   { href: "/zecchiere/fusioni", label: "Fusioni" },

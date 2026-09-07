@@ -60,6 +60,20 @@ model User {
   ledgerActor     LedgerEntry[]    @relation("Actor")
 }
 
+model Supplier {
+  id        String     @id @default(cuid())
+  slug      String     @unique
+  name      String
+  company   String
+  street    String
+  city      String
+  postal    String
+  phone     String
+  email     String
+  products  Product[]
+  shipments Shipment[]
+}
+
 model Product {
   id           String   @id @default(cuid())
   slug         String   @unique
@@ -69,6 +83,8 @@ model Product {
   priceCredits Int
   stock        Int
   active       Boolean  @default(true)
+  supplierId   String?
+  supplier     Supplier? @relation(fields: [supplierId], references: [id])
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
   orderItems   OrderItem[]
@@ -102,17 +118,48 @@ model Order {
   shippedAt    DateTime?
   createdAt    DateTime    @default(now())
   items        OrderItem[]
+  shipments    Shipment[]
   ledger       LedgerEntry[]
 
   @@index([trackingNumber])
 }
 
+model Shipment {
+  id             String   @id @default(cuid())
+  orderId        String
+  order          Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  supplierId     String
+  supplier       Supplier @relation(fields: [supplierId], references: [id])
+  supplierName   String
+  supplierStreet String
+  supplierCity   String
+  supplierPostal String
+  supplierPhone  String
+  supplierEmail  String
+  trackingNumber String?
+  trackingUrl    String?
+  dhlShipmentId  String?
+  dhlMessage     String?
+  dhlTrackStatus String?
+  dhlTrackDetail String?
+  dhlTrackedAt   DateTime?
+  dhlLabelPath   String?
+  shipStatus     String   @default("AWAITING_SUPPLIER")
+  shippedAt      DateTime?
+  createdAt      DateTime @default(now())
+  items          OrderItem[]
+
+  @@index([trackingNumber])
+}
+
 model OrderItem {
-  id          String  @id @default(cuid())
+  id          String    @id @default(cuid())
   orderId     String
-  order       Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  order       Order     @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  shipmentId  String?
+  shipment    Shipment? @relation(fields: [shipmentId], references: [id])
   productId   String
-  product     Product @relation(fields: [productId], references: [id])
+  product     Product   @relation(fields: [productId], references: [id])
   quantity    Int
   unitCredits Int
 }

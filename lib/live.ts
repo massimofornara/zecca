@@ -108,9 +108,9 @@ export function getLiveReport(): LiveReport {
       detail:
         process.env.DHL_API_KEY && process.env.DHL_API_SECRET && process.env.DHL_ACCOUNT_NUMBER
           ? process.env.DHL_LIVE === "1"
-            ? "Contratto DHL live: al checkout si prenota il ritiro."
+            ? "Contratto DHL live: al checkout si prenota il ritiro dalla sede del fornitore."
             : "Chiavi DHL in ambiente test."
-          : "Mancano DHL_API_KEY, DHL_API_SECRET, DHL_ACCOUNT_NUMBER. Senza di esse la lettera di vettura è locale.",
+          : "Mancano DHL_API_KEY, DHL_API_SECRET, DHL_ACCOUNT_NUMBER. Senza di esse la lettera di vettura è locale. I fornitori restano i mittenti.",
       needsYou: true,
     },
     {

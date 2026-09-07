@@ -16,6 +16,7 @@ export default async function ProductEditPage({
   const isNew = id === "nuovo";
   const product = isNew ? null : await prisma.product.findUnique({ where: { id } });
   if (!isNew && !product) notFound();
+  const suppliers = await prisma.supplier.findMany({ orderBy: { name: "asc" } });
 
   return (
     <div className="max-w-xl">
@@ -39,6 +40,25 @@ export default async function ProductEditPage({
             {PRODUCT_ART.map((key) => (
               <option key={key} value={key}>
                 {PRODUCT_ART_LABELS[key]}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="supplierId">Fornitore (imballa e spedisce lui)</Label>
+          <select
+            id="supplierId"
+            name="supplierId"
+            defaultValue={product?.supplierId ?? ""}
+            className="h-8 w-full rounded-lg border border-input bg-background px-2 text-sm"
+            required
+          >
+            <option value="" disabled>
+              Scegli l’azienda
+            </option>
+            {suppliers.map((supplier) => (
+              <option key={supplier.id} value={supplier.id}>
+                {supplier.name} · {supplier.city}
               </option>
             ))}
           </select>

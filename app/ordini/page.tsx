@@ -12,9 +12,9 @@ import { buttonVariants } from "@/components/ui/button";
 export const metadata = { title: "Ordini" };
 
 function shipLabel(status: string) {
-  if (status === "SHIPPED") return "In viaggio / consegnato in sede";
-  if (status === "BOOKED") return "DHL: ritiro prenotato";
-  return "In preparazione";
+  if (status === "SHIPPED") return "I fornitori hanno spedito";
+  if (status === "BOOKED") return "DHL: ritiro dal fornitore";
+  return "In preparazione dal fornitore";
 }
 
 export default async function OrdiniPage({
@@ -28,7 +28,10 @@ export default async function OrdiniPage({
   const orders = await prisma.order.findMany({
     where: { userId: session.user.id },
     orderBy: { createdAt: "desc" },
-    include: { items: { include: { product: true } } },
+    include: {
+      items: { include: { product: { include: { supplier: true } } } },
+      shipments: true,
+    },
   });
 
   return (
@@ -36,7 +39,7 @@ export default async function OrdiniPage({
       <h1 className="font-display text-4xl text-primary">Ordini</h1>
       <div className="mt-4">
         {ok && (
-          <OkBanner message="Ordine pagato. Se hai scelto casa tua, DHL Express 24h è in coda di ritiro." />
+          <OkBanner message="Ordine pagato. I fornitori imballano; DHL ritira dalle loro sedi. Massimo non tocca i colli." />
         )}
       </div>
       {orders.length === 0 ? (

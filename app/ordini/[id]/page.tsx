@@ -16,7 +16,10 @@ export default async function OrdinePage({ params }: { params: Promise<{ id: str
   const { id } = await params;
   const order = await prisma.order.findUnique({
     where: { id },
-    include: { items: { include: { product: true } } },
+    include: {
+      items: { include: { product: { include: { supplier: true } } } },
+      shipments: { include: { items: { include: { product: true } } } },
+    },
   });
   if (!order || (order.userId !== session.user.id && session.user.role !== "ADMIN")) {
     notFound();
@@ -29,11 +32,10 @@ export default async function OrdinePage({ params }: { params: Promise<{ id: str
         Ordine #{order.id.slice(-6).toUpperCase()}
       </h1>
       <p className="mt-2 max-w-2xl text-muted-foreground">
-        Pagato in crediti. Il conio, il prelievo e la tesoreria non cambiano: qui c’è solo la merce e,
-        se l’hai chiesta, la spedizione DHL.
+        Pagato in crediti. Chi produce il pezzo imballa e spedisce. Massimo non prepara colli.
       </p>
       <div className="mt-4">
-        <OkBanner message="Ricevuta del negozio. I crediti restano nel libro mastro; il collo è un’azione a parte." />
+        <OkBanner message="Ricevuta del negozio. Il collo parte dal fornitore, non dalla casa della zecca." />
       </div>
       <div className="mt-8 max-w-2xl">
         <OrderSheet order={order} />

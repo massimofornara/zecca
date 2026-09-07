@@ -13,7 +13,11 @@ export const metadata = { title: "Ordini" };
 export default async function AdminOrdiniPage() {
   const orders = await prisma.order.findMany({
     orderBy: { createdAt: "desc" },
-    include: { user: true, items: { include: { product: true } } },
+    include: {
+      user: true,
+      items: { include: { product: { include: { supplier: true } } } },
+      shipments: true,
+    },
     take: 50,
   });
   const dhl = isDhlConfigured();
@@ -22,7 +26,8 @@ export default async function AdminOrdiniPage() {
     <div>
       <h1 className="font-display text-4xl text-primary">Ordini</h1>
       <p className="mt-2 text-muted-foreground">
-        Oltre a conio e fusioni: merce, bolla, tracking e DHL Express 24h.{" "}
+        Tu non imballi. I fornitori preparano i colli nella loro sede; qui trasmetti l’ordine e
+        prenoti DHL da lì.{" "}
         {dhl
           ? "Contratto DHL collegato."
           : "Senza chiavi DHL la lettera di vettura è locale: il ritiro vero parte quando le metti nel .env."}
@@ -53,6 +58,7 @@ export default async function AdminOrdiniPage() {
                   {order.items.map((item) => (
                     <li key={item.id}>
                       {item.quantity} × {item.product.name}
+                      {item.product.supplier ? ` · ${item.product.supplier.name}` : ""}
                     </li>
                   ))}
                 </ul>
@@ -84,15 +90,15 @@ export default async function AdminOrdiniPage() {
                 )}
                 <p className="mt-3 text-sm">
                   <Link href={`/zecchiere/ordini/${order.id}`} className="underline hover:text-primary">
-                    Banco imballo e bolla
+                    Ordine ai fornitori
                   </Link>
                 </p>
                 <div className="mt-3 flex flex-wrap gap-2">
-                  {order.carrier === "DHL_EXPRESS" && order.shipStatus !== "SHIPPED" && (
+                  {order.shipStatus !== "SHIPPED" && (
                     <form action={bookDhlAction}>
                       <input type="hidden" name="id" value={order.id} />
                       <SubmitButton size="sm" variant="outline">
-                        Prenota / ripeti DHL
+                        Invia DHL ai fornitori
                       </SubmitButton>
                     </form>
                   )}
@@ -101,7 +107,7 @@ export default async function AdminOrdiniPage() {
                   ) : (
                     <form action={markOrderShippedAction}>
                       <input type="hidden" name="id" value={order.id} />
-                      <SubmitButton size="sm">Segna ritiro avvenuto</SubmitButton>
+                      <SubmitButton size="sm">Fornitori: ritiro avvenuto</SubmitButton>
                     </form>
                   )}
                 </div>

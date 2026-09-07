@@ -23,9 +23,9 @@ export function CheckoutForm({ lastAddress }: { lastAddress?: LastAddress | null
     <form action={action} className="mt-4 w-full max-w-xl space-y-4">
       <ErrorBanner message={state?.error} />
       <p className="text-sm text-muted-foreground">
-        Paga in crediti — come prima. In più, il collo parte con{" "}
-        <strong>DHL Express 24h</strong> da San Rocco al Forno. Consegna in casa di Massimo: niente
-        corriere.
+        Paga in crediti. Il produttore imballa e <strong>DHL Express 24h</strong> ritira dalla sua
+        sede. Massimo non tocca il collo. «A casa di Massimo» è solo la destinazione: spedisce
+        comunque il fornitore.
       </p>
 
       <p className="text-sm">Dove lo spediamo</p>
@@ -59,7 +59,7 @@ export function CheckoutForm({ lastAddress }: { lastAddress?: LastAddress | null
           className="metal-frame cursor-pointer rounded-md bg-background/40 px-3 py-2 text-sm peer-checked/massimo:bg-primary/15 peer-checked/massimo:text-primary peer-checked/massimo:ring-1 peer-checked/massimo:ring-primary/40"
         >
           A casa di Massimo
-          <span className="mt-1 block font-ledger">0 cr</span>
+          <span className="mt-1 block font-ledger">0 cr · il fornitore spedisce lì</span>
         </label>
       </div>
 
@@ -109,7 +109,8 @@ export function CheckoutForm({ lastAddress }: { lastAddress?: LastAddress | null
       </div>
 
       <div className="hidden rounded-md bg-background/40 p-3 text-sm text-muted-foreground peer-checked/massimo:block">
-        <p className="font-medium text-foreground">Casa della Zecca · ritiro in sede</p>
+        <p className="font-medium text-foreground">Destinazione: casa di Massimo</p>
+        <p className="mt-1">Il fornitore spedisce qui. Massimo riceve, non imballa.</p>
         <p>
           {CASA_MASSIMO.name}
           <br />
@@ -124,7 +125,7 @@ export function CheckoutForm({ lastAddress }: { lastAddress?: LastAddress | null
         <Input name="shipNote" className="mt-1" placeholder="Campanello, piano, orario…" />
       </label>
 
-      <SubmitButton>Paga e spedisci con DHL Express 24h</SubmitButton>
+      <SubmitButton>Paga: spedisce il fornitore</SubmitButton>
     </form>
   );
 }

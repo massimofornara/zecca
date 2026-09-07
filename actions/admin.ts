@@ -8,7 +8,7 @@ import { resolveCashout } from "@/lib/zecca/cashout";
 import { convertTreasuryToShopFiat } from "@/lib/zecca/convert";
 import { saveSettings, type ForgeTier } from "@/lib/zecca/settings";
 import { prisma } from "@/lib/db";
-import { fulfillDhlOrder, refreshOrderTracking } from "@/lib/zecca/shop";
+import { fulfillDhlOrder, markSupplierShipped, refreshOrderTracking } from "@/lib/zecca/shop";
 import { CATALOG_SEED } from "@/lib/catalog";
 
 export async function mintAction(
@@ -183,16 +183,17 @@ export async function upsertProductAction(
 
   const validKeys = CATALOG_SEED.map((p) => p.imageKey);
   const key = validKeys.includes(imageKey as (typeof validKeys)[number]) ? imageKey : "olio";
+  const supplierId = String(formData.get("supplierId") ?? "").trim() || null;
 
   try {
     if (id) {
       await prisma.product.update({
         where: { id },
-        data: { name, slug, description, imageKey: key, priceCredits, stock, active },
+        data: { name, slug, description, imageKey: key, priceCredits, stock, active, supplierId },
       });
     } else {
       await prisma.product.create({
-        data: { name, slug, description, imageKey: key, priceCredits, stock, active },
+        data: { name, slug, description, imageKey: key, priceCredits, stock, active, supplierId },
       });
     }
   } catch {
@@ -239,16 +240,7 @@ export async function markOrderShippedAction(formData: FormData) {
   if (!admin) return;
   const id = String(formData.get("id") ?? "");
   if (!id) return;
-  await prisma.order.update({
-    where: { id },
-    data: {
-      shipStatus: "SHIPPED",
-      shippedAt: new Date(),
-      dhlTrackStatus: "Ritiro avvenuto",
-      dhlTrackDetail: "Massimo ha consegnato il collo a DHL o al cliente in sede.",
-      dhlTrackedAt: new Date(),
-    },
-  });
+  await markSupplierShipped(id);
   revalidatePath("/zecchiere/ordini");
   revalidatePath(`/zecchiere/ordini/${id}`);
   revalidatePath("/ordini");

@@ -52,6 +52,18 @@ async function main() {
       ],
     });
 
+    const supplier = await db.supplier.create({
+      data: {
+        slug: "saponificio-test",
+        name: "Saponificio Test",
+        company: "Saponificio Test",
+        street: "Via Prove 1",
+        city: "Taggia",
+        postal: "18018",
+        phone: "+390184000001",
+        email: "test@fornitore.test",
+      },
+    });
     const product = await db.product.create({
       data: {
         slug: "sapone-test",
@@ -61,6 +73,7 @@ async function main() {
         priceCredits: 50,
         stock: 10,
         active: true,
+        supplierId: supplier.id,
       },
     });
 
@@ -101,6 +114,11 @@ async function main() {
     assert.equal(paidOrder.carrier, "DHL_EXPRESS");
     assert.ok(paidOrder.trackingNumber);
     assert.ok(paidOrder.dhlTrackStatus);
+    const dhlShipments = await db.shipment.findMany({ where: { orderId: paidOrder.id } });
+    assert.equal(dhlShipments.length, 1);
+    assert.equal(dhlShipments[0].supplierName, "Saponificio Test");
+    assert.ok(dhlShipments[0].trackingNumber);
+    assert.match(dhlShipments[0].dhlTrackDetail ?? "", /Massimo non tocca|Taggia|fornitore/i);
 
     const remembered = await lastCustomerAddress(customer.id, db);
     assert.equal(remembered?.shipCity, "Genova");
@@ -123,6 +141,7 @@ async function main() {
         priceCredits: 2,
         stock: 4,
         active: true,
+        supplierId: supplier.id,
       },
     });
     await placeOrder({
@@ -143,6 +162,9 @@ async function main() {
     });
     assert.equal(handOrder.shippingCredits, 0);
     assert.equal(handOrder.shipTo, "MASSIMO");
+    const handShipments = await db.shipment.findMany({ where: { orderId: handOrder.id } });
+    assert.equal(handShipments.length, 1);
+    assert.equal(handShipments[0].supplierCity, "Taggia");
     const stillCustomerAddress = await lastCustomerAddress(customer.id, db);
     assert.equal(stillCustomerAddress?.shipCity, "Genova");
 

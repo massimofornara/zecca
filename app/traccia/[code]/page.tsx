@@ -15,31 +15,46 @@ export default async function TracciaPage({ params }: { params: Promise<{ code: 
   const tracking = decodeURIComponent(code).trim();
   if (!tracking) notFound();
 
-  const order = await prisma.order.findFirst({
+  const shipment = await prisma.shipment.findFirst({
     where: { trackingNumber: tracking },
-    include: { items: { include: { product: true } } },
+    include: { items: { include: { product: true } }, order: true, supplier: true },
   });
+  const order =
+    shipment?.order ??
+    (await prisma.order.findFirst({
+      where: { trackingNumber: tracking },
+      include: { items: { include: { product: true } } },
+    }));
   if (!order) notFound();
 
   const dest = formatShipping(order);
-  const progress = shipProgress(order);
+  const progress = shipProgress(shipment ?? order);
+  const items = shipment?.items ?? order.items;
+  const trackingNumber = shipment?.trackingNumber ?? order.trackingNumber;
+  const trackingUrl = shipment?.trackingUrl ?? order.trackingUrl;
+  const updatedAt = shipment?.dhlTrackedAt ?? order.dhlTrackedAt;
 
   return (
     <PageShell>
       <p className="text-xs uppercase tracking-[0.28em] text-primary/80">Spedizione</p>
-      <h1 className="mt-1 font-display text-4xl text-primary">Tracking {order.trackingNumber}</h1>
+      <h1 className="mt-1 font-display text-4xl text-primary">Tracking {trackingNumber}</h1>
       <p className="mt-2 max-w-2xl text-muted-foreground">
-        Stato del collo. Non sostituisce conio, prelievo o tesoreria: è solo il corriere.
+        Il collo parte dal fornitore, non dalla casa della zecca. Massimo non imballa.
       </p>
 
       <section className="metal-frame mt-8 max-w-2xl rounded-md bg-card p-5">
         <p className="text-xs uppercase tracking-[0.2em] text-primary/80">{progress.status}</p>
-        <p className="mt-2 font-display text-3xl text-primary">{dest.who}</p>
-        <p className="mt-2 text-sm text-muted-foreground">{progress.detail}</p>
-        {order.dhlTrackedAt ? (
-          <p className="mt-2 text-xs text-muted-foreground">
-            Aggiornato {formatRomeDate(order.dhlTrackedAt)}
+        <p className="mt-2 font-display text-3xl text-primary">
+          {shipment ? shipment.supplierName : dest.who}
+        </p>
+        {shipment ? (
+          <p className="mt-1 text-sm text-muted-foreground">
+            Ritiro DHL da {shipment.supplierCity}. Destinazione: {dest.who}.
           </p>
+        ) : null}
+        <p className="mt-2 text-sm text-muted-foreground">{progress.detail}</p>
+        {updatedAt ? (
+          <p className="mt-2 text-xs text-muted-foreground">Aggiornato {formatRomeDate(updatedAt)}</p>
         ) : null}
         {dest.lines ? (
           <p className="mt-4 text-sm text-muted-foreground">
@@ -47,15 +62,15 @@ export default async function TracciaPage({ params }: { params: Promise<{ code: 
           </p>
         ) : null}
         <ul className="mt-4 text-sm text-muted-foreground">
-          {order.items.map((item) => (
+          {items.map((item) => (
             <li key={item.id}>
               {item.quantity} × {item.product.name}
             </li>
           ))}
         </ul>
-        {order.trackingUrl ? (
+        {trackingUrl ? (
           <p className="mt-4 text-sm">
-            <a href={order.trackingUrl} className="underline hover:text-primary" target="_blank" rel="noreferrer">
+            <a href={trackingUrl} className="underline hover:text-primary" target="_blank" rel="noreferrer">
               Apri su DHL
             </a>
           </p>
