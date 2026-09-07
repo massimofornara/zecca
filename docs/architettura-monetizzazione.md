@@ -160,13 +160,13 @@ Un sito che dice “non siamo una banca” **non** esclude la qualificazione se 
 
 ## Cosa questo repo implementa — e cosa no
 
-Implementato: libro mastro, conio, acquisto (demo/Stripe), bottega, forgia, fusione IBAN, **indicatore di copertura** in Tesoreria, questa nota.
+Implementato: libro mastro, conio, acquisto (demo/Stripe), bottega, forgia, prelievo clienti verso **IBAN o wallet** (coda manuale), **indicatore di copertura** in Tesoreria, questa nota.
 
 Non verrà implementato qui:
 
 - smart contract ERC-20 con mint libero;
-- invio verso wallet crypto esterni;
-- trasformazione del conio scoperto in prelievo fiat/crypto.
+- invio automatico verso wallet crypto esterni (hot wallet, exchange, viem);
+- trasformazione del conio scoperto in un prelievo automatico fiat/crypto.
 
 Quella strada è un prodotto regolamentato, con capitale, riserve e autorizzazione — non un’estensione di `ensureTreasury`.
 

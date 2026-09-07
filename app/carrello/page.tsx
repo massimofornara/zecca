@@ -5,6 +5,7 @@ import { SubmitButton } from "@/components/forms/SubmitButton";
 import { PageShell } from "@/components/layout/SiteChrome";
 import { EmptyState, ErrorBanner } from "@/components/ui/banners";
 import { buttonVariants } from "@/components/ui/button";
+import { ProductArt } from "@/components/brand/ProductArt";
 import { getCart } from "@/lib/cart";
 import { formatCredits } from "@/lib/format";
 import { prisma } from "@/lib/db";
@@ -59,7 +60,11 @@ export default async function CarrelloPage({
               key={line.productId}
               className="metal-frame flex flex-col gap-3 rounded-md bg-card p-4 sm:flex-row sm:items-center sm:justify-between"
             >
-              <div>
+              <div className="flex items-center gap-3">
+                <div className="h-16 w-16 shrink-0 overflow-hidden rounded-md ring-1 ring-primary/20">
+                  <ProductArt imageKey={line.product.imageKey} alt={line.product.name} />
+                </div>
+                <div>
                 <Link href={`/vetrina/${line.product.slug}`} className="font-display text-xl text-primary">
                   {line.product.name}
                 </Link>
@@ -67,6 +72,7 @@ export default async function CarrelloPage({
                   {formatCredits(line.product.priceCredits)} × {line.quantity} ={" "}
                   {formatCredits(line.lineTotal)}
                 </p>
+                </div>
               </div>
               <form action={updateCartAction} className="flex items-center gap-2">
                 <input type="hidden" name="productId" value={line.productId} />

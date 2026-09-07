@@ -20,8 +20,9 @@ export default async function HomePage() {
         <Wordmark size="lg" className="mt-4" />
         <p className="mt-6 max-w-2xl text-lg text-muted-foreground md:text-xl">
           Massimo Fornara conia i crediti (non euro di banca). Tu li compri — in demo o, se Stripe è
-          acceso, in euro veri — li spendi in bottega, e se la forgia di oggi è calda puoi chiedere un
-          bonifico. Zecca non dispone i pagamenti: lo fa il zecchiere.
+          acceso, in euro veri — li spendi in bottega su oggetti veri della casa, e puoi chiedere di
+          prelevare i crediti verso un conto o un wallet. Zecca non dispone i pagamenti: lo fa il
+          zecchiere.
         </p>
         <div className="mt-8 flex flex-wrap gap-3">
           <Link href="/vetrina" className={cn(buttonVariants({ size: "lg" }), "px-5")}>
@@ -35,8 +36,8 @@ export default async function HomePage() {
 
       <section className="mt-6 grid gap-4 md:grid-cols-3">
         <Step n="01" title="Il conio" body="Solo il zecchiere può far nascere i crediti. Entrano in tesoreria, non in un portafoglio a caso." />
-        <Step n="02" title="La bottega" body="I crediti comprano olio, miele, carta, lana. Ogni spesa di oggi scalda la Forgia del Giorno." />
-        <Step n="03" title="La fusione" body="Più compri nella giornata (Europa/Roma), più del tuo saldo diventa forgiato: fondibile in euro." />
+        <Step n="02" title="La bottega" body="I crediti comprano oggetti veri della casa: olio, miele, caffè, sapone, lana. Ogni spesa di oggi scalda la Forgia del Giorno." />
+        <Step n="03" title="Il prelievo" body="Chiunque abbia crediti può chiedere euro verso IBAN o wallet. Massimo invia dalla sua banca o dal suo wallet." />
       </section>
 
       <section className="paper mt-12 rounded-md px-6 py-8 md:px-10">

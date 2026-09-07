@@ -83,21 +83,30 @@ export async function requestCashoutAction(
   const user = await requireUser();
   if (!user) return { error: "Devi entrare per chiedere una fusione." };
   const credits = Number(formData.get("credits"));
+  const payoutKind = String(formData.get("payoutKind") ?? "IBAN") === "WALLET" ? "WALLET" : "IBAN";
   const iban = String(formData.get("iban") ?? "");
   const ibanHolder = String(formData.get("ibanHolder") ?? "");
+  const walletAddress = String(formData.get("walletAddress") ?? "");
+  const walletNetwork = String(formData.get("walletNetwork") ?? "");
   try {
     await requestCustomerCashout({
       userId: user.id,
       role: user.role,
       credits,
+      payoutKind,
       iban,
       ibanHolder,
+      walletAddress,
+      walletNetwork,
     });
     revalidatePath("/fusione");
     revalidatePath("/portafoglio");
     revalidatePath("/zecchiere/fusioni");
     return {
-      ok: "Richiesta inviata. Massimo vedrà il tuo IBAN e, se accetta, disporrà un bonifico dalla sua banca. Zecca non invia i soldi da sola.",
+      ok:
+        payoutKind === "WALLET"
+          ? "Richiesta inviata. Massimo vedrà il tuo wallet e, se accetta, invierà da un wallet suo. Zecca non spedisce crypto da sola."
+          : "Richiesta inviata. Massimo vedrà il tuo IBAN e, se accetta, disporrà un bonifico dalla sua banca. Zecca non invia i soldi da sola.",
     };
   } catch (error) {
     return { error: isZeccaError(error) ? error.message : "Richiesta non riuscita." };

@@ -29,9 +29,9 @@ export default async function FusioniPage() {
     <div>
       <h1 className="font-display text-4xl text-primary">Fusioni</h1>
       <p className="mt-2 text-muted-foreground">
-        I clienti chiedono di convertire il forgiato. Copia IBAN e importo, fai il bonifico{" "}
-        <strong>dalla tua banca</strong>, poi conferma qui. Zecca non ha accesso ai conti e non
-        dispone SEPA da sola.
+        Chiunque abbia crediti può chiedere un prelievo verso IBAN o wallet. Copia i dati, invia{" "}
+        <strong>dalla tua banca o dal tuo wallet</strong>, poi conferma qui. Zecca non ha accesso
+        ai conti e non spedisce da sola.
       </p>
 
       <section className="metal-frame mt-8 rounded-md bg-card p-5">
@@ -62,8 +62,11 @@ export default async function FusioniPage() {
               email={r.user?.email ?? ""}
               credits={r.credits}
               eurCents={r.eurCents}
+              payoutKind={r.payoutKind}
               iban={r.iban}
               ibanHolder={r.ibanHolder}
+              walletAddress={r.walletAddress}
+              walletNetwork={r.walletNetwork}
               createdLabel={formatRomeDate(r.createdAt)}
             />
           ))}

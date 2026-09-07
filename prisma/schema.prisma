@@ -138,8 +138,11 @@ model CashoutRequest {
   currency   String        @default("EUR")
   status     CashoutStatus @default(PENDING)
   isTreasury Boolean       @default(false)
+  payoutKind String        @default("IBAN")
   iban       String?
   ibanHolder String?
+  walletAddress String?
+  walletNetwork String?
   adminNote  String?
   createdAt  DateTime      @default(now())
   resolvedAt DateTime?

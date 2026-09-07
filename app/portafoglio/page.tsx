@@ -43,7 +43,7 @@ export default async function PortafoglioPage() {
           Compra crediti
         </Link>
         <Link href="/fusione" className={cn(buttonVariants({ size: "lg", variant: "outline" }), "px-5")}>
-          Chiedi una fusione
+          Preleva euro
         </Link>
         <Link href="/vetrina" className={cn(buttonVariants({ size: "lg", variant: "ghost" }), "px-5")}>
           Vai in bottega

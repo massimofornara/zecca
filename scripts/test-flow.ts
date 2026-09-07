@@ -94,13 +94,14 @@ async function main() {
     const cashout = await requestCustomerCashout({
       userId: customer.id,
       role: "CUSTOMER",
-      credits: 30,
+      credits: 80,
+      payoutKind: "IBAN",
       iban: "IT60X0542811101000000123456",
       ibanHolder: "Chiara Test",
       db,
     });
-    assert.equal(await pocketBalance("USER", customer.id, db), 120);
-    assert.equal(await pocketBalance("ESCROW", customer.id, db), 30);
+    assert.equal(await pocketBalance("USER", customer.id, db), 70);
+    assert.equal(await pocketBalance("ESCROW", customer.id, db), 80);
 
     let badIban = false;
     try {
@@ -120,8 +121,39 @@ async function main() {
     const pending = await db.cashoutRequest.findMany({ where: { status: "PENDING" } });
     assert.equal(pending.length, 1);
     assert.equal(pending[0].id, cashout.id);
+    assert.equal(pending[0].payoutKind, "IBAN");
+
+    const walletOut = await requestCustomerCashout({
+      userId: customer.id,
+      role: "CUSTOMER",
+      credits: 20,
+      payoutKind: "WALLET",
+      walletNetwork: "ETH",
+      walletAddress: "0x742d35Cc6634C0532925a3b844Bc454e4438f44e",
+      db,
+    });
+    assert.equal(walletOut.payoutKind, "WALLET");
+    assert.equal(await pocketBalance("USER", customer.id, db), 50);
+    assert.equal(await pocketBalance("ESCROW", customer.id, db), 100);
+
+    let badWallet = false;
+    try {
+      await requestCustomerCashout({
+        userId: customer.id,
+        role: "CUSTOMER",
+        credits: 1,
+        payoutKind: "WALLET",
+        walletNetwork: "ETH",
+        walletAddress: "not-an-address",
+        db,
+      });
+    } catch (error) {
+      badWallet = error instanceof Error && error.message.includes("wallet");
+    }
+    assert.equal(badWallet, true, "wallet invalido deve fallire");
 
     await resolveCashout({ cashoutId: cashout.id, actorId: admin.id, action: "pay", db });
+    await resolveCashout({ cashoutId: walletOut.id, actorId: admin.id, action: "pay", db });
     assert.equal(await pocketBalance("ESCROW", customer.id, db), 0);
     const paid = await db.cashoutRequest.findUniqueOrThrow({ where: { id: cashout.id } });
     assert.equal(paid.status, "PAID");
@@ -165,7 +197,7 @@ async function main() {
     assert.equal(convertRows[1].amountCredits, 2000);
     assert.equal(convertRows[1].usdCents, 216000);
 
-    console.log("Flusso Zecca: conio → crediti → bottega → forgia → fusione. OK.");
+    console.log("Flusso Zecca: conio → crediti → bottega → prelievo IBAN/wallet. OK.");
     console.log("Conversione tesoreria 3000 cr→EUR e 2000 cr→USD in cassa negozio. OK.");
   } finally {
     await db.$disconnect();

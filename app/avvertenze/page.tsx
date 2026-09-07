@@ -14,9 +14,9 @@ export default function AvvertenzePage() {
           euro, banconote o depositi bancari.
         </p>
         <p>
-          Gli euro veri, se arrivano, passano da Stripe (ingressi con carta) e dal conto del
-          zecchiere (uscite SEPA). Questo sito non è una banca, non è la Banca d’Italia, non dispone
-          bonifici e non può inventare fondi sul tuo IBAN.
+          Gli euro veri, se arrivano, passano da Stripe (ingressi con carta) e dal conto o dal wallet
+          del zecchiere (uscite). Questo sito non è una banca, non è la Banca d’Italia, non dispone
+          bonifici e non invia crypto da sola.
         </p>
         <p>
           In modalità dimostrativa nessun pagamento si muove. Per i fondi veri servono le chiavi
@@ -24,8 +24,9 @@ export default function AvvertenzePage() {
         </p>
         <p>
           Coniare crediti non crea una riserva. Il rapporto di copertura (euro Stripe sul circolante)
-          sta in Tesoreria. Un off-ramp verso wallet crypto o un token ERC-20 rimborsabile è un
-          prodotto regolamentato (AML, eventuale IMEL, MiCA): non è incluso in questo sito.
+          sta in Tesoreria. Puoi chiedere un prelievo verso IBAN o wallet: Massimo lo esegue a mano.
+          Un off-ramp automatico (hot wallet, exchange, token ERC-20 rimborsabile) è un prodotto
+          regolamentato (AML, eventuale IMEL, MiCA): non è incluso in questo sito.
         </p>
       </div>
     </PageShell>

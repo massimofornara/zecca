@@ -1,6 +1,6 @@
 # Zecca
 
-Zecca è una **zecca + bottega**. Massimo Fornara, lo zecchiere, è l’unico che può **coniare** crediti. I clienti comprano quei crediti in euro, li spendono in vetrina, e — se la **Forgia del Giorno** è calda — possono fonderli di nuovo in denaro.
+Zecca è una **zecca + bottega**. Massimo Fornara, lo zecchiere, è l’unico che può **coniare** crediti. I clienti comprano quei crediti in euro, li spendono in vetrina su oggetti della casa, e possono **prelevarli** verso un conto bancario o un wallet.
 
 Non è un e-commerce a punti. I crediti vivono in un **libro mastro** immutabile. Non c’è una blockchain.
 
@@ -9,8 +9,8 @@ Non è un e-commerce a punti. I crediti vivono in un **libro mastro** immutabile
 1. **Conio** — Massimo scrive **qualsiasi quantità positiva**: i crediti nascono in tesoreria. Non sono euro di banca.
 2. **Acquisto crediti** — Il cliente versa euro (demo o Stripe) e riceve crediti dalla tesoreria.
 3. **Bottega** — Si paga in crediti. Ogni spesa di **oggi** (confine di calendario `Europe/Rome`) scalda la forgia.
-4. **Forgia del Giorno** — La quota fondibile del portafoglio dipende da quanto hai comprato *nella giornata*, non da una fedeltà a vita. A mezzanotte romana il calore si azzera.
-5. **Fusione clienti** — Il cliente chiede di convertire il *forgiato* in **euro**. Massimo segna pagato dopo il bonifico (in demo: chiude il movimento).
+4. **Forgia del Giorno** — Il calore di oggi dipende da quanto hai comprato *nella giornata*. A mezzanotte romana si azzera. Non blocca più il prelievo.
+5. **Prelievo clienti** — Chiunque abbia crediti può chiedere euro verso **IBAN** o **wallet**. Massimo segna pagato dopo il bonifico o l’invio dal suo wallet (in demo: chiude il movimento). L’app non spedisce da sola.
 6. **Conversione tesoreria** — Massimo converte crediti ancora in casa in **euro e/o dollari della cassa negozio**. È un movimento contabile: non è un prelievo personale e non accredita un conto bancario.
 
 Soglie predefinite (modificabili da Massimo):
@@ -59,16 +59,15 @@ L’app ascolta su [http://127.0.0.1:4731](http://127.0.0.1:4731).
 | Cliente | `chiara@zecca.local` | `ForgiaChiara1` |
 | Cliente | `luca@zecca.local` | `ForgiaLuca1` |
 
-Chiara ha già speso oggi in bottega: la sua forgia è tiepida. Luca ha crediti ma non ha ancora scaldato il metallo.
+Chiara ha già speso oggi in bottega. Luca ha crediti e può già chiedere un prelievo, anche senza aver scaldato la forgia.
 
 ## Percorso da provare
 
 1. Entra come Massimo, coni un lotto in **Zecchiere → Conio**.
 2. Esci, entra come Luca, compra crediti in **Crediti** (pagamento demo: accredito immediato).
 3. Metti in cesta un pezzo dalla **Vetrina** e paga in crediti.
-4. Guarda la **Forgia** nel portafoglio: il calore sale, una quota diventa fondibile.
-5. In **Fusione** chiedi di convertire.
-6. Torna come Massimo: in **Fusioni** copia IBAN e importo, poi conferma il bonifico.
+4. In **Prelievo** chiedi euro verso IBAN o wallet (anche senza aver comprato oggi).
+5. Torna come Massimo: in **Fusioni** copia IBAN/indirizzo e importo, poi conferma l’invio.
 
 ## Da fittizio a reale
 
@@ -107,7 +106,7 @@ STRIPE_WEBHOOK_SECRET="whsec_..."
 
 Senza queste variabili resta solo il pagamento dimostrativo: nessun euro si muove.
 
-**Euro in uscita (veri):** il cliente indica IBAN e intestatario. In **Fusioni** compare un blocco da incollare in banca (beneficiario, IBAN, importo, causale). Il zecchiere fa il SEPA **dal proprio home banking**, poi conferma. L’app non ha accesso ai conti.
+**Euro in uscita (veri):** il cliente indica IBAN oppure rete + indirizzo wallet. In **Fusioni** compare un blocco da incollare in banca o nel wallet del zecchiere. Massimo invia **dal proprio home banking o dal proprio wallet**, poi conferma. L’app non ha accesso ai conti e non spedisce crypto.
 
 Non esiste un pulsante che “conia e manda” soldi a un IBAN.
 
@@ -117,7 +116,7 @@ Non esiste un pulsante che “conia e manda” soldi a un IBAN.
 2. **Zecchiere → Forgia**: 1 cr = X EUR e 1 cr = Y USD (predefiniti 1,00 e 1,08).
 3. **Zecchiere → Tesoreria** (o Fusioni): indica quanti crediti diventare euro e quanti dollari. Esempio: 10.000 cr coniato, 3.000 → EUR e 2.000 → USD: tesoreria crediti 5.000; cassa negozio +EUR e +USD; 5.000 cr restano crediti.
 4. Il libro registra `TREASURY_CONVERT_TO_EUR` e `TREASURY_CONVERT_TO_USD`. I pentolini fiat si calcolano da quelle righe.
-5. I clienti restano sulla fusione forgiata in **EUR** (coda Fusioni). Bonifici e Stripe sono un passo a parte.
+5. I clienti prelevano in **EUR** verso IBAN o wallet (coda Fusioni). Bonifici, invii wallet e Stripe restano un passo a parte.
 
 `npm run test:flow` include mint → conversione 3.000 cr in EUR e 2.000 cr in USD e controlla saldi e libro.
 
@@ -135,7 +134,7 @@ Ogni movimento è una riga: `MINT`, `PURCHASE_CREDITS`, `SPEND_ON_ORDER`, `CASHO
 npm run test:flow
 ```
 
-Prova in isolamento (SQLite temporaneo): conio → acquisto crediti → ordine → sblocco forgia → fusione cliente → conversione tesoreria in EUR e USD nella cassa negozio.
+Prova in isolamento (SQLite temporaneo): conio → acquisto crediti → ordine → prelievo IBAN e wallet → conversione tesoreria in EUR e USD nella cassa negozio.
 
 ## Stack
 

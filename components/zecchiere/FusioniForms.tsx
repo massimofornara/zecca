@@ -7,8 +7,8 @@ import { SubmitButton } from "@/components/forms/SubmitButton";
 import { ErrorBanner, OkBanner } from "@/components/ui/banners";
 import { Input } from "@/components/ui/input";
 import { formatCredits, formatEurFromCents, formatFiatFromCents } from "@/lib/format";
-import { formatIbanDisplay } from "@/lib/iban";
-import { sepaInstruction } from "@/lib/sepa";
+import { destinationInstruction } from "@/lib/payout";
+import { walletNetworkLabel } from "@/lib/wallet";
 
 export function TreasuryConvertForm({
   treasury,
@@ -85,8 +85,11 @@ export function PendingCashoutCard({
   email,
   credits,
   eurCents,
+  payoutKind,
   iban,
   ibanHolder,
+  walletAddress,
+  walletNetwork,
   createdLabel,
 }: {
   id: string;
@@ -94,17 +97,26 @@ export function PendingCashoutCard({
   email: string;
   credits: number;
   eurCents: number;
+  payoutKind: string;
   iban: string | null;
   ibanHolder: string | null;
+  walletAddress: string | null;
+  walletNetwork: string | null;
   createdLabel: string;
 }) {
   const [payState, payAction] = useActionState(resolveCashoutAction, null);
   const [rejectState, rejectAction] = useActionState(resolveCashoutAction, null);
 
-  const sepa =
-    iban && ibanHolder
-      ? sepaInstruction({ holder: ibanHolder, iban, eurCents, cashoutId: id })
-      : null;
+  const dest = destinationInstruction({
+    payoutKind,
+    holder: ibanHolder,
+    iban,
+    walletAddress,
+    walletNetwork,
+    eurCents,
+    cashoutId: id,
+  });
+  const isWallet = dest?.kind === "WALLET";
 
   return (
     <li className="metal-frame rounded-md bg-card p-4">
@@ -113,20 +125,32 @@ export function PendingCashoutCard({
       </p>
       <p className="font-ledger text-ember">
         {formatCredits(credits)} → {formatEurFromCents(eurCents)}
+        {isWallet ? ` · ${walletNetworkLabel(walletNetwork)}` : " · IBAN"}
       </p>
       <p className="text-xs text-muted-foreground">{createdLabel}</p>
 
-      {sepa && iban && ibanHolder ? (
+      {dest?.kind === "IBAN" && ibanHolder ? (
         <div className="mt-4 space-y-3 rounded-md bg-background/50 p-3 ring-1 ring-primary/20">
           <p className="text-xs uppercase tracking-[0.2em] text-primary/80">Da incollare in banca</p>
           <CopyField label="Beneficiario" value={ibanHolder} />
-          <CopyField label="IBAN" value={formatIbanDisplay(iban)} mono />
+          <CopyField label="IBAN" value={dest.ibanDisplay} mono />
           <CopyField label="Importo" value={formatEurFromCents(eurCents)} mono />
-          <CopyField label="Causale" value={sepa.causal} mono />
-          <CopyField label="Tutto il blocco" value={sepa.text} />
+          <CopyField label="Causale" value={dest.causal} mono />
+          <CopyField label="Tutto il blocco" value={dest.text} />
+        </div>
+      ) : dest?.kind === "WALLET" && walletAddress ? (
+        <div className="mt-4 space-y-3 rounded-md bg-background/50 p-3 ring-1 ring-primary/20">
+          <p className="text-xs uppercase tracking-[0.2em] text-primary/80">Da incollare nel tuo wallet</p>
+          <CopyField label="Rete" value={walletNetworkLabel(walletNetwork)} />
+          <CopyField label="Indirizzo" value={walletAddress} mono />
+          <CopyField label="Importo" value={formatEurFromCents(eurCents)} mono />
+          <CopyField label="Riferimento" value={dest.causal} mono />
+          <CopyField label="Tutto il blocco" value={dest.text} />
         </div>
       ) : (
-        <p className="mt-3 text-sm text-destructive">Manca l’IBAN: non pagare finché il cliente non lo indica.</p>
+        <p className="mt-3 text-sm text-destructive">
+          Manca la destinazione: non pagare finché il cliente non indica IBAN o wallet.
+        </p>
       )}
 
       <ErrorBanner message={payState?.error || rejectState?.error} />
@@ -136,11 +160,22 @@ export function PendingCashoutCard({
         <form action={payAction} className="space-y-2">
           <input type="hidden" name="cashoutId" value={id} />
           <input type="hidden" name="action" value="pay" />
+          <input type="hidden" name="payoutKind" value={isWallet ? "WALLET" : "IBAN"} />
           <label className="flex items-start gap-2 text-xs text-muted-foreground">
-            <input type="checkbox" name="sepaConfirm" value="on" className="mt-0.5" required />
-            Ho disposto il bonifico SEPA da un conto a mio nome verso questo IBAN.
+            <input
+              type="checkbox"
+              name={isWallet ? "payoutConfirm" : "sepaConfirm"}
+              value="on"
+              className="mt-0.5"
+              required
+            />
+            {isWallet
+              ? "Ho inviato da un wallet a mio nome verso questo indirizzo."
+              : "Ho disposto il bonifico SEPA da un conto a mio nome verso questo IBAN."}
           </label>
-          <SubmitButton size="sm">Conferma bonifico eseguito</SubmitButton>
+          <SubmitButton size="sm">
+            {isWallet ? "Conferma invio eseguito" : "Conferma bonifico eseguito"}
+          </SubmitButton>
         </form>
         <form action={rejectAction}>
           <input type="hidden" name="cashoutId" value={id} />

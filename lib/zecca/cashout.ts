@@ -2,49 +2,63 @@ import type { PrismaClient, Role } from "@prisma/client";
 import { prisma as defaultPrisma } from "@/lib/db";
 import { ZeccaError } from "@/lib/errors";
 import { isValidIban, normalizeIban } from "@/lib/iban";
+import { isValidWalletAddress, normalizeWalletAddress, walletNetworkLabel } from "@/lib/wallet";
 import { appendLedger, pocketBalance } from "@/lib/zecca/ledger";
-import { getForgeState } from "@/lib/zecca/forge";
 import { creditsToEurCents, getSettings } from "@/lib/zecca/settings";
+
+export type PayoutKind = "IBAN" | "WALLET";
 
 export async function requestCustomerCashout(input: {
   userId: string;
   role: Role;
   credits: number;
-  iban: string;
-  ibanHolder: string;
+  payoutKind?: PayoutKind;
+  iban?: string;
+  ibanHolder?: string;
+  walletAddress?: string;
+  walletNetwork?: string;
   db?: PrismaClient;
 }) {
   const db = input.db ?? defaultPrisma;
   const credits = Math.floor(input.credits);
   if (!Number.isFinite(credits) || credits <= 0) {
-    throw new ZeccaError("Indica i crediti da fondere.", "INVALID_AMOUNT");
+    throw new ZeccaError("Indica i crediti da prelevare.", "INVALID_AMOUNT");
   }
 
-  const forge = await getForgeState({ userId: input.userId, role: input.role, db });
-  if (forge.forged <= 0) {
-    throw new ZeccaError(
-      "Oggi la forgia non ha ancora sbloccato crediti. Compra in bottega per scaldare il metallo.",
-      "FORGE_COLD",
-    );
-  }
-  if (credits > forge.forged) {
-    throw new ZeccaError(
-      `Puoi fondere al massimo ${forge.forged} cr forgiato oggi (${forge.percent}% del portafoglio).`,
-      "OVER_FORGED",
-    );
-  }
+  const payoutKind: PayoutKind = input.payoutKind === "WALLET" ? "WALLET" : "IBAN";
+  let iban: string | null = null;
+  let ibanHolder: string | null = null;
+  let walletAddress: string | null = null;
+  let walletNetwork: string | null = null;
+  let destinationNote = "";
 
-  const holder = input.ibanHolder.trim();
-  if (holder.length < 2) {
-    throw new ZeccaError("Indica l’intestatario del conto che riceverà il bonifico.", "INVALID_IBAN");
+  if (payoutKind === "IBAN") {
+    const holder = (input.ibanHolder ?? "").trim();
+    if (holder.length < 2) {
+      throw new ZeccaError("Indica l’intestatario del conto che riceverà il bonifico.", "INVALID_IBAN");
+    }
+    if (!isValidIban(input.iban ?? "")) {
+      throw new ZeccaError(
+        "IBAN non valido. Usa un IBAN italiano (27 caratteri). Zecca non dispone il bonifico: lo fa il zecchiere dalla sua banca.",
+        "INVALID_IBAN",
+      );
+    }
+    iban = normalizeIban(input.iban ?? "");
+    ibanHolder = holder;
+    destinationNote = `verso ${iban}`;
+  } else {
+    const network = (input.walletNetwork ?? "").trim().toUpperCase();
+    const address = normalizeWalletAddress(input.walletAddress ?? "");
+    if (!isValidWalletAddress(address, network)) {
+      throw new ZeccaError(
+        "Indirizzo wallet non valido per la rete scelta. Controlla rete e indirizzo: Massimo invierà da un wallet suo, l’app non spedisce da sola.",
+        "INVALID_WALLET",
+      );
+    }
+    walletAddress = address;
+    walletNetwork = network;
+    destinationNote = `verso ${walletNetworkLabel(network)} ${address}`;
   }
-  if (!isValidIban(input.iban)) {
-    throw new ZeccaError(
-      "IBAN non valido. Usa un IBAN italiano (27 caratteri). Zecca non dispone il bonifico: lo fa il zecchiere dalla sua banca.",
-      "INVALID_IBAN",
-    );
-  }
-  const iban = normalizeIban(input.iban);
 
   const settings = await getSettings(db);
   const eurCents = creditsToEurCents(credits, settings.eurCentsPerCredit);
@@ -64,8 +78,11 @@ export async function requestCustomerCashout(input: {
         currency: "EUR",
         status: "PENDING",
         isTreasury: false,
+        payoutKind,
         iban,
-        ibanHolder: holder,
+        ibanHolder,
+        walletAddress,
+        walletNetwork,
       },
     });
 
@@ -81,7 +98,7 @@ export async function requestCustomerCashout(input: {
         cashoutId: cashout.id,
         eurCents,
         fiatCurrency: "EUR",
-        note: `Richiesta di fusione: ${credits} cr → ${(eurCents / 100).toFixed(2)} EUR verso ${iban}`,
+        note: `Richiesta di prelievo: ${credits} cr → ${(eurCents / 100).toFixed(2)} EUR ${destinationNote}`,
       },
       tx,
     );
@@ -102,16 +119,16 @@ export async function resolveCashout(input: {
   return db.$transaction(async (tx) => {
     const cashout = await tx.cashoutRequest.findUnique({ where: { id: input.cashoutId } });
     if (!cashout) {
-      throw new ZeccaError("Richiesta di fusione non trovata.", "NOT_FOUND");
+      throw new ZeccaError("Richiesta di prelievo non trovata.", "NOT_FOUND");
     }
     if (cashout.status !== "PENDING") {
-      throw new ZeccaError("Questa fusione è già stata chiusa.", "ALREADY_RESOLVED");
+      throw new ZeccaError("Questa richiesta è già stata chiusa.", "ALREADY_RESOLVED");
     }
     if (cashout.isTreasury) {
       throw new ZeccaError("Le fusioni di tesoreria si eseguono direttamente.", "INVALID");
     }
     if (!cashout.userId) {
-      throw new ZeccaError("Fusione senza titolare.", "INVALID");
+      throw new ZeccaError("Prelievo senza titolare.", "INVALID");
     }
 
     if (input.action === "pay") {
@@ -120,7 +137,7 @@ export async function resolveCashout(input: {
         data: {
           status: "PAID",
           resolvedAt: new Date(),
-          adminNote: input.adminNote?.trim() || "Pagata (demo)",
+          adminNote: input.adminNote?.trim() || "Pagata",
         },
       });
       await appendLedger(
@@ -136,7 +153,7 @@ export async function resolveCashout(input: {
           usdCents: cashout.usdCents,
           fiatCurrency: (cashout.currency === "USD" ? "USD" : "EUR") as "EUR" | "USD",
           eurDirection: cashout.currency === "USD" ? null : "OUT",
-          note: `Fusione pagata: ${cashout.credits} cr`,
+          note: `Prelievo pagato: ${cashout.credits} cr`,
         },
         tx,
       );
@@ -159,7 +176,7 @@ export async function resolveCashout(input: {
           toUserId: cashout.userId,
           actorId: input.actorId,
           cashoutId: cashout.id,
-          note: `Fusione rifiutata, crediti restituiti: ${cashout.credits} cr`,
+          note: `Prelievo rifiutato, crediti restituiti: ${cashout.credits} cr`,
         },
         tx,
       );

@@ -28,7 +28,7 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
       </p>
       <div className="mt-6 grid gap-8 md:grid-cols-2">
         <div className="metal-frame overflow-hidden rounded-md">
-          <ProductArt imageKey={product.imageKey} className="min-h-[320px]" />
+          <ProductArt imageKey={product.imageKey} alt={product.name} className="min-h-[320px]" />
         </div>
         <div>
           <h1 className="font-display text-4xl text-primary">{product.name}</h1>

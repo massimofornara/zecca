@@ -21,7 +21,7 @@ export function ProductCard({
   return (
     <article className="metal-frame group flex flex-col overflow-hidden rounded-md bg-card">
       <Link href={`/vetrina/${product.slug}`} className="block">
-        <ProductArt imageKey={product.imageKey} />
+        <ProductArt imageKey={product.imageKey} alt={product.name} />
       </Link>
       <div className="flex flex-1 flex-col gap-3 p-4">
         <div>

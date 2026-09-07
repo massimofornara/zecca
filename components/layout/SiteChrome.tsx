@@ -10,6 +10,7 @@ import { userWallet } from "@/lib/zecca/ledger";
 const LINKS = [
   { href: "/vetrina", label: "Vetrina" },
   { href: "/crediti", label: "Crediti" },
+  { href: "/fusione", label: "Prelievo" },
   { href: "/portafoglio", label: "Forgia" },
 ];
 
