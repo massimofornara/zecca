@@ -138,13 +138,17 @@ async function main() {
   const chiaraOrder = await prisma.order.create({
     data: {
       userId: chiara.id,
-      totalCredits: 86 + 48 + 36 + 36 + 28,
+      totalCredits: 86 + 48 + 36 + 36 + 28 + 18,
       status: "PAID",
       shipTo: "CUSTOMER",
       shipName: "Chiara Viale",
       shipStreet: "Via delle Rose 8",
       shipCity: "Genova",
       shipPostal: "16121",
+      shipPhone: "+390101234567",
+      carrier: "DHL_EXPRESS",
+      service: "EXPRESS_24H",
+      shippingCredits: 18,
       shipStatus: "TO_PACK",
       items: {
         create: [
@@ -177,7 +181,7 @@ async function main() {
   await prisma.ledgerEntry.create({
     data: {
       type: "SPEND_ON_ORDER",
-      amountCredits: 234,
+      amountCredits: 252,
       fromPocket: "USER",
       toPocket: "BURN",
       fromUserId: chiara.id,

@@ -86,17 +86,25 @@ async function main() {
         shipStreet: "Via Roma 12",
         shipCity: "Genova",
         shipPostal: "16121",
+        shipPhone: "+390101234567",
       },
       db,
     });
-    assert.equal(await pocketBalance("USER", customer.id, db), 150);
+    assert.equal(await pocketBalance("USER", customer.id, db), 132);
     const stock = await db.product.findUniqueOrThrow({ where: { id: product.id } });
     assert.equal(stock.stock, 9);
+    const paidOrder = await db.order.findFirstOrThrow({
+      where: { userId: customer.id },
+      orderBy: { createdAt: "desc" },
+    });
+    assert.equal(paidOrder.shippingCredits, 18);
+    assert.equal(paidOrder.carrier, "DHL_EXPRESS");
+    assert.ok(paidOrder.trackingNumber);
 
     const forge = await getForgeState({ userId: customer.id, role: "CUSTOMER", db });
-    assert.equal(forge.spentToday, 50);
+    assert.equal(forge.spentToday, 68);
     assert.equal(forge.percent, 20);
-    assert.equal(forge.forged, 30);
+    assert.equal(forge.forged, 26);
 
     const cashout = await requestCustomerCashout({
       userId: customer.id,
@@ -107,7 +115,7 @@ async function main() {
       ibanHolder: "Chiara Test",
       db,
     });
-    assert.equal(await pocketBalance("USER", customer.id, db), 70);
+    assert.equal(await pocketBalance("USER", customer.id, db), 52);
     assert.equal(await pocketBalance("ESCROW", customer.id, db), 80);
 
     let badIban = false;
@@ -140,7 +148,7 @@ async function main() {
       db,
     });
     assert.equal(walletOut.payoutKind, "WALLET");
-    assert.equal(await pocketBalance("USER", customer.id, db), 50);
+    assert.equal(await pocketBalance("USER", customer.id, db), 32);
     assert.equal(await pocketBalance("ESCROW", customer.id, db), 100);
 
     let badWallet = false;

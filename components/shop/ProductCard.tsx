@@ -29,6 +29,9 @@ export function ProductCard({
             <h3 className="font-display text-xl text-primary group-hover:underline">{product.name}</h3>
           </Link>
           <p className="mt-1 line-clamp-2 text-sm text-muted-foreground">{product.description}</p>
+          <p className="mt-2 text-[11px] uppercase tracking-[0.16em] text-primary/80">
+            DHL Express 24h
+          </p>
         </div>
         <div className="mt-auto flex items-end justify-between gap-3">
           <div>

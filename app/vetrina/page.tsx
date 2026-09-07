@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { PageShell } from "@/components/layout/SiteChrome";
 import { ProductCard } from "@/components/shop/ProductCard";
 import { EmptyState } from "@/components/ui/banners";
@@ -16,9 +17,11 @@ export default async function VetrinaPage() {
       <p className="text-xs uppercase tracking-[0.28em] text-primary/80">Bottega della Zecca</p>
       <h1 className="mt-1 font-display text-4xl text-primary md:text-5xl">La vetrina</h1>
       <p className="mt-3 max-w-2xl text-muted-foreground">
-        Pezzi di massima fattura: olio cru, argento, lino, seta, vino della costa. Si pagano in
-        crediti e si spediscono a casa tua o a casa di Massimo. Ogni acquisto di oggi alimenta la
-        tua forgia.
+        E-commerce della bottega: pezzi di massima fattura, pagamento in crediti,{" "}
+        <Link href="/spedizione" className="underline hover:text-primary">
+          DHL Express 24h
+        </Link>{" "}
+        a casa tua oppure consegna in casa di Massimo.
       </p>
       {products.length === 0 ? (
         <div className="mt-10">

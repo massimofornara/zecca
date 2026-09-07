@@ -1,10 +1,11 @@
-import { markOrderShippedAction } from "@/actions/admin";
+import { bookDhlAction, markOrderShippedAction } from "@/actions/admin";
 import { SubmitButton } from "@/components/forms/SubmitButton";
 import { formatCredits } from "@/lib/format";
 import { formatRomeDate } from "@/lib/rome-day";
 import { formatShipping } from "@/lib/shipping";
 import { prisma } from "@/lib/db";
 import { EmptyState } from "@/components/ui/banners";
+import { isDhlConfigured } from "@/lib/dhl";
 
 export const metadata = { title: "Ordini" };
 
@@ -14,13 +15,13 @@ export default async function AdminOrdiniPage() {
     include: { user: true, items: { include: { product: true } } },
     take: 50,
   });
+  const dhl = isDhlConfigured();
 
   return (
     <div>
       <h1 className="font-display text-4xl text-primary">Ordini</h1>
       <p className="mt-2 text-muted-foreground">
-        Spese in bottega. Copia l’indirizzo, imballa, spedisci, poi conferma. Zecca non chiama il
-        corriere da sola.
+        Negozio: merce + DHL Express 24h. {dhl ? "Contratto DHL collegato." : "Senza chiavi DHL la lettera di vettura è locale: il ritiro vero parte quando le metti nel .env."}
       </p>
       {orders.length === 0 ? (
         <div className="mt-8">
@@ -40,7 +41,9 @@ export default async function AdminOrdiniPage() {
                   <p className="font-ledger text-ember">{formatCredits(order.totalCredits)}</p>
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  #{order.id.slice(-6).toUpperCase()} · {formatRomeDate(order.createdAt)}
+                  #{order.id.slice(-6).toUpperCase()} · {formatRomeDate(order.createdAt)} ·{" "}
+                  {order.carrier === "DHL_EXPRESS" ? "DHL Express 24h" : "Ritiro in casa"}
+                  {order.shippingCredits > 0 ? ` · ${formatCredits(order.shippingCredits)}` : ""}
                 </p>
                 <ul className="mt-2 text-sm text-muted-foreground">
                   {order.items.map((item) => (
@@ -52,18 +55,47 @@ export default async function AdminOrdiniPage() {
                 <p className="mt-3 text-sm">
                   {dest.who}
                   {dest.lines ? <span className="block text-muted-foreground">{dest.lines}</span> : null}
+                  {order.shipPhone ? (
+                    <span className="block text-muted-foreground">Tel. {order.shipPhone}</span>
+                  ) : null}
                   {order.shipNote ? (
                     <span className="mt-1 block text-muted-foreground">Nota: {order.shipNote}</span>
                   ) : null}
                 </p>
-                {order.shipStatus === "SHIPPED" ? (
-                  <p className="mt-2 text-xs uppercase tracking-wider text-primary">Spedito</p>
-                ) : (
-                  <form action={markOrderShippedAction} className="mt-3">
-                    <input type="hidden" name="id" value={order.id} />
-                    <SubmitButton size="sm">Segna come spedito</SubmitButton>
-                  </form>
+                {order.trackingNumber && (
+                  <p className="mt-2 font-ledger text-sm">
+                    {order.trackingNumber}
+                    {order.trackingUrl ? (
+                      <>
+                        {" · "}
+                        <a href={order.trackingUrl} className="underline" target="_blank" rel="noreferrer">
+                          DHL
+                        </a>
+                      </>
+                    ) : null}
+                  </p>
                 )}
+                {order.dhlMessage && (
+                  <p className="mt-1 text-xs text-muted-foreground">{order.dhlMessage}</p>
+                )}
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {order.carrier === "DHL_EXPRESS" && order.shipStatus !== "SHIPPED" && (
+                    <form action={bookDhlAction}>
+                      <input type="hidden" name="id" value={order.id} />
+                      <SubmitButton size="sm" variant="outline">
+                        Prenota / ripeti DHL
+                      </SubmitButton>
+                    </form>
+                  )}
+                  {order.shipStatus === "SHIPPED" ? (
+                    <p className="text-xs uppercase tracking-wider text-primary">Spedito</p>
+                  ) : (
+                    <form action={markOrderShippedAction}>
+                      <input type="hidden" name="id" value={order.id} />
+                      <SubmitButton size="sm">Segna ritiro avvenuto</SubmitButton>
+                    </form>
+                  )}
+                </div>
               </li>
             );
           })}

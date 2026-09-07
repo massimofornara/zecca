@@ -2,7 +2,8 @@ import type { PrismaClient } from "@prisma/client";
 import { prisma as defaultPrisma } from "@/lib/db";
 import { ZeccaError } from "@/lib/errors";
 import { appendLedger, pocketBalance } from "@/lib/zecca/ledger";
-import { assertShipping, type ShippingInput } from "@/lib/shipping";
+import { bookDhlExpress24h } from "@/lib/dhl";
+import { assertShipping, shippingQuote, type ShippingInput } from "@/lib/shipping";
 
 export type CartLine = { productId: string; quantity: number };
 
@@ -21,8 +22,9 @@ export async function placeOrder(input: {
     throw new ZeccaError("Il carrello è vuoto.", "EMPTY_CART");
   }
   assertShipping(input.shipping);
+  const quote = shippingQuote(input.shipping.shipTo);
 
-  return db.$transaction(async (tx) => {
+  const order = await db.$transaction(async (tx) => {
     const products = await tx.product.findMany({
       where: { id: { in: cleaned.map((i) => i.productId) } },
     });
@@ -52,23 +54,24 @@ export async function placeOrder(input: {
       });
     }
 
+    const payable = total + quote.credits;
     const wallet = await pocketBalance("USER", input.userId, tx);
-    if (wallet < total) {
+    if (wallet < payable) {
       throw new ZeccaError(
-        `Crediti insufficienti. Ti servono ${total} cr, ne hai ${wallet}.`,
+        `Crediti insufficienti. Ti servono ${payable} cr (merce + ${quote.label}), ne hai ${wallet}.`,
         "INSUFFICIENT_CREDITS",
       );
     }
 
     const destNote =
       input.shipping.shipTo === "MASSIMO"
-        ? "Spedizione a casa di Massimo, San Rocco al Forno"
-        : `Spedizione a ${input.shipping.shipName}, ${input.shipping.shipCity}`;
+        ? "Consegna in casa di Massimo, San Rocco al Forno"
+        : `DHL Express 24h a ${input.shipping.shipName}, ${input.shipping.shipCity}`;
 
-    const order = await tx.order.create({
+    const created = await tx.order.create({
       data: {
         userId: input.userId,
-        totalCredits: total,
+        totalCredits: payable,
         status: "PAID",
         shipTo: input.shipping.shipTo,
         shipName: input.shipping.shipName,
@@ -76,7 +79,12 @@ export async function placeOrder(input: {
         shipCity: input.shipping.shipCity,
         shipPostal: input.shipping.shipPostal,
         shipNote: input.shipping.shipNote,
-        shipStatus: "TO_PACK",
+        shipPhone: input.shipping.shipPhone,
+        carrier: quote.carrier,
+        service: quote.service,
+        shippingCredits: quote.credits,
+        shipStatus: quote.carrier === "DHL_EXPRESS" ? "TO_PACK" : "SHIPPED",
+        shippedAt: quote.carrier === "HAND" ? new Date() : null,
         items: {
           create: lines.map((l) => ({
             productId: l.productId,
@@ -97,20 +105,65 @@ export async function placeOrder(input: {
     await appendLedger(
       {
         type: "SPEND_ON_ORDER",
-        amountCredits: total,
+        amountCredits: payable,
         fromPocket: "USER",
         toPocket: "BURN",
         fromUserId: input.userId,
         actorId: input.userId,
-        orderId: order.id,
-        note: `Ordine ${order.id.slice(-6).toUpperCase()}: ${lines.map((l) => `${l.quantity}× ${l.name}`).join(", ")}. ${destNote}`,
+        orderId: created.id,
+        note: `Ordine ${created.id.slice(-6).toUpperCase()}: ${lines.map((l) => `${l.quantity}× ${l.name}`).join(", ")}. ${destNote}`,
       },
       tx,
     );
 
     return tx.order.findUniqueOrThrow({
-      where: { id: order.id },
+      where: { id: created.id },
       include: { items: { include: { product: true } } },
     });
   });
+
+  if (order.carrier === "DHL_EXPRESS") {
+    return fulfillDhlOrder(order.id, db);
+  }
+  return order;
+}
+
+export async function fulfillDhlOrder(orderId: string, db: PrismaClient = defaultPrisma) {
+  const order = await db.order.findUniqueOrThrow({
+    where: { id: orderId },
+    include: { items: { include: { product: true } }, user: true },
+  });
+  if (order.carrier !== "DHL_EXPRESS") return order;
+  try {
+    const booking = await bookDhlExpress24h({
+      orderRef: order.id.slice(-8).toUpperCase(),
+      receiver: {
+        name: order.shipName ?? "Cliente",
+        street: order.shipStreet ?? "",
+        city: order.shipCity ?? "",
+        postal: order.shipPostal ?? "",
+        phone: order.shipPhone,
+        email: order.user.email,
+      },
+      description: order.items.map((i) => i.product.name).join(", "),
+    });
+    return db.order.update({
+      where: { id: order.id },
+      data: {
+        trackingNumber: booking.trackingNumber,
+        trackingUrl: booking.trackingUrl,
+        dhlShipmentId: booking.shipmentId,
+        dhlMessage: booking.message,
+        shipStatus: booking.pickupRequested ? "BOOKED" : "TO_PACK",
+      },
+      include: { items: { include: { product: true } }, user: true },
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Prenotazione DHL non riuscita.";
+    return db.order.update({
+      where: { id: order.id },
+      data: { dhlMessage: message, shipStatus: "TO_PACK" },
+      include: { items: { include: { product: true } }, user: true },
+    });
+  }
 }

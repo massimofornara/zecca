@@ -11,6 +11,12 @@ import { buttonVariants } from "@/components/ui/button";
 
 export const metadata = { title: "Ordini" };
 
+function shipLabel(status: string) {
+  if (status === "SHIPPED") return "In viaggio / consegnato in sede";
+  if (status === "BOOKED") return "DHL: ritiro prenotato";
+  return "In preparazione";
+}
+
 export default async function OrdiniPage({
   searchParams,
 }: {
@@ -30,12 +36,12 @@ export default async function OrdiniPage({
       <h1 className="font-display text-4xl text-primary">Ordini</h1>
       <div className="mt-4">
         {ok && (
-          <OkBanner message="Ordine pagato in crediti. Il collo è in coda di spedizione." />
+          <OkBanner message="Ordine pagato. Se hai scelto casa tua, DHL Express 24h è in coda di ritiro." />
         )}
       </div>
       {orders.length === 0 ? (
         <div className="mt-8">
-          <EmptyState title="Nessun ordine" body="La vetrina aspetta.">
+          <EmptyState title="Nessun ordine" body="Il negozio è aperto.">
             <Link href="/vetrina" className={buttonVariants()}>
               Vai in vetrina
             </Link>
@@ -60,12 +66,30 @@ export default async function OrdiniPage({
                     </li>
                   ))}
                 </ul>
+                {order.shippingCredits > 0 && (
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    DHL Express 24h · {formatCredits(order.shippingCredits)}
+                  </p>
+                )}
                 <p className="mt-3 text-sm">
                   {dest.who}
                   {dest.lines ? <span className="block text-muted-foreground">{dest.lines}</span> : null}
                 </p>
+                {order.trackingNumber && (
+                  <p className="mt-2 font-ledger text-sm">
+                    Tracking {order.trackingNumber}
+                    {order.trackingUrl ? (
+                      <>
+                        {" · "}
+                        <a href={order.trackingUrl} className="underline hover:text-primary" target="_blank" rel="noreferrer">
+                          Segui su DHL
+                        </a>
+                      </>
+                    ) : null}
+                  </p>
+                )}
                 <p className="mt-1 text-xs uppercase tracking-wider text-primary">
-                  {order.shipStatus === "SHIPPED" ? "Spedito" : "Da imballare"}
+                  {shipLabel(order.shipStatus)}
                 </p>
               </li>
             );

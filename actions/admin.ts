@@ -8,6 +8,7 @@ import { resolveCashout } from "@/lib/zecca/cashout";
 import { convertTreasuryToShopFiat } from "@/lib/zecca/convert";
 import { saveSettings, type ForgeTier } from "@/lib/zecca/settings";
 import { prisma } from "@/lib/db";
+import { fulfillDhlOrder } from "@/lib/zecca/shop";
 import { CATALOG_SEED } from "@/lib/catalog";
 
 export async function mintAction(
@@ -209,6 +210,16 @@ export async function saveForgeSettingsForm(formData: FormData): Promise<void> {
 
 export async function upsertProductForm(formData: FormData): Promise<void> {
   await upsertProductAction(formData);
+}
+
+export async function bookDhlAction(formData: FormData) {
+  const admin = await requireAdmin();
+  if (!admin) return;
+  const id = String(formData.get("id") ?? "");
+  if (!id) return;
+  await fulfillDhlOrder(id);
+  revalidatePath("/zecchiere/ordini");
+  revalidatePath("/ordini");
 }
 
 export async function markOrderShippedAction(formData: FormData) {

@@ -86,6 +86,14 @@ model Order {
   shipCity     String?
   shipPostal   String?
   shipNote     String?
+  shipPhone    String?
+  carrier      String      @default("DHL_EXPRESS")
+  service      String      @default("EXPRESS_24H")
+  shippingCredits Int      @default(0)
+  trackingNumber String?
+  trackingUrl  String?
+  dhlShipmentId String?
+  dhlMessage   String?
   shipStatus   String      @default("TO_PACK")
   shippedAt    DateTime?
   createdAt    DateTime    @default(now())

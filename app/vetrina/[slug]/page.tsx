@@ -37,6 +37,10 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
           <p className="mt-1 text-sm text-muted-foreground">
             {product.stock > 0 ? `${product.stock} pezzi in bottega` : "Esaurito"}
           </p>
+          <p className="mt-3 text-sm text-primary">
+            Spedizione DHL Express 24h in Italia · ritiro da San Rocco al Forno. Oppure consegna in
+            casa di Massimo, senza corriere.
+          </p>
           {product.stock > 0 && (
             <form action={addToCartAction} className="mt-6 flex items-end gap-3">
               <input type="hidden" name="productId" value={product.id} />

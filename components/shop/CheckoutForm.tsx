@@ -6,6 +6,8 @@ import { SubmitButton } from "@/components/forms/SubmitButton";
 import { ErrorBanner } from "@/components/ui/banners";
 import { Input } from "@/components/ui/input";
 import { CASA_MASSIMO } from "@/lib/shipping";
+import { DHL_EXPRESS_24H_CREDITS } from "@/lib/dhl";
+import { formatCredits } from "@/lib/format";
 
 export function CheckoutForm() {
   const [state, action] = useActionState(checkoutCartAction, null);
@@ -13,8 +15,9 @@ export function CheckoutForm() {
     <form action={action} className="mt-4 w-full max-w-xl space-y-4">
       <ErrorBanner message={state?.error} />
       <p className="text-sm text-muted-foreground">
-        Paga in crediti. Poi il collo parte verso casa tua o verso casa di Massimo a San Rocco al
-        Forno. Zecca non è un corriere: il zecchiere imballa e spedisce.
+        E-commerce della bottega: paghi in crediti, il collo parte con{" "}
+        <strong>DHL Express 24h</strong> da San Rocco al Forno. Consegna in casa di Massimo: niente
+        corriere.
       </p>
 
       <p className="text-sm">Dove lo spediamo</p>
@@ -38,13 +41,17 @@ export function CheckoutForm() {
           htmlFor="ship-customer"
           className="metal-frame cursor-pointer rounded-md bg-background/40 px-3 py-2 text-sm peer-checked/customer:bg-primary/15 peer-checked/customer:text-primary peer-checked/customer:ring-1 peer-checked/customer:ring-primary/40"
         >
-          A casa mia
+          A casa mia · DHL Express 24h
+          <span className="mt-1 block font-ledger text-ember">
+            + {formatCredits(DHL_EXPRESS_24H_CREDITS)}
+          </span>
         </label>
         <label
           htmlFor="ship-massimo"
           className="metal-frame cursor-pointer rounded-md bg-background/40 px-3 py-2 text-sm peer-checked/massimo:bg-primary/15 peer-checked/massimo:text-primary peer-checked/massimo:ring-1 peer-checked/massimo:ring-primary/40"
         >
           A casa di Massimo
+          <span className="mt-1 block font-ledger">0 cr</span>
         </label>
       </div>
 
@@ -67,10 +74,14 @@ export function CheckoutForm() {
             <Input name="shipCity" className="mt-1" placeholder="Genova" />
           </label>
         </div>
+        <label className="block text-sm">
+          Telefono (per DHL)
+          <Input name="shipPhone" className="mt-1 font-ledger" placeholder="+39 333 0000000" />
+        </label>
       </div>
 
       <div className="hidden rounded-md bg-background/40 p-3 text-sm text-muted-foreground peer-checked/massimo:block">
-        <p className="font-medium text-foreground">Casa della Zecca</p>
+        <p className="font-medium text-foreground">Casa della Zecca · ritiro in sede</p>
         <p>
           {CASA_MASSIMO.name}
           <br />
@@ -85,7 +96,7 @@ export function CheckoutForm() {
         <Input name="shipNote" className="mt-1" placeholder="Campanello, piano, orario…" />
       </label>
 
-      <SubmitButton>Paga in crediti e spedisci</SubmitButton>
+      <SubmitButton>Paga e spedisci con DHL Express 24h</SubmitButton>
     </form>
   );
 }

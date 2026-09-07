@@ -102,6 +102,18 @@ export function getLiveReport(): LiveReport {
       needsYou: false,
     },
     {
+      id: "dhl",
+      ok: Boolean(process.env.DHL_API_KEY && process.env.DHL_API_SECRET && process.env.DHL_ACCOUNT_NUMBER),
+      title: "DHL Express 24h",
+      detail:
+        process.env.DHL_API_KEY && process.env.DHL_API_SECRET && process.env.DHL_ACCOUNT_NUMBER
+          ? process.env.DHL_LIVE === "1"
+            ? "Contratto DHL live: al checkout si prenota il ritiro."
+            : "Chiavi DHL in ambiente test."
+          : "Mancano DHL_API_KEY, DHL_API_SECRET, DHL_ACCOUNT_NUMBER. Senza di esse la lettera di vettura è locale.",
+      needsYou: true,
+    },
+    {
       id: "payouts",
       ok: false,
       title: "Bonifici in uscita",

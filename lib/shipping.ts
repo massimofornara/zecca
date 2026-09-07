@@ -1,4 +1,5 @@
 import { ZeccaError } from "@/lib/errors";
+import { DHL_EXPRESS_24H_CREDITS } from "@/lib/dhl";
 
 export const SHIP_TO = {
   CUSTOMER: "CUSTOMER",
@@ -22,6 +23,7 @@ export type ShippingInput = {
   shipCity: string;
   shipPostal: string;
   shipNote?: string | null;
+  shipPhone?: string | null;
 };
 
 export function parseShipping(formData: FormData): ShippingInput {
@@ -34,6 +36,7 @@ export function parseShipping(formData: FormData): ShippingInput {
       shipCity: CASA_MASSIMO.city,
       shipPostal: CASA_MASSIMO.postal,
       shipNote: String(formData.get("shipNote") ?? "").trim() || null,
+      shipPhone: process.env.DHL_SHIPPER_PHONE || "+390184000000",
     };
   }
   return {
@@ -43,6 +46,7 @@ export function parseShipping(formData: FormData): ShippingInput {
     shipCity: String(formData.get("shipCity") ?? "").trim(),
     shipPostal: String(formData.get("shipPostal") ?? "").trim(),
     shipNote: String(formData.get("shipNote") ?? "").trim() || null,
+    shipPhone: String(formData.get("shipPhone") ?? "").trim() || null,
   };
 }
 
@@ -60,6 +64,22 @@ export function assertShipping(shipping: ShippingInput) {
   if (!/^\d{5}$/.test(shipping.shipPostal.replace(/\s/g, ""))) {
     throw new ZeccaError("Il CAP deve avere 5 cifre.", "INVALID_SHIPPING");
   }
+  const phone = (shipping.shipPhone ?? "").replace(/\s/g, "");
+  if (phone.length < 8) {
+    throw new ZeccaError("Per DHL Express serve un telefono di chi riceve.", "INVALID_SHIPPING");
+  }
+}
+
+export function shippingQuote(shipTo: ShipTo) {
+  if (shipTo === "MASSIMO") {
+    return { carrier: "HAND", service: "RITIRO", credits: 0, label: "Consegna in casa di Massimo" };
+  }
+  return {
+    carrier: "DHL_EXPRESS",
+    service: "EXPRESS_24H",
+    credits: DHL_EXPRESS_24H_CREDITS,
+    label: "DHL Express 24h",
+  };
 }
 
 export function formatShipping(shipping: {

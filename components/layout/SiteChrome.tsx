@@ -8,7 +8,7 @@ import { cartCount, getCart } from "@/lib/cart";
 import { userWallet } from "@/lib/zecca/ledger";
 
 const LINKS = [
-  { href: "/vetrina", label: "Vetrina" },
+  { href: "/vetrina", label: "Negozio" },
   { href: "/crediti", label: "Crediti" },
   { href: "/fusione", label: "Prelievo" },
   { href: "/portafoglio", label: "Forgia" },
@@ -99,7 +99,11 @@ export function SiteFooter() {
         <Link href="/avvertenze" className="underline hover:text-primary">
           Avvertenze
         </Link>
-        : i crediti non sono euro di banca.
+        : i crediti non sono euro di banca.{" "}
+        <Link href="/spedizione" className="underline hover:text-primary">
+          Spedizione DHL 24h
+        </Link>
+        .
       </p>
     </footer>
   );
