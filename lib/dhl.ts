@@ -37,6 +37,15 @@ export type DhlBooking = {
   shipmentId: string | null;
   pickupRequested: boolean;
   message: string;
+  labelPath: string | null;
+  trackStatus: string;
+  trackDetail: string;
+};
+
+export type DhlTrack = {
+  status: string;
+  detail: string;
+  live: boolean;
 };
 
 function authHeader() {
@@ -79,6 +88,9 @@ export async function bookDhlExpress24h(input: {
       pickupRequested: false,
       message:
         "Lettera di vettura DHL Express 24h preparata in locale. Manca il contratto DHL (DHL_API_KEY, DHL_API_SECRET, DHL_ACCOUNT_NUMBER) per il ritiro vero.",
+      labelPath: null,
+      trackStatus: "In preparazione",
+      trackDetail: "Massimo sta imballando in bottega. Il ritiro DHL parte quando c’è il contratto.",
     };
   }
 
@@ -138,6 +150,18 @@ export async function bookDhlExpress24h(input: {
     },
     valueAddedServices: [{ serviceCode: "TK" }],
     customerReferences: [{ value: input.orderRef, typeCode: "CU" }],
+    outputImageProperties: {
+      printerDPI: 300,
+      encodingFormat: "pdf",
+      imageOptions: [
+        {
+          typeCode: "label",
+          templateName: "ECOM26_84_001",
+          isRequested: true,
+          hideAccountNumber: true,
+        },
+      ],
+    },
   };
 
   const base = isDhlLive() ? LIVE_BASE : TEST_BASE;
@@ -154,6 +178,7 @@ export async function bookDhlExpress24h(input: {
   const payload = (await response.json().catch(() => ({}))) as {
     shipmentTrackingNumber?: string;
     packages?: { trackingNumber?: string }[];
+    documents?: { typeCode?: string; content?: string; imageFormat?: string }[];
     detail?: string;
     message?: string;
     title?: string;
@@ -170,6 +195,8 @@ export async function bookDhlExpress24h(input: {
     throw new Error("DHL ha accettato la chiamata ma non ha restituito il tracking.");
   }
 
+  const labelPath = await saveDhlLabel(trackingNumber, payload.documents);
+
   return {
     live: isDhlLive(),
     trackingNumber,
@@ -179,5 +206,96 @@ export async function bookDhlExpress24h(input: {
     message: isDhlLive()
       ? "Ritiro DHL Express 24h prenotato. Massimo deve avere il collo pronto."
       : "Spedizione creata sull’ambiente di test DHL (non è un ritiro sul serio).",
+    labelPath,
+    trackStatus: isDhlLive() ? "Ritiro prenotato" : "Prenotata in test DHL",
+    trackDetail: isDhlLive()
+      ? "DHL deve passare in bottega. Massimo imballa; tu segui il tracking."
+      : "Ambiente di test: nessuna furgone arriva in via del Frantoio.",
   };
+}
+
+async function saveDhlLabel(
+  trackingNumber: string,
+  documents?: { typeCode?: string; content?: string }[],
+) {
+  const label = documents?.find((doc) => doc.typeCode === "label" && doc.content);
+  if (!label?.content) return null;
+  const fs = await import("node:fs/promises");
+  const path = await import("node:path");
+  const dir = path.join(process.cwd(), "public", "labels");
+  await fs.mkdir(dir, { recursive: true });
+  const filename = `${trackingNumber.replace(/[^A-Za-z0-9_-]/g, "")}.pdf`;
+  await fs.writeFile(path.join(dir, filename), Buffer.from(label.content, "base64"));
+  return `/labels/${filename}`;
+}
+
+export async function fetchDhlTracking(trackingNumber: string): Promise<DhlTrack> {
+  if (!isDhlConfigured()) {
+    return {
+      live: false,
+      status: "In preparazione",
+      detail: "Senza contratto DHL lo stato resta quello del banco di imballo.",
+    };
+  }
+
+  const base = isDhlLive() ? LIVE_BASE : TEST_BASE;
+  const response = await fetch(
+    `${base}/shipments/${encodeURIComponent(trackingNumber)}/tracking`,
+    {
+      headers: {
+        Authorization: authHeader(),
+        Accept: "application/json",
+      },
+    },
+  );
+  const payload = (await response.json().catch(() => ({}))) as {
+    shipments?: {
+      status?: string;
+      events?: { description?: string; timestamp?: string; typeCode?: string }[];
+    }[];
+    detail?: string;
+    message?: string;
+  };
+
+  if (!response.ok) {
+    const reason = payload.detail || payload.message || `HTTP ${response.status}`;
+    throw new Error(`DHL non ha restituito il tracking: ${reason}`);
+  }
+
+  const shipment = payload.shipments?.[0];
+  const latest = shipment?.events?.[0];
+  return {
+    live: isDhlLive(),
+    status: latest?.description || shipment?.status || "Aggiornato da DHL",
+    detail: latest?.timestamp
+      ? `Ultimo evento DHL: ${latest.timestamp}${latest.typeCode ? ` (${latest.typeCode})` : ""}`
+      : "Nessun evento ancora sul collo.",
+  };
+}
+
+export function shipProgress(order: {
+  carrier: string;
+  shipStatus: string;
+  dhlTrackStatus?: string | null;
+  dhlTrackDetail?: string | null;
+}) {
+  if (order.carrier === "HAND") {
+    return {
+      status: order.shipStatus === "SHIPPED" ? "Pronto in sede" : "Da consegnare in sede",
+      detail: "Niente corriere: ritiro in casa di Massimo, San Rocco al Forno.",
+    };
+  }
+  if (order.dhlTrackStatus) {
+    return {
+      status: order.dhlTrackStatus,
+      detail: order.dhlTrackDetail || "Stato dal banco di imballo o da DHL.",
+    };
+  }
+  if (order.shipStatus === "SHIPPED") {
+    return { status: "In viaggio", detail: "Massimo ha segnato il ritiro DHL." };
+  }
+  if (order.shipStatus === "BOOKED") {
+    return { status: "Ritiro prenotato", detail: "DHL deve passare in bottega." };
+  }
+  return { status: "In preparazione", detail: "Massimo sta imballando il collo." };
 }

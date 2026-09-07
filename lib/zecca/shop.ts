@@ -2,7 +2,7 @@ import type { PrismaClient } from "@prisma/client";
 import { prisma as defaultPrisma } from "@/lib/db";
 import { ZeccaError } from "@/lib/errors";
 import { appendLedger, pocketBalance } from "@/lib/zecca/ledger";
-import { bookDhlExpress24h } from "@/lib/dhl";
+import { bookDhlExpress24h, fetchDhlTracking, shipProgress } from "@/lib/dhl";
 import { assertShipping, shippingQuote, type ShippingInput } from "@/lib/shipping";
 
 export type CartLine = { productId: string; quantity: number };
@@ -154,6 +154,10 @@ export async function fulfillDhlOrder(orderId: string, db: PrismaClient = defaul
         trackingUrl: booking.trackingUrl,
         dhlShipmentId: booking.shipmentId,
         dhlMessage: booking.message,
+        dhlLabelPath: booking.labelPath,
+        dhlTrackStatus: booking.trackStatus,
+        dhlTrackDetail: booking.trackDetail,
+        dhlTrackedAt: new Date(),
         shipStatus: booking.pickupRequested ? "BOOKED" : "TO_PACK",
       },
       include: { items: { include: { product: true } }, user: true },
@@ -166,4 +170,63 @@ export async function fulfillDhlOrder(orderId: string, db: PrismaClient = defaul
       include: { items: { include: { product: true } }, user: true },
     });
   }
+}
+
+export async function refreshOrderTracking(orderId: string, db: PrismaClient = defaultPrisma) {
+  const order = await db.order.findUniqueOrThrow({ where: { id: orderId } });
+  if (order.carrier !== "DHL_EXPRESS" || !order.trackingNumber) {
+    const local = shipProgress(order);
+    return db.order.update({
+      where: { id: order.id },
+      data: {
+        dhlTrackStatus: local.status,
+        dhlTrackDetail: local.detail,
+        dhlTrackedAt: new Date(),
+      },
+      include: { items: { include: { product: true } }, user: true },
+    });
+  }
+
+  try {
+    const track = await fetchDhlTracking(order.trackingNumber);
+    return db.order.update({
+      where: { id: order.id },
+      data: {
+        dhlTrackStatus: track.status,
+        dhlTrackDetail: track.detail,
+        dhlTrackedAt: new Date(),
+      },
+      include: { items: { include: { product: true } }, user: true },
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Tracking DHL non disponibile.";
+    const local = shipProgress(order);
+    return db.order.update({
+      where: { id: order.id },
+      data: {
+        dhlMessage: message,
+        dhlTrackStatus: local.status,
+        dhlTrackDetail: local.detail,
+        dhlTrackedAt: new Date(),
+      },
+      include: { items: { include: { product: true } }, user: true },
+    });
+  }
+}
+
+export async function lastCustomerAddress(userId: string, db: PrismaClient = defaultPrisma) {
+  const previous = await db.order.findFirst({
+    where: { userId, shipTo: "CUSTOMER", shipStreet: { not: null } },
+    orderBy: { createdAt: "desc" },
+  });
+  if (!previous?.shipName || !previous.shipStreet || !previous.shipCity || !previous.shipPostal) {
+    return null;
+  }
+  return {
+    shipName: previous.shipName,
+    shipStreet: previous.shipStreet,
+    shipCity: previous.shipCity,
+    shipPostal: previous.shipPostal,
+    shipPhone: previous.shipPhone ?? "",
+  };
 }

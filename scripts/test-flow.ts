@@ -6,7 +6,7 @@ import { hash } from "bcryptjs";
 import { PrismaClient } from "@prisma/client";
 import { mintCredits, ensureTreasury } from "../lib/zecca/mint";
 import { purchaseCredits } from "../lib/zecca/credits";
-import { placeOrder } from "../lib/zecca/shop";
+import { lastCustomerAddress, placeOrder, refreshOrderTracking } from "../lib/zecca/shop";
 import { getForgeState } from "../lib/zecca/forge";
 import { requestCustomerCashout, resolveCashout } from "../lib/zecca/cashout";
 import { convertTreasuryToShopFiat, shopFiatBalances } from "../lib/zecca/convert";
@@ -100,11 +100,51 @@ async function main() {
     assert.equal(paidOrder.shippingCredits, 18);
     assert.equal(paidOrder.carrier, "DHL_EXPRESS");
     assert.ok(paidOrder.trackingNumber);
+    assert.ok(paidOrder.dhlTrackStatus);
+
+    const remembered = await lastCustomerAddress(customer.id, db);
+    assert.equal(remembered?.shipCity, "Genova");
+    assert.equal(remembered?.shipPostal, "16121");
+
+    const refreshed = await refreshOrderTracking(paidOrder.id, db);
+    assert.ok(refreshed.dhlTrackStatus);
 
     const forge = await getForgeState({ userId: customer.id, role: "CUSTOMER", db });
     assert.equal(forge.spentToday, 68);
     assert.equal(forge.percent, 20);
     assert.equal(forge.forged, 26);
+
+    const handProduct = await db.product.create({
+      data: {
+        slug: "taccuino-test",
+        name: "Taccuino test",
+        description: "Consegna in sede",
+        imageKey: "taccuino",
+        priceCredits: 2,
+        stock: 4,
+        active: true,
+      },
+    });
+    await placeOrder({
+      userId: customer.id,
+      items: [{ productId: handProduct.id, quantity: 1 }],
+      shipping: {
+        shipTo: "MASSIMO",
+        shipName: "Massimo Fornara",
+        shipStreet: "Casa della Zecca, via del Frantoio 1",
+        shipCity: "San Rocco al Forno",
+        shipPostal: "18012",
+      },
+      db,
+    });
+    assert.equal(await pocketBalance("USER", customer.id, db), 130);
+    const handOrder = await db.order.findFirstOrThrow({
+      where: { userId: customer.id, carrier: "HAND" },
+    });
+    assert.equal(handOrder.shippingCredits, 0);
+    assert.equal(handOrder.shipTo, "MASSIMO");
+    const stillCustomerAddress = await lastCustomerAddress(customer.id, db);
+    assert.equal(stillCustomerAddress?.shipCity, "Genova");
 
     const cashout = await requestCustomerCashout({
       userId: customer.id,
@@ -115,7 +155,7 @@ async function main() {
       ibanHolder: "Chiara Test",
       db,
     });
-    assert.equal(await pocketBalance("USER", customer.id, db), 52);
+    assert.equal(await pocketBalance("USER", customer.id, db), 50);
     assert.equal(await pocketBalance("ESCROW", customer.id, db), 80);
 
     let badIban = false;
@@ -148,7 +188,7 @@ async function main() {
       db,
     });
     assert.equal(walletOut.payoutKind, "WALLET");
-    assert.equal(await pocketBalance("USER", customer.id, db), 32);
+    assert.equal(await pocketBalance("USER", customer.id, db), 30);
     assert.equal(await pocketBalance("ESCROW", customer.id, db), 100);
 
     let badWallet = false;
@@ -212,7 +252,7 @@ async function main() {
     assert.equal(convertRows[1].amountCredits, 2000);
     assert.equal(convertRows[1].usdCents, 216000);
 
-    console.log("Flusso Zecca: conio → crediti → bottega → prelievo IBAN/wallet. OK.");
+    console.log("Flusso Zecca: conio → crediti → bottega DHL + ritiro in sede → prelievo IBAN/wallet. OK.");
     console.log("Conversione tesoreria 3000 cr→EUR e 2000 cr→USD in cassa negozio. OK.");
   } finally {
     await db.$disconnect();

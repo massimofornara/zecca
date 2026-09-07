@@ -75,7 +75,7 @@ export async function checkoutCartAction(
   revalidatePath("/ordini");
   revalidatePath("/vetrina");
   revalidatePath("/zecchiere");
-  redirect(`/ordini?ok=${orderId}`);
+  redirect(`/ordini/${orderId}`);
 }
 
 export async function requestCashoutAction(

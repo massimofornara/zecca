@@ -150,6 +150,13 @@ async function main() {
       service: "EXPRESS_24H",
       shippingCredits: 18,
       shipStatus: "TO_PACK",
+      trackingNumber: "JD14ZECCA0001",
+      trackingUrl: "https://www.dhl.com/it-it/home/tracking.html?tracking-id=JD14ZECCA0001",
+      dhlMessage:
+        "Lettera di vettura locale. Il ritiro vero parte quando Massimo mette le chiavi DHL nel .env.",
+      dhlTrackStatus: "In preparazione",
+      dhlTrackDetail: "Massimo sta imballando in bottega.",
+      dhlTrackedAt: new Date(),
       items: {
         create: [
           { productId: olio.id, quantity: 1, unitCredits: 86 },

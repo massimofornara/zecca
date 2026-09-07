@@ -11,6 +11,8 @@ import { formatCredits } from "@/lib/format";
 import { prisma } from "@/lib/db";
 import { auth } from "@/auth";
 import { userWallet } from "@/lib/zecca/ledger";
+import { lastCustomerAddress } from "@/lib/zecca/shop";
+import { DHL_EXPRESS_24H_CREDITS } from "@/lib/dhl";
 import { cn } from "@/lib/utils";
 
 export const metadata = { title: "Cesta" };
@@ -37,6 +39,7 @@ export default async function CarrelloPage({
   const total = lines.reduce((s, l) => s + l.lineTotal, 0);
   const session = await auth();
   const wallet = session?.user ? await userWallet(session.user.id) : null;
+  const lastAddress = session?.user ? await lastCustomerAddress(session.user.id) : null;
 
   return (
     <PageShell>
@@ -95,6 +98,10 @@ export default async function CarrelloPage({
           ))}
           <div className="border-t border-primary/20 pt-6">
             <p className="font-ledger text-2xl text-ember">{formatCredits(total)}</p>
+            <p className="text-sm text-muted-foreground">
+              Merce. Se spedisci a casa tua si aggiungono {formatCredits(DHL_EXPRESS_24H_CREDITS)} per
+              DHL Express 24h.
+            </p>
             {wallet && (
               <p className="text-sm text-muted-foreground">
                 Nel portafoglio: {formatCredits(wallet.available)}
@@ -102,7 +109,7 @@ export default async function CarrelloPage({
               </p>
             )}
             {session?.user ? (
-              <CheckoutForm />
+              <CheckoutForm lastAddress={lastAddress} />
             ) : (
               <Link href="/accedi?callbackUrl=/carrello" className={cn(buttonVariants({ size: "lg" }), "mt-4")}>
                 Entra per pagare e spedire

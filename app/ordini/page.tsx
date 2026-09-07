@@ -91,6 +91,11 @@ export default async function OrdiniPage({
                 <p className="mt-1 text-xs uppercase tracking-wider text-primary">
                   {shipLabel(order.shipStatus)}
                 </p>
+                <p className="mt-3 text-sm">
+                  <Link href={`/ordini/${order.id}`} className="underline hover:text-primary">
+                    Ricevuta e tracking
+                  </Link>
+                </p>
               </li>
             );
           })}

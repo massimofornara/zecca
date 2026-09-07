@@ -94,11 +94,17 @@ model Order {
   trackingUrl  String?
   dhlShipmentId String?
   dhlMessage   String?
+  dhlTrackStatus String?
+  dhlTrackDetail String?
+  dhlTrackedAt DateTime?
+  dhlLabelPath String?
   shipStatus   String      @default("TO_PACK")
   shippedAt    DateTime?
   createdAt    DateTime    @default(now())
   items        OrderItem[]
   ledger       LedgerEntry[]
+
+  @@index([trackingNumber])
 }
 
 model OrderItem {

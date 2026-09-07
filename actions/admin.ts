@@ -8,7 +8,7 @@ import { resolveCashout } from "@/lib/zecca/cashout";
 import { convertTreasuryToShopFiat } from "@/lib/zecca/convert";
 import { saveSettings, type ForgeTier } from "@/lib/zecca/settings";
 import { prisma } from "@/lib/db";
-import { fulfillDhlOrder } from "@/lib/zecca/shop";
+import { fulfillDhlOrder, refreshOrderTracking } from "@/lib/zecca/shop";
 import { CATALOG_SEED } from "@/lib/catalog";
 
 export async function mintAction(
@@ -219,6 +219,18 @@ export async function bookDhlAction(formData: FormData) {
   if (!id) return;
   await fulfillDhlOrder(id);
   revalidatePath("/zecchiere/ordini");
+  revalidatePath(`/zecchiere/ordini/${id}`);
+  revalidatePath("/ordini");
+}
+
+export async function refreshDhlTrackingAction(formData: FormData) {
+  const admin = await requireAdmin();
+  if (!admin) return;
+  const id = String(formData.get("id") ?? "");
+  if (!id) return;
+  await refreshOrderTracking(id);
+  revalidatePath("/zecchiere/ordini");
+  revalidatePath(`/zecchiere/ordini/${id}`);
   revalidatePath("/ordini");
 }
 
@@ -229,9 +241,16 @@ export async function markOrderShippedAction(formData: FormData) {
   if (!id) return;
   await prisma.order.update({
     where: { id },
-    data: { shipStatus: "SHIPPED", shippedAt: new Date() },
+    data: {
+      shipStatus: "SHIPPED",
+      shippedAt: new Date(),
+      dhlTrackStatus: "Ritiro avvenuto",
+      dhlTrackDetail: "Massimo ha consegnato il collo a DHL o al cliente in sede.",
+      dhlTrackedAt: new Date(),
+    },
   });
   revalidatePath("/zecchiere/ordini");
+  revalidatePath(`/zecchiere/ordini/${id}`);
   revalidatePath("/ordini");
 }
 

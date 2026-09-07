@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { bookDhlAction, markOrderShippedAction } from "@/actions/admin";
 import { SubmitButton } from "@/components/forms/SubmitButton";
 import { formatCredits } from "@/lib/format";
@@ -21,7 +22,10 @@ export default async function AdminOrdiniPage() {
     <div>
       <h1 className="font-display text-4xl text-primary">Ordini</h1>
       <p className="mt-2 text-muted-foreground">
-        Negozio: merce + DHL Express 24h. {dhl ? "Contratto DHL collegato." : "Senza chiavi DHL la lettera di vettura è locale: il ritiro vero parte quando le metti nel .env."}
+        Oltre a conio e fusioni: merce, bolla, tracking e DHL Express 24h.{" "}
+        {dhl
+          ? "Contratto DHL collegato."
+          : "Senza chiavi DHL la lettera di vettura è locale: il ritiro vero parte quando le metti nel .env."}
       </p>
       {orders.length === 0 ? (
         <div className="mt-8">
@@ -78,6 +82,11 @@ export default async function AdminOrdiniPage() {
                 {order.dhlMessage && (
                   <p className="mt-1 text-xs text-muted-foreground">{order.dhlMessage}</p>
                 )}
+                <p className="mt-3 text-sm">
+                  <Link href={`/zecchiere/ordini/${order.id}`} className="underline hover:text-primary">
+                    Banco imballo e bolla
+                  </Link>
+                </p>
                 <div className="mt-3 flex flex-wrap gap-2">
                   {order.carrier === "DHL_EXPRESS" && order.shipStatus !== "SHIPPED" && (
                     <form action={bookDhlAction}>
