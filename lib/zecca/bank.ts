@@ -3,7 +3,10 @@ import { prisma as defaultPrisma } from "@/lib/db";
 import { ZeccaError } from "@/lib/errors";
 import { formatIbanDisplay, isValidIban, normalizeIban } from "@/lib/iban";
 import { completePendingPurchase } from "@/lib/zecca/credits";
+import { HOUSE_PAYOUT_ACCOUNTS } from "@/lib/zecca/house-accounts";
 import { creditsToEurCents, getSettings } from "@/lib/zecca/settings";
+
+const UNICREDIT = HOUSE_PAYOUT_ACCOUNTS[0];
 
 export type ShopBank = {
   iban: string;
@@ -21,9 +24,9 @@ export async function getShopBank(db: PrismaClient = defaultPrisma): Promise<Sho
   });
   const map = Object.fromEntries(rows.map((row) => [row.key, row.value]));
   return {
-    iban: map.shopIban ?? "",
-    holder: map.shopIbanHolder ?? "",
-    bankName: map.shopBankName ?? "",
+    iban: map.shopIban || UNICREDIT.iban,
+    holder: map.shopIbanHolder || UNICREDIT.holder,
+    bankName: map.shopBankName || UNICREDIT.bank,
   };
 }
 

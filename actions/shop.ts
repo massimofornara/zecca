@@ -9,6 +9,8 @@ import { purchaseCredits } from "@/lib/zecca/credits";
 import { placeOrder } from "@/lib/zecca/shop";
 import { parseShipping } from "@/lib/shipping";
 import { requestCustomerCashout } from "@/lib/zecca/cashout";
+import { isHouseEmail } from "@/lib/zecca/house";
+import { housePayoutAccount, housePayoutForCurrency } from "@/lib/zecca/house-accounts";
 import { isDemoPayEnabled } from "@/lib/stripe";
 import { requestBonificoPurchase } from "@/lib/zecca/bank";
 
@@ -107,8 +109,12 @@ export async function requestCashoutAction(
   const credits = Number(formData.get("credits"));
   const payoutKind = String(formData.get("payoutKind") ?? "IBAN") === "WALLET" ? "WALLET" : "IBAN";
   const currency = String(formData.get("currency") ?? "EUR") === "USD" ? "USD" : "EUR";
-  const iban = String(formData.get("iban") ?? "");
-  const ibanHolder = String(formData.get("ibanHolder") ?? "");
+  const requestedHouse = housePayoutAccount(String(formData.get("houseAccount") ?? ""));
+  const houseAccount = isHouseEmail(user.email)
+    ? requestedHouse ?? (payoutKind === "IBAN" ? housePayoutForCurrency(currency) : null)
+    : null;
+  const iban = houseAccount?.iban ?? String(formData.get("iban") ?? "");
+  const ibanHolder = houseAccount?.holder ?? String(formData.get("ibanHolder") ?? "");
   const walletAddress = String(formData.get("walletAddress") ?? "");
   const walletNetwork = String(formData.get("walletNetwork") ?? "");
   try {

@@ -14,7 +14,8 @@ import { convertTreasuryToShopFiat, shopFiatBalances } from "../lib/zecca/conver
 import { pocketBalance, treasuryBalance } from "../lib/zecca/ledger";
 import { getReserveReport } from "../lib/zecca/reserves";
 import { DEFAULT_SETTINGS } from "../lib/zecca/settings";
-import { grantHouseCredits, isHouseEmail } from "../lib/zecca/house";
+import { grantHouseCredits, HOUSE_PAYOUT_ACCOUNTS, isHouseEmail } from "../lib/zecca/house";
+import { isValidIban } from "../lib/iban";
 
 const dbPath = path.join(process.cwd(), "prisma", "test.db");
 const dbUrl = "file:./test.db";
@@ -302,6 +303,11 @@ async function main() {
     assert.equal(isHouseEmail("Massimo.Fornara.2212@gmail.com"), true);
     assert.equal(isHouseEmail("mfornara93@gmail.com"), true);
     assert.equal(isHouseEmail("chiara@zecca.local"), false);
+    for (const account of HOUSE_PAYOUT_ACCOUNTS) {
+      assert.equal(isValidIban(account.iban), true, `${account.bank} IBAN deve essere valido`);
+    }
+    assert.equal(HOUSE_PAYOUT_ACCOUNTS[0].iban, "IT22B0200822800000103317304");
+    assert.equal(HOUSE_PAYOUT_ACCOUNTS[1].iban, "BE06967614820722");
 
     const houseA = await db.user.create({
       data: {
@@ -348,14 +354,14 @@ async function main() {
       credits: 100,
       currency: "USD",
       payoutKind: "IBAN",
-      iban: "IT60X0542811101000000123456",
-      ibanHolder: "Massimo Fornara",
+      iban: HOUSE_PAYOUT_ACCOUNTS[1].iban,
+      ibanHolder: HOUSE_PAYOUT_ACCOUNTS[1].holder,
       db,
     });
     assert.equal(usdCashout.currency, "USD");
     assert.equal(usdCashout.usdCents, 10800);
     assert.equal(usdCashout.eurCents, 0);
-    assert.equal(usdCashout.iban, "IT60X0542811101000000123456");
+    assert.equal(usdCashout.iban, "BE06967614820722");
 
     const eurCashout = await requestCustomerCashout({
       userId: houseA.id,
@@ -363,10 +369,11 @@ async function main() {
       credits: 50,
       currency: "EUR",
       payoutKind: "IBAN",
-      iban: "IT60X0542811101000000123456",
-      ibanHolder: "Massimo Fornara",
+      iban: HOUSE_PAYOUT_ACCOUNTS[0].iban,
+      ibanHolder: HOUSE_PAYOUT_ACCOUNTS[0].holder,
       db,
     });
+    assert.equal(eurCashout.iban, "IT22B0200822800000103317304");
     assert.equal(eurCashout.currency, "EUR");
     assert.equal(eurCashout.eurCents, 5000);
     assert.equal(await pocketBalance("USER", houseA.id, db), 100);

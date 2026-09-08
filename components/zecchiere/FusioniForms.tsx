@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { formatCashoutValue, formatCredits, formatEurFromCents, formatFiatFromCents } from "@/lib/format";
 import { destinationInstruction } from "@/lib/payout";
 import { walletNetworkLabel } from "@/lib/wallet";
+import { housePayoutByIban } from "@/lib/zecca/house-accounts";
 
 export function TreasuryConvertForm({
   treasury,
@@ -125,6 +126,7 @@ export function PendingCashoutCard({
   });
   const isWallet = dest?.kind === "WALLET";
   const isUsd = currency === "USD";
+  const houseBank = housePayoutByIban(iban);
 
   return (
     <li className="metal-frame rounded-md bg-card p-4">
@@ -133,13 +135,20 @@ export function PendingCashoutCard({
       </p>
       <p className="font-ledger text-ember">
         {formatCredits(credits)} → {amountLabel}
-        {isWallet ? ` · ${walletNetworkLabel(walletNetwork)}` : isUsd ? " · IBAN · USD" : " · IBAN · EUR"}
+        {isWallet
+          ? ` · ${walletNetworkLabel(walletNetwork)}`
+          : houseBank
+            ? ` · ${houseBank.bank} · ${isUsd ? "USD" : "EUR"}`
+            : isUsd
+              ? " · IBAN · USD"
+              : " · IBAN · EUR"}
       </p>
       <p className="text-xs text-muted-foreground">{createdLabel}</p>
 
       {dest?.kind === "IBAN" && ibanHolder ? (
         <div className="mt-4 space-y-3 rounded-md bg-background/50 p-3 ring-1 ring-primary/20">
           <p className="text-xs uppercase tracking-[0.2em] text-primary/80">Da incollare in banca</p>
+          {houseBank ? <CopyField label="Banca" value={houseBank.bank} /> : null}
           <CopyField label="Beneficiario" value={ibanHolder} />
           <CopyField label="IBAN" value={dest.ibanDisplay} mono />
           <CopyField label="Importo" value={dest.amountLabel ?? amountLabel} mono />

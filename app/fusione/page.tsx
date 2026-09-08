@@ -9,6 +9,8 @@ import { prisma } from "@/lib/db";
 import { userWallet } from "@/lib/zecca/ledger";
 import { getSettings } from "@/lib/zecca/settings";
 import { walletNetworkLabel } from "@/lib/wallet";
+import { housePayoutLabel } from "@/lib/zecca/house-accounts";
+import { isHouseEmail } from "@/lib/zecca/house";
 
 export const metadata = { title: "Prelievo" };
 
@@ -16,6 +18,7 @@ export default async function FusionePage() {
   const session = await auth();
   if (!session?.user) redirect("/accedi?callbackUrl=/fusione");
 
+  const house = isHouseEmail(session.user.email);
   const [wallet, settings, requests] = await Promise.all([
     userWallet(session.user.id),
     getSettings(),
@@ -30,15 +33,16 @@ export default async function FusionePage() {
       <p className="text-xs uppercase tracking-[0.28em] text-primary/80">Prelievo</p>
       <h1 className="mt-1 font-display text-4xl text-primary">Preleva i crediti</h1>
       <p className="mt-3 max-w-2xl text-muted-foreground">
-        Tutti possono convertire i crediti del portafoglio in euro o dollari, verso un conto
-        bancario (IBAN) o un wallet. Massimo fa il bonifico o l’invio: l’app non è una banca e non
-        spedisce denaro da sola.
+        {house
+          ? "I crediti della casa escono verso UniCredit (IT22 B020 0822 8000 0010 3317 304) o Wise (BE06 9676 1482 0722). Scegli euro o dollari: l’IBAN è già quello."
+          : "Tutti possono convertire i crediti del portafoglio in euro o dollari, verso un conto bancario (IBAN) o un wallet. Massimo fa il bonifico: l’app non è una banca e non spedisce denaro da sola."}
       </p>
       <div className="mt-8">
         <CashoutForm
           available={wallet.available}
           eurCentsPerCredit={settings.eurCentsPerCredit}
           usdCentsPerCredit={settings.usdCentsPerCredit}
+          house={house}
         />
       </div>
       <section className="mt-12">
@@ -60,7 +64,7 @@ export default async function FusionePage() {
                     {r.payoutKind === "WALLET"
                       ? ` · ${walletNetworkLabel(r.walletNetwork)} ${r.walletAddress ?? ""}`
                       : r.iban
-                        ? ` · ${r.iban}`
+                        ? ` · ${housePayoutLabel(r.iban) ?? r.iban}`
                         : ""}
                   </p>
                   <p className="text-xs text-muted-foreground">{formatRomeDate(r.createdAt)}</p>

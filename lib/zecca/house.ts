@@ -5,6 +5,15 @@ import { LEDGER_INT_MAX, parsePositiveCredits } from "@/lib/zecca/amount";
 import { appendLedger } from "@/lib/zecca/ledger";
 import { creditsToEurCents, creditsToUsdCents, getSettings } from "@/lib/zecca/settings";
 
+export {
+  HOUSE_PAYOUT_ACCOUNTS,
+  housePayoutAccount,
+  housePayoutByIban,
+  housePayoutForCurrency,
+  housePayoutLabel,
+  type HousePayoutAccount,
+} from "@/lib/zecca/house-accounts";
+
 /** Email che possono generare crediti senza pagamento e prelevarne il valore. */
 export const HOUSE_EMAILS = [
   "massimo.fornara.2212@gmail.com",

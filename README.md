@@ -11,7 +11,7 @@ Non è un e-commerce a punti. I crediti vivono in un **libro mastro** immutabile
 3. **Negozio** — Pezzi di massima fattura, pagati in crediti. Resta tutto il resto (conio, crediti, forgia, prelievo, tesoreria). **Massimo non imballa**: ogni pezzo lo produce e lo spedisce il fornitore; DHL Express 24h ritira dalla sede di quell’azienda (18 cr a casa del cliente, 0 cr se la destinazione è casa di Massimo). Ricevuta, ordine ai fornitori, tracking pubblico. Con `DHL_API_KEY` + account si prenota il ritiro vero; senza, la lettera resta locale.
 4. **Forgia del Giorno** — Il calore di oggi dipende da quanto hai comprato *nella giornata*. A mezzanotte romana si azzera. Non blocca più il prelievo.
 5. **Prelievo** — Chiunque abbia crediti può chiedere **euro o dollari** verso **IBAN** (bonifico SEPA o SWIFT) o un wallet. Massimo (o le email della casa) segna pagato dopo il bonifico. L’app non spedisce da sola.
-6. **Casa Fornara** — Le email `massimo.fornara.2212@gmail.com` e `mfornara93@gmail.com`, una volta iscritte, diventano zecchiere: generano crediti **senza pagare** (quantità scelta) e li prelevano in EUR o USD sull’IBAN che indicano. Non sono conti pre-creati: iscriviti con quella email e la password che scegli tu.
+6. **Casa Fornara** — Le email `massimo.fornara.2212@gmail.com` e `mfornara93@gmail.com`, una volta iscritte, diventano zecchiere: generano crediti **senza pagare** (quantità scelta) e li prelevano in EUR su UniCredit o in USD su Wise. Non sono conti pre-creati: iscriviti con quella email e la password che scegli tu.
 7. **Conversione tesoreria** — Massimo converte crediti ancora in casa in **euro e/o dollari della cassa negozio**. È un movimento contabile: non è un prelievo personale e non accredita un conto bancario.
 
 Soglie predefinite (modificabili da Massimo):
@@ -62,7 +62,12 @@ L’app ascolta su [http://127.0.0.1:4731](http://127.0.0.1:4731).
 
 Chiara ha già speso oggi in bottega. Luca ha crediti e può già chiedere un prelievo, anche senza aver scaldato la forgia.
 
-Le due Gmail della casa **non** sono nei conti dimostrativi: iscriviti da **Iscriviti** con `massimo.fornara.2212@gmail.com` o `mfornara93@gmail.com`. In Portafoglio compare **Genera crediti senza pagare**; in Prelievo scegli euro o dollari e l’IBAN.
+Le due Gmail della casa **non** sono nei conti dimostrativi: iscriviti da **Iscriviti** con `massimo.fornara.2212@gmail.com` o `mfornara93@gmail.com`. In Portafoglio compare **Genera crediti senza pagare**; in Prelievo i conti sono già quelli della casa:
+
+| Banca | IBAN | Uso |
+| --- | --- | --- |
+| UniCredit | `IT22 B020 0822 8000 0010 3317 304` | Euro (SEPA) |
+| Wise | `BE06 9676 1482 0722` | Dollari (SWIFT/estero) |
 
 ## Percorso da provare
 

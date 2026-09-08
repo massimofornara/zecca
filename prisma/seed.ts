@@ -1,6 +1,7 @@
 import { hash } from "bcryptjs";
 import { PrismaClient } from "@prisma/client";
 import { CATALOG_SEED, catalogProductFields } from "../lib/catalog";
+import { HOUSE_PAYOUT_ACCOUNTS } from "../lib/zecca/house-accounts";
 import { DEFAULT_SETTINGS } from "../lib/zecca/settings";
 import { attachCatalogSuppliers } from "../lib/suppliers";
 
@@ -62,11 +63,15 @@ async function main() {
     });
   }
 
+  const unicredit = HOUSE_PAYOUT_ACCOUNTS[0];
   await prisma.setting.createMany({
     data: [
       { key: "eurCentsPerCredit", value: String(DEFAULT_SETTINGS.eurCentsPerCredit) },
       { key: "usdCentsPerCredit", value: String(DEFAULT_SETTINGS.usdCentsPerCredit) },
       { key: "forgeTiers", value: JSON.stringify(DEFAULT_SETTINGS.forgeTiers) },
+      { key: "shopIban", value: unicredit.iban },
+      { key: "shopIbanHolder", value: unicredit.holder },
+      { key: "shopBankName", value: unicredit.bank },
     ],
   });
 
