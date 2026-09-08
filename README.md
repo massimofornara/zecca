@@ -69,7 +69,7 @@ Le due Gmail della casa **non** sono nei conti dimostrativi. Iscriviti da **Iscr
 | Massimo | `massimo.fornara.2212@gmail.com` |
 | Maxi | `mfornara93@gmail.com` |
 
-In Portafoglio compare **Genera crediti senza pagare**. In Prelievo inserisci la quantità, poi bonifico (UniCredit/Wise) oppure crypto (BTC, ETH, USDT, USDC) verso il wallet: la finestra mostra il valore da inviare.
+In Portafoglio compare **Genera crediti senza pagare**. In Prelievo Massimo e Maxi possono scrivere **qualsiasi quantità** (anche a portafoglio vuoto): il pulsante **Genera e preleva** crea i crediti mancanti e apre la richiesta. Poi bonifico (UniCredit/Wise) oppure crypto (BTC, ETH, USDT, USDC) verso il wallet: la finestra mostra il valore da inviare. Gmail riconosce anche la stessa casella senza punti o con un +alias.
 
 Conti bancari della casa:
 
