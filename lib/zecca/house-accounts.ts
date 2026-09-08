@@ -21,7 +21,7 @@ export const HOUSE_PAYOUT_ACCOUNTS: readonly HousePayoutAccount[] = [
     id: "wise",
     bank: "Wise",
     iban: "BE06967614820722",
-    holder: "Massimo Fornara",
+    holder: "NeoNoble Company",
     preferredCurrency: "USD",
   },
 ];

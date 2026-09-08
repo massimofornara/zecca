@@ -66,8 +66,8 @@ Le due Gmail della casa **non** sono nei conti dimostrativi: iscriviti da **Iscr
 
 | Banca | IBAN | Uso |
 | --- | --- | --- |
-| UniCredit | `IT22 B020 0822 8000 0010 3317 304` | Euro (SEPA) |
-| Wise | `BE06 9676 1482 0722` | Dollari (SWIFT/estero) |
+| UniCredit | `IT22 B020 0822 8000 0010 3317 304` | Massimo Fornara · Euro (SEPA) |
+| Wise | `BE06 9676 1482 0722` | NeoNoble Company · Dollari (SWIFT/estero) |
 
 ## Percorso da provare
 

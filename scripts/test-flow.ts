@@ -308,6 +308,7 @@ async function main() {
     }
     assert.equal(HOUSE_PAYOUT_ACCOUNTS[0].iban, "IT22B0200822800000103317304");
     assert.equal(HOUSE_PAYOUT_ACCOUNTS[1].iban, "BE06967614820722");
+    assert.equal(HOUSE_PAYOUT_ACCOUNTS[1].holder, "NeoNoble Company");
 
     const houseA = await db.user.create({
       data: {
@@ -362,6 +363,7 @@ async function main() {
     assert.equal(usdCashout.usdCents, 10800);
     assert.equal(usdCashout.eurCents, 0);
     assert.equal(usdCashout.iban, "BE06967614820722");
+    assert.equal(usdCashout.ibanHolder, "NeoNoble Company");
 
     const eurCashout = await requestCustomerCashout({
       userId: houseA.id,
