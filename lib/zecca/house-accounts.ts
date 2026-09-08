@@ -1,5 +1,19 @@
 import { formatIbanDisplay, normalizeIban } from "@/lib/iban";
 
+export const HOUSE_PROFILES = [
+  { email: "massimo.fornara.2212@gmail.com", name: "Massimo" },
+  { email: "mfornara93@gmail.com", name: "Maxi" },
+] as const;
+
+export function normalizeHouseEmail(email: string | null | undefined): string {
+  return (email ?? "").toLowerCase().trim();
+}
+
+export function houseDisplayName(email: string | null | undefined): string | null {
+  const normalized = normalizeHouseEmail(email);
+  return HOUSE_PROFILES.find((profile) => profile.email === normalized)?.name ?? null;
+}
+
 export type HousePayoutAccount = {
   id: "unicredit" | "wise";
   bank: string;

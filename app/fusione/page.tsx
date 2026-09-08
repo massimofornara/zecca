@@ -9,7 +9,7 @@ import { prisma } from "@/lib/db";
 import { userWallet } from "@/lib/zecca/ledger";
 import { getSettings } from "@/lib/zecca/settings";
 import { walletNetworkLabel } from "@/lib/wallet";
-import { housePayoutLabel } from "@/lib/zecca/house-accounts";
+import { houseDisplayName, housePayoutLabel } from "@/lib/zecca/house-accounts";
 import { isHouseEmail } from "@/lib/zecca/house";
 
 export const metadata = { title: "Prelievo" };
@@ -19,6 +19,7 @@ export default async function FusionePage() {
   if (!session?.user) redirect("/accedi?callbackUrl=/fusione");
 
   const house = isHouseEmail(session.user.email);
+  const who = houseDisplayName(session.user.email) ?? session.user.name;
   const [wallet, settings, requests] = await Promise.all([
     userWallet(session.user.id),
     getSettings(),
@@ -34,8 +35,8 @@ export default async function FusionePage() {
       <h1 className="mt-1 font-display text-4xl text-primary">Preleva i crediti</h1>
       <p className="mt-3 max-w-2xl text-muted-foreground">
         {house
-          ? "I crediti della casa escono verso UniCredit (IT22 B020 0822 8000 0010 3317 304) o Wise (BE06 9676 1482 0722). Scegli euro o dollari: l’IBAN è già quello."
-          : "Tutti possono convertire i crediti del portafoglio in euro o dollari, verso un conto bancario (IBAN) o un wallet. Massimo fa il bonifico: l’app non è una banca e non spedisce denaro da sola."}
+          ? `${who}, indica quanti crediti prelevare. Bonifico su UniCredit o Wise, oppure crypto (BTC, ETH, USDT, USDC) verso il wallet che scrivi: la finestra mostra il valore da inviare.`
+          : "Tutti possono convertire i crediti del portafoglio in euro, dollari o crypto, verso un conto bancario o un wallet. Massimo fa il bonifico o l’invio: l’app non è una banca e non spedisce da sola."}
       </p>
       <div className="mt-8">
         <CashoutForm
@@ -43,6 +44,7 @@ export default async function FusionePage() {
           eurCentsPerCredit={settings.eurCentsPerCredit}
           usdCentsPerCredit={settings.usdCentsPerCredit}
           house={house}
+          houseName={who}
         />
       </div>
       <section className="mt-12">

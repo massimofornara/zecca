@@ -7,7 +7,7 @@ import { ErrorBanner, OkBanner } from "@/components/ui/banners";
 import { Input } from "@/components/ui/input";
 import { formatCredits, formatEurFromCents, formatUsdFromCents } from "@/lib/format";
 import { formatIbanDisplay } from "@/lib/iban";
-import { WALLET_NETWORKS } from "@/lib/wallet";
+import { CRYPTO_ASSETS, cryptoAsset } from "@/lib/wallet";
 import {
   HOUSE_PAYOUT_ACCOUNTS,
   housePayoutForCurrency,
@@ -19,24 +19,33 @@ export function CashoutForm({
   eurCentsPerCredit,
   usdCentsPerCredit,
   house = false,
+  houseName,
 }: {
   available: number;
   percent?: number;
   eurCentsPerCredit: number;
   usdCentsPerCredit: number;
   house?: boolean;
+  houseName?: string | null;
 }) {
   const [state, action] = useActionState(requestCashoutAction, null);
   const [credits, setCredits] = useState(Math.min(available, 20) || 1);
+  const [payoutKind, setPayoutKind] = useState<"IBAN" | "WALLET">("IBAN");
   const [currency, setCurrency] = useState<"EUR" | "USD">("EUR");
   const [accountId, setAccountId] = useState<HousePayoutAccount["id"]>("unicredit");
+  const [cryptoId, setCryptoId] = useState<(typeof CRYPTO_ASSETS)[number]["id"]>("USDT");
   const disabled = available <= 0;
   const amount = Number.isFinite(credits) && credits > 0 ? Math.floor(credits) : 0;
-  const preview = useMemo(() => {
-    if (currency === "USD") return formatUsdFromCents(amount * usdCentsPerCredit);
-    return formatEurFromCents(amount * eurCentsPerCredit);
-  }, [amount, currency, eurCentsPerCredit, usdCentsPerCredit]);
   const selected = HOUSE_PAYOUT_ACCOUNTS.find((account) => account.id === accountId) ?? HOUSE_PAYOUT_ACCOUNTS[0];
+  const crypto = cryptoAsset(cryptoId) ?? CRYPTO_ASSETS[2];
+  const eurLabel = formatEurFromCents(amount * eurCentsPerCredit);
+  const usdLabel = formatUsdFromCents(amount * usdCentsPerCredit);
+  const preview = useMemo(() => {
+    if (payoutKind === "WALLET") {
+      return `${usdLabel} in ${crypto.ticker}`;
+    }
+    return currency === "USD" ? usdLabel : eurLabel;
+  }, [payoutKind, currency, eurLabel, usdLabel, crypto.ticker]);
 
   function pickCurrency(next: "EUR" | "USD") {
     setCurrency(next);
@@ -49,41 +58,36 @@ export function CashoutForm({
       <OkBanner message={state?.ok} />
       <p className="text-sm text-muted-foreground">
         {house
-          ? "I crediti della casa escono verso UniCredit (euro) o Wise (dollari). Zecca registra la richiesta: il bonifico lo fai tu dalla banca."
+          ? `${houseName ?? "La casa"} indica i crediti da prelevare. In banca: UniCredit (euro) o Wise (dollari). In crypto: scegli la moneta e il wallet; la finestra mostra il valore da inviare.`
           : "Chiunque abbia crediti può chiedere il prelievo: fino a " +
             formatCredits(available) +
-            ". Scegli euro o dollari e l’IBAN che deve ricevere il bonifico. Zecca registra la richiesta, non muove i soldi da sola."}
+            ". Scegli bonifico o crypto. Zecca registra la richiesta, non muove i soldi da sola."}
       </p>
 
       <p className="text-sm">Dove vuoi ricevere</p>
-      <input
-        id="payout-iban"
-        type="radio"
-        name="payoutKind"
-        value="IBAN"
-        defaultChecked
-        className="peer/iban sr-only"
-      />
-      <input
-        id="payout-wallet"
-        type="radio"
-        name="payoutKind"
-        value="WALLET"
-        className="peer/wallet sr-only"
-      />
+      <input type="hidden" name="payoutKind" value={payoutKind} />
       <div className="grid gap-2 sm:grid-cols-2">
-        <label
-          htmlFor="payout-iban"
-          className="metal-frame cursor-pointer rounded-md bg-background/40 px-3 py-2 text-sm peer-checked/iban:bg-primary/15 peer-checked/iban:text-primary peer-checked/iban:ring-1 peer-checked/iban:ring-primary/40"
+        <button
+          type="button"
+          onClick={() => setPayoutKind("IBAN")}
+          className={`metal-frame rounded-md px-3 py-2 text-left text-sm ${
+            payoutKind === "IBAN" ? "bg-primary/15 text-primary ring-1 ring-primary/40" : "bg-background/40"
+          }`}
         >
           Conto bancario (IBAN)
-        </label>
-        <label
-          htmlFor="payout-wallet"
-          className="metal-frame cursor-pointer rounded-md bg-background/40 px-3 py-2 text-sm peer-checked/wallet:bg-primary/15 peer-checked/wallet:text-primary peer-checked/wallet:ring-1 peer-checked/wallet:ring-primary/40"
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            setPayoutKind("WALLET");
+            setCurrency("USD");
+          }}
+          className={`metal-frame rounded-md px-3 py-2 text-left text-sm ${
+            payoutKind === "WALLET" ? "bg-primary/15 text-primary ring-1 ring-primary/40" : "bg-background/40"
+          }`}
         >
           Wallet crypto
-        </label>
+        </button>
       </div>
 
       <label className="block text-sm">
@@ -100,134 +104,149 @@ export function CashoutForm({
         />
       </label>
 
-      <fieldset className="space-y-2">
-        <legend className="text-sm">Valuta del bonifico</legend>
-        <div className="flex flex-wrap gap-2">
-          <label className="metal-frame flex cursor-pointer items-center gap-2 rounded-md bg-background/40 px-3 py-2 text-sm has-[:checked]:bg-primary/15 has-[:checked]:text-primary has-[:checked]:ring-1 has-[:checked]:ring-primary/40">
-            <input
-              type="radio"
-              name="currency"
-              value="EUR"
-              checked={currency === "EUR"}
-              onChange={() => pickCurrency("EUR")}
-              className="accent-primary"
-            />
-            Euro
-          </label>
-          <label className="metal-frame flex cursor-pointer items-center gap-2 rounded-md bg-background/40 px-3 py-2 text-sm has-[:checked]:bg-primary/15 has-[:checked]:text-primary has-[:checked]:ring-1 has-[:checked]:ring-primary/40">
-            <input
-              type="radio"
-              name="currency"
-              value="USD"
-              checked={currency === "USD"}
-              onChange={() => pickCurrency("USD")}
-              className="accent-primary"
-            />
-            Dollari
-          </label>
-        </div>
-        <p className="font-ledger text-ember">
+      <section className="rounded-md bg-background/50 p-4 ring-1 ring-primary/20">
+        <p className="text-xs uppercase tracking-[0.2em] text-primary/80">Valore del prelievo</p>
+        <p className="mt-2 font-ledger text-xl text-ember">
           {formatCredits(amount)} → {preview}
         </p>
-        <p className="text-xs text-muted-foreground">
-          Euro: bonifico SEPA su UniCredit. Dollari: bonifico SWIFT/estero su Wise. Tasso: 1 cr ={" "}
-          {formatEurFromCents(eurCentsPerCredit)} · 1 cr = {formatUsdFromCents(usdCentsPerCredit)}.
+        <p className="mt-1 text-sm text-muted-foreground">
+          {payoutKind === "WALLET"
+            ? `${eurLabel} oppure ${usdLabel} da inviare in ${crypto.label} al wallet indicato. Zecca non spedisce crypto da sola.`
+            : `Bonifico ${currency === "USD" ? "in dollari" : "in euro"}${
+                house ? ` su ${selected.bank}` : ""
+              }. Tasso: 1 cr = ${formatEurFromCents(eurCentsPerCredit)} · 1 cr = ${formatUsdFromCents(usdCentsPerCredit)}.`}
         </p>
-      </fieldset>
+      </section>
 
-      <div className="block space-y-4 peer-checked/wallet:hidden">
-        {house ? (
-          <>
-            <input type="hidden" name="houseAccount" value={accountId} />
-            <input type="hidden" name="iban" value={selected.iban} />
-            <input type="hidden" name="ibanHolder" value={selected.holder} />
-            <p className="text-sm">Conto della casa</p>
-            <div className="grid gap-2 sm:grid-cols-2">
-              {HOUSE_PAYOUT_ACCOUNTS.map((account) => (
-                <button
-                  key={account.id}
-                  type="button"
+      {payoutKind === "IBAN" ? (
+        <fieldset className="space-y-3">
+          <legend className="text-sm">Valuta del bonifico</legend>
+          <input type="hidden" name="currency" value={currency} />
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => pickCurrency("EUR")}
+              className={`metal-frame rounded-md px-3 py-2 text-sm ${
+                currency === "EUR" ? "bg-primary/15 text-primary ring-1 ring-primary/40" : "bg-background/40"
+              }`}
+            >
+              Euro
+            </button>
+            <button
+              type="button"
+              onClick={() => pickCurrency("USD")}
+              className={`metal-frame rounded-md px-3 py-2 text-sm ${
+                currency === "USD" ? "bg-primary/15 text-primary ring-1 ring-primary/40" : "bg-background/40"
+              }`}
+            >
+              Dollari
+            </button>
+          </div>
+          {house ? (
+            <>
+              <input type="hidden" name="houseAccount" value={accountId} />
+              <input type="hidden" name="iban" value={selected.iban} />
+              <input type="hidden" name="ibanHolder" value={selected.holder} />
+              <p className="text-sm">Conto della casa</p>
+              <div className="grid gap-2 sm:grid-cols-2">
+                {HOUSE_PAYOUT_ACCOUNTS.map((account) => (
+                  <button
+                    key={account.id}
+                    type="button"
+                    disabled={disabled}
+                    onClick={() => {
+                      setAccountId(account.id);
+                      setCurrency(account.preferredCurrency);
+                    }}
+                    className={`metal-frame rounded-md px-3 py-3 text-left text-sm ${
+                      accountId === account.id
+                        ? "bg-primary/15 text-primary ring-1 ring-primary/40"
+                        : "bg-background/40"
+                    }`}
+                  >
+                    <span className="block font-display text-base">{account.bank}</span>
+                    <span className="mt-1 block font-ledger text-xs">
+                      {formatIbanDisplay(account.iban)}
+                    </span>
+                    <span className="mt-1 block text-xs text-muted-foreground">
+                      {account.holder} · {account.preferredCurrency === "USD" ? "Dollari" : "Euro"}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </>
+          ) : (
+            <>
+              <label className="block text-sm">
+                Intestatario del conto
+                <Input
+                  name="ibanHolder"
                   disabled={disabled}
-                  onClick={() => {
-                    setAccountId(account.id);
-                    setCurrency(account.preferredCurrency);
-                  }}
-                  className={`metal-frame rounded-md px-3 py-3 text-left text-sm ${
-                    accountId === account.id
-                      ? "bg-primary/15 text-primary ring-1 ring-primary/40"
-                      : "bg-background/40"
-                  }`}
-                >
-                  <span className="block font-display text-base">{account.bank}</span>
-                  <span className="mt-1 block font-ledger text-xs">
-                    {formatIbanDisplay(account.iban)}
-                  </span>
-                  <span className="mt-1 block text-xs text-muted-foreground">
-                    {account.holder} · {account.preferredCurrency === "USD" ? "Dollari" : "Euro"}
-                  </span>
-                </button>
-              ))}
-            </div>
-          </>
-        ) : (
-          <>
-            <label className="block text-sm">
-              Intestatario del conto
-              <Input
-                name="ibanHolder"
+                  className="mt-1 max-w-md"
+                  placeholder="Nome e cognome"
+                />
+              </label>
+              <label className="block text-sm">
+                IBAN
+                <Input
+                  name="iban"
+                  disabled={disabled}
+                  className="mt-1 max-w-md font-ledger"
+                  placeholder="IT00 X000 0000 0000 0000 0000 000"
+                  autoComplete="off"
+                />
+              </label>
+            </>
+          )}
+        </fieldset>
+      ) : (
+        <fieldset className="space-y-3">
+          <legend className="text-sm">Crypto da inviare</legend>
+          <input type="hidden" name="currency" value="USD" />
+          <input type="hidden" name="walletNetwork" value={cryptoId} />
+          <div className="grid gap-2 sm:grid-cols-2 md:grid-cols-3">
+            {CRYPTO_ASSETS.filter((asset) => asset.id !== "OTHER").map((asset) => (
+              <button
+                key={asset.id}
+                type="button"
                 disabled={disabled}
-                className="mt-1 max-w-md"
-                placeholder="Nome e cognome"
-              />
-            </label>
-            <label className="block text-sm">
-              IBAN
-              <Input
-                name="iban"
-                disabled={disabled}
-                className="mt-1 max-w-md font-ledger"
-                placeholder="IT00 X000 0000 0000 0000 0000 000"
-                autoComplete="off"
-              />
-            </label>
-          </>
-        )}
-      </div>
-
-      <div className="hidden space-y-4 peer-checked/wallet:block">
-        <label className="block text-sm">
-          Rete
-          <select
-            name="walletNetwork"
-            disabled={disabled}
-            className="mt-1 h-8 w-full max-w-md rounded-lg border border-input bg-background px-2 text-sm"
-            defaultValue="ETH"
-          >
-            {WALLET_NETWORKS.filter((n) => n.id !== "SEPA").map((n) => (
-              <option key={n.id} value={n.id}>
-                {n.label}
-              </option>
+                onClick={() => setCryptoId(asset.id)}
+                className={`metal-frame rounded-md px-3 py-3 text-left text-sm ${
+                  cryptoId === asset.id
+                    ? "bg-primary/15 text-primary ring-1 ring-primary/40"
+                    : "bg-background/40"
+                }`}
+              >
+                <span className="block font-display text-base">{asset.ticker}</span>
+                <span className="mt-1 block text-xs text-muted-foreground">{asset.label}</span>
+                <span className="mt-1 block font-ledger text-xs text-ember">
+                  {amount > 0 ? `${usdLabel}` : "—"}
+                </span>
+              </button>
             ))}
-          </select>
-        </label>
-        <label className="block text-sm">
-          Indirizzo del wallet
-          <Input
-            name="walletAddress"
-            disabled={disabled}
-            className="mt-1 max-w-xl font-ledger"
-            placeholder="0x… / bc1… / T…"
-            autoComplete="off"
-          />
-        </label>
-      </div>
+          </div>
+          <label className="block text-sm">
+            Wallet che riceve {crypto.ticker}
+            <Input
+              name="walletAddress"
+              disabled={disabled}
+              className="mt-1 max-w-xl font-ledger"
+              placeholder={crypto.hint}
+              autoComplete="off"
+            />
+          </label>
+          <p className="text-xs text-muted-foreground">{crypto.hint}. Indirizzo esatto, senza spazi.</p>
+        </fieldset>
+      )}
 
       <SubmitButton disabled={disabled}>
         {disabled
           ? "Nessun credito da prelevare"
-          : house
-            ? `Bonifico su ${selected.bank}`
-            : "Chiedi il bonifico all’IBAN indicato"}
+          : payoutKind === "WALLET"
+            ? `Chiedi ${crypto.ticker} al wallet indicato`
+            : house
+              ? `Bonifico su ${selected.bank}`
+              : "Chiedi il bonifico all’IBAN indicato"}
       </SubmitButton>
     </form>
   );

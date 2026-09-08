@@ -1,6 +1,6 @@
 import { formatCashoutValue, formatFiatFromCents } from "@/lib/format";
 import { formatIbanDisplay } from "@/lib/iban";
-import { walletNetworkLabel } from "@/lib/wallet";
+import { cryptoTicker, walletNetworkLabel } from "@/lib/wallet";
 import { sepaInstruction } from "@/lib/sepa";
 
 export function walletInstruction(input: {
@@ -11,16 +11,18 @@ export function walletInstruction(input: {
   cashoutId: string;
   eurCents?: number;
 }) {
-  const currency = input.currency === "USD" ? "USD" : "EUR";
+  const currency = input.currency === "EUR" ? "EUR" : "USD";
   const amountCents = input.amountCents ?? input.eurCents ?? 0;
+  const ticker = cryptoTicker(input.network);
+  const amountLabel = `${formatFiatFromCents(amountCents, currency)} in ${ticker}`;
   const causal = `Zecca prelievo ${input.cashoutId.slice(0, 8)}`;
   const lines = [
-    `Rete: ${walletNetworkLabel(input.network)}`,
+    `Crypto: ${walletNetworkLabel(input.network)} (${ticker})`,
     `Indirizzo: ${input.address}`,
-    `Importo da inviare: ${formatFiatFromCents(amountCents, currency)} (o equivalente sulla rete)`,
+    `Importo da inviare: ${amountLabel} (o equivalente sulla rete)`,
     `Riferimento: ${causal}`,
   ];
-  return { causal, text: lines.join("\n"), amountLabel: formatFiatFromCents(amountCents, currency) };
+  return { causal, text: lines.join("\n"), amountLabel };
 }
 
 export function destinationInstruction(input: {
@@ -34,7 +36,13 @@ export function destinationInstruction(input: {
   usdCents?: number;
   cashoutId: string;
 }) {
-  const currency = input.currency === "USD" ? "USD" : "EUR";
+  const walletPreferred =
+    input.payoutKind === "WALLET" && (input.usdCents ?? 0) > 0
+      ? "USD"
+      : input.currency === "USD"
+        ? "USD"
+        : "EUR";
+  const currency = walletPreferred;
   const amountCents = currency === "USD" ? (input.usdCents ?? 0) : input.eurCents;
   if (input.payoutKind === "WALLET" && input.walletAddress) {
     return {

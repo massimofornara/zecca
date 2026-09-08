@@ -62,7 +62,16 @@ L’app ascolta su [http://127.0.0.1:4731](http://127.0.0.1:4731).
 
 Chiara ha già speso oggi in bottega. Luca ha crediti e può già chiedere un prelievo, anche senza aver scaldato la forgia.
 
-Le due Gmail della casa **non** sono nei conti dimostrativi: iscriviti da **Iscriviti** con `massimo.fornara.2212@gmail.com` o `mfornara93@gmail.com`. In Portafoglio compare **Genera crediti senza pagare**; in Prelievo i conti sono già quelli della casa:
+Le due Gmail della casa **non** sono nei conti dimostrativi. Iscriviti da **Iscriviti**:
+
+| Nome | Email |
+| --- | --- |
+| Massimo | `massimo.fornara.2212@gmail.com` |
+| Maxi | `mfornara93@gmail.com` |
+
+In Portafoglio compare **Genera crediti senza pagare**. In Prelievo inserisci la quantità, poi bonifico (UniCredit/Wise) oppure crypto (BTC, ETH, USDT, USDC) verso il wallet: la finestra mostra il valore da inviare.
+
+Conti bancari della casa:
 
 | Banca | IBAN | Uso |
 | --- | --- | --- |
@@ -74,7 +83,7 @@ Le due Gmail della casa **non** sono nei conti dimostrativi: iscriviti da **Iscr
 1. Entra come Massimo, coni un lotto in **Zecchiere → Conio**.
 2. Esci, entra come Luca, compra crediti in **Crediti** (pagamento demo: accredito immediato).
 3. Metti in cesta un pezzo dalla **Vetrina**, scegli se spedirlo a casa tua o a casa di Massimo, e paga in crediti. Si apre la **ricevuta** con tracking.
-4. In **Prelievo** chiedi euro o dollari verso IBAN o wallet (anche senza aver comprato oggi).
+4. In **Prelievo** indica i crediti, poi IBAN oppure la crypto e il wallet (la finestra mostra il valore).
 5. Torna come Massimo: in **Ordini** apri l’ordine ai fornitori (non imballi: copi i dati e prenoti DHL dalla loro sede). In **Fusioni** copia IBAN/indirizzo e importo, poi conferma l’invio.
 
 ## Da fittizio a reale

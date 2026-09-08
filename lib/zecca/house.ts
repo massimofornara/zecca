@@ -5,8 +5,12 @@ import { LEDGER_INT_MAX, parsePositiveCredits } from "@/lib/zecca/amount";
 import { appendLedger } from "@/lib/zecca/ledger";
 import { creditsToEurCents, creditsToUsdCents, getSettings } from "@/lib/zecca/settings";
 
+import { HOUSE_PROFILES, houseDisplayName, normalizeHouseEmail } from "@/lib/zecca/house-accounts";
+
 export {
   HOUSE_PAYOUT_ACCOUNTS,
+  HOUSE_PROFILES,
+  houseDisplayName,
   housePayoutAccount,
   housePayoutByIban,
   housePayoutForCurrency,
@@ -14,18 +18,15 @@ export {
   type HousePayoutAccount,
 } from "@/lib/zecca/house-accounts";
 
-/** Email che possono generare crediti senza pagamento e prelevarne il valore. */
-export const HOUSE_EMAILS = [
-  "massimo.fornara.2212@gmail.com",
-  "mfornara93@gmail.com",
-] as const;
+export const HOUSE_EMAILS = HOUSE_PROFILES.map((profile) => profile.email);
 
 export function normalizeEmail(email: string | null | undefined): string {
-  return (email ?? "").toLowerCase().trim();
+  return normalizeHouseEmail(email);
 }
 
 export function isHouseEmail(email: string | null | undefined): boolean {
-  return (HOUSE_EMAILS as readonly string[]).includes(normalizeEmail(email));
+  const normalized = normalizeHouseEmail(email);
+  return HOUSE_PROFILES.some((profile) => profile.email === normalized);
 }
 
 export async function ensureHouseAdmin(input: {
@@ -35,10 +36,19 @@ export async function ensureHouseAdmin(input: {
 }) {
   if (!isHouseEmail(input.email)) return false;
   const db = input.db ?? defaultPrisma;
-  const user = await db.user.findUnique({ where: { id: input.userId }, select: { role: true } });
+  const user = await db.user.findUnique({
+    where: { id: input.userId },
+    select: { role: true, name: true },
+  });
   if (!user) return false;
-  if (user.role === "ADMIN") return true;
-  await db.user.update({ where: { id: input.userId }, data: { role: "ADMIN" } });
+  const name = houseDisplayName(input.email);
+  const next = {
+    role: "ADMIN" as const,
+    ...(name && user.name !== name ? { name } : {}),
+  };
+  if (user.role !== "ADMIN" || next.name) {
+    await db.user.update({ where: { id: input.userId }, data: next });
+  }
   return true;
 }
 

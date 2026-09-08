@@ -135,7 +135,7 @@ export async function requestCashoutAction(
     return {
       ok:
         payoutKind === "WALLET"
-          ? "Richiesta inviata. Massimo vedrà il tuo wallet e, se accetta, invierà da un wallet suo. Zecca non spedisce crypto da sola."
+          ? "Richiesta inviata. In Fusioni compare la crypto, l’importo e il wallet. Zecca non spedisce crypto da sola: l’invio lo fai tu dal wallet."
           : currency === "USD"
             ? "Richiesta inviata. Il bonifico in dollari va all’IBAN indicato. Zecca non invia i soldi da sola: lo fai tu dalla banca, poi confermi in Fusioni."
             : "Richiesta inviata. Il bonifico in euro va all’IBAN indicato. Zecca non invia i soldi da sola: lo fai tu dalla banca, poi confermi in Fusioni.",

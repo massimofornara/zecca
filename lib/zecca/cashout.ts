@@ -64,12 +64,21 @@ export async function requestCustomerCashout(input: {
   }
 
   const settings = await getSettings(db);
-  const eurCents = currency === "EUR" ? creditsToEurCents(credits, settings.eurCentsPerCredit) : 0;
-  const usdCents = currency === "USD" ? creditsToUsdCents(credits, settings.usdCentsPerCredit) : 0;
+  const eurCents =
+    payoutKind === "WALLET" || currency === "EUR"
+      ? creditsToEurCents(credits, settings.eurCentsPerCredit)
+      : 0;
+  const usdCents =
+    payoutKind === "WALLET" || currency === "USD"
+      ? creditsToUsdCents(credits, settings.usdCentsPerCredit)
+      : 0;
+  const resolvedCurrency: CashoutCurrency = payoutKind === "WALLET" ? "USD" : currency;
   const fiatLabel =
-    currency === "USD"
-      ? `${(usdCents / 100).toFixed(2)} USD`
-      : `${(eurCents / 100).toFixed(2)} EUR`;
+    payoutKind === "WALLET"
+      ? `${(usdCents / 100).toFixed(2)} USD in ${walletNetworkLabel(walletNetwork ?? "OTHER")}`
+      : resolvedCurrency === "USD"
+        ? `${(usdCents / 100).toFixed(2)} USD`
+        : `${(eurCents / 100).toFixed(2)} EUR`;
 
   return db.$transaction(async (tx) => {
     const available = await pocketBalance("USER", input.userId, tx);
@@ -83,7 +92,7 @@ export async function requestCustomerCashout(input: {
         credits,
         eurCents,
         usdCents,
-        currency,
+        currency: resolvedCurrency,
         status: "PENDING",
         isTreasury: false,
         payoutKind,
@@ -106,7 +115,7 @@ export async function requestCustomerCashout(input: {
         cashoutId: cashout.id,
         eurCents,
         usdCents,
-        fiatCurrency: currency,
+        fiatCurrency: resolvedCurrency,
         note: `Richiesta di prelievo: ${credits} cr → ${fiatLabel} ${destinationNote}`,
       },
       tx,

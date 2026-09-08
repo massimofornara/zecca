@@ -14,7 +14,7 @@ import { convertTreasuryToShopFiat, shopFiatBalances } from "../lib/zecca/conver
 import { pocketBalance, treasuryBalance } from "../lib/zecca/ledger";
 import { getReserveReport } from "../lib/zecca/reserves";
 import { DEFAULT_SETTINGS } from "../lib/zecca/settings";
-import { grantHouseCredits, HOUSE_PAYOUT_ACCOUNTS, isHouseEmail } from "../lib/zecca/house";
+import { grantHouseCredits, houseDisplayName, HOUSE_PAYOUT_ACCOUNTS, isHouseEmail } from "../lib/zecca/house";
 import { isValidIban } from "../lib/iban";
 
 const dbPath = path.join(process.cwd(), "prisma", "test.db");
@@ -303,6 +303,8 @@ async function main() {
     assert.equal(isHouseEmail("Massimo.Fornara.2212@gmail.com"), true);
     assert.equal(isHouseEmail("mfornara93@gmail.com"), true);
     assert.equal(isHouseEmail("chiara@zecca.local"), false);
+    assert.equal(houseDisplayName("massimo.fornara.2212@gmail.com"), "Massimo");
+    assert.equal(houseDisplayName("mfornara93@gmail.com"), "Maxi");
     for (const account of HOUSE_PAYOUT_ACCOUNTS) {
       assert.equal(isValidIban(account.iban), true, `${account.bank} IBAN deve essere valido`);
     }
@@ -387,6 +389,21 @@ async function main() {
 
     await grantHouseCredits({ userId: houseB.id, credits: 10, db });
     assert.equal(await pocketBalance("USER", houseB.id, db), 10);
+    const usdtOut = await requestCustomerCashout({
+      userId: houseB.id,
+      role: "ADMIN",
+      credits: 10,
+      payoutKind: "WALLET",
+      walletNetwork: "USDT",
+      walletAddress: "0x742d35Cc6634C0532925a3b844Bc454e4438f44e",
+      db,
+    });
+    assert.equal(usdtOut.payoutKind, "WALLET");
+    assert.equal(usdtOut.walletNetwork, "USDT");
+    assert.equal(usdtOut.currency, "USD");
+    assert.equal(usdtOut.usdCents, 1080);
+    assert.equal(usdtOut.eurCents, 1000);
+    assert.equal(await pocketBalance("USER", houseB.id, db), 0);
 
     console.log("Flusso Zecca: conio → crediti → bottega DHL + ritiro in sede → prelievo IBAN/wallet. OK.");
     console.log("Conversione tesoreria 3000 cr→EUR e 2000 cr→USD in cassa negozio. OK.");

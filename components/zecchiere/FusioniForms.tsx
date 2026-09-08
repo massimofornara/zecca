@@ -158,7 +158,7 @@ export function PendingCashoutCard({
       ) : dest?.kind === "WALLET" && walletAddress ? (
         <div className="mt-4 space-y-3 rounded-md bg-background/50 p-3 ring-1 ring-primary/20">
           <p className="text-xs uppercase tracking-[0.2em] text-primary/80">Da incollare nel tuo wallet</p>
-          <CopyField label="Rete" value={walletNetworkLabel(walletNetwork)} />
+          <CopyField label="Crypto" value={walletNetworkLabel(walletNetwork)} />
           <CopyField label="Indirizzo" value={walletAddress} mono />
           <CopyField label="Importo" value={dest.amountLabel ?? amountLabel} mono />
           <CopyField label="Riferimento" value={dest.causal} mono />

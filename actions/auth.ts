@@ -7,7 +7,7 @@ import { z } from "zod";
 import { signIn, signOut } from "@/auth";
 import { prisma } from "@/lib/db";
 import { isDemoAccount, isDemoLoginAllowed } from "@/lib/live";
-import { isHouseEmail } from "@/lib/zecca/house";
+import { houseDisplayName, isHouseEmail } from "@/lib/zecca/house";
 
 const credentialsSchema = z.object({
   email: z.string().min(3),
@@ -56,7 +56,7 @@ export async function registerAction(_prev: { error?: string } | null, formData:
 
   await prisma.user.create({
     data: {
-      name,
+      name: houseDisplayName(email) ?? name,
       email,
       passwordHash: await hash(password, 12),
       role: isHouseEmail(email) ? "ADMIN" : "CUSTOMER",
