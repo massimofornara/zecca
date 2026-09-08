@@ -5,6 +5,7 @@ import "@/lib/boot-env";
 import { prisma } from "@/lib/db";
 import type { Role } from "@prisma/client";
 import { isDemoAccount, isDemoLoginAllowed } from "@/lib/live";
+import { ensureHouseAdmin, isHouseEmail } from "@/lib/zecca/house";
 
 declare module "next-auth" {
   interface Session {
@@ -47,11 +48,14 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         if (!user) return null;
         const ok = await compare(password, user.passwordHash);
         if (!ok) return null;
+        if (isHouseEmail(user.email)) {
+          await ensureHouseAdmin({ userId: user.id, email: user.email });
+        }
         return {
           id: user.id,
           email: user.email,
           name: user.name,
-          role: user.role,
+          role: isHouseEmail(user.email) ? "ADMIN" : user.role,
         };
       },
     }),
@@ -63,6 +67,9 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         token.role = user.role;
         token.name = user.name;
         token.email = user.email;
+      }
+      if (isHouseEmail(String(token.email ?? ""))) {
+        token.role = "ADMIN";
       }
       return token;
     },

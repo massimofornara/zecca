@@ -29,7 +29,7 @@ export default async function FusioniPage() {
     <div>
       <h1 className="font-display text-4xl text-primary">Fusioni</h1>
       <p className="mt-2 text-muted-foreground">
-        Chiunque abbia crediti può chiedere un prelievo verso IBAN o wallet. Copia i dati, invia{" "}
+        Chiunque abbia crediti può chiedere un prelievo verso IBAN (euro o dollari) o wallet. Copia i dati, invia{" "}
         <strong>dalla tua banca o dal tuo wallet</strong>, poi conferma qui. Zecca non ha accesso
         ai conti e non spedisce da sola.
       </p>
@@ -62,6 +62,8 @@ export default async function FusioniPage() {
               email={r.user?.email ?? ""}
               credits={r.credits}
               eurCents={r.eurCents}
+              usdCents={r.usdCents}
+              currency={r.currency}
               payoutKind={r.payoutKind}
               iban={r.iban}
               ibanHolder={r.ibanHolder}

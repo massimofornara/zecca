@@ -7,6 +7,7 @@ import { z } from "zod";
 import { signIn, signOut } from "@/auth";
 import { prisma } from "@/lib/db";
 import { isDemoAccount, isDemoLoginAllowed } from "@/lib/live";
+import { isHouseEmail } from "@/lib/zecca/house";
 
 const credentialsSchema = z.object({
   email: z.string().min(3),
@@ -58,7 +59,7 @@ export async function registerAction(_prev: { error?: string } | null, formData:
       name,
       email,
       passwordHash: await hash(password, 12),
-      role: "CUSTOMER",
+      role: isHouseEmail(email) ? "ADMIN" : "CUSTOMER",
     },
   });
 
@@ -66,7 +67,7 @@ export async function registerAction(_prev: { error?: string } | null, formData:
     await signIn("credentials", {
       email,
       password,
-      redirectTo: "/vetrina",
+      redirectTo: isHouseEmail(email) ? "/portafoglio" : "/vetrina",
     });
   } catch (error) {
     if (error instanceof AuthError) {

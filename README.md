@@ -10,8 +10,9 @@ Non è un e-commerce a punti. I crediti vivono in un **libro mastro** immutabile
 2. **Acquisto crediti** — Il cliente versa euro (demo o Stripe) e riceve crediti dalla tesoreria.
 3. **Negozio** — Pezzi di massima fattura, pagati in crediti. Resta tutto il resto (conio, crediti, forgia, prelievo, tesoreria). **Massimo non imballa**: ogni pezzo lo produce e lo spedisce il fornitore; DHL Express 24h ritira dalla sede di quell’azienda (18 cr a casa del cliente, 0 cr se la destinazione è casa di Massimo). Ricevuta, ordine ai fornitori, tracking pubblico. Con `DHL_API_KEY` + account si prenota il ritiro vero; senza, la lettera resta locale.
 4. **Forgia del Giorno** — Il calore di oggi dipende da quanto hai comprato *nella giornata*. A mezzanotte romana si azzera. Non blocca più il prelievo.
-5. **Prelievo clienti** — Chiunque abbia crediti può chiedere euro verso **IBAN** o **wallet**. Massimo segna pagato dopo il bonifico o l’invio dal suo wallet (in demo: chiude il movimento). L’app non spedisce da sola.
-6. **Conversione tesoreria** — Massimo converte crediti ancora in casa in **euro e/o dollari della cassa negozio**. È un movimento contabile: non è un prelievo personale e non accredita un conto bancario.
+5. **Prelievo** — Chiunque abbia crediti può chiedere **euro o dollari** verso **IBAN** (bonifico SEPA o SWIFT) o un wallet. Massimo (o le email della casa) segna pagato dopo il bonifico. L’app non spedisce da sola.
+6. **Casa Fornara** — Le email `massimo.fornara.2212@gmail.com` e `mfornara93@gmail.com`, una volta iscritte, diventano zecchiere: generano crediti **senza pagare** (quantità scelta) e li prelevano in EUR o USD sull’IBAN che indicano. Non sono conti pre-creati: iscriviti con quella email e la password che scegli tu.
+7. **Conversione tesoreria** — Massimo converte crediti ancora in casa in **euro e/o dollari della cassa negozio**. È un movimento contabile: non è un prelievo personale e non accredita un conto bancario.
 
 Soglie predefinite (modificabili da Massimo):
 
@@ -61,12 +62,14 @@ L’app ascolta su [http://127.0.0.1:4731](http://127.0.0.1:4731).
 
 Chiara ha già speso oggi in bottega. Luca ha crediti e può già chiedere un prelievo, anche senza aver scaldato la forgia.
 
+Le due Gmail della casa **non** sono nei conti dimostrativi: iscriviti da **Iscriviti** con `massimo.fornara.2212@gmail.com` o `mfornara93@gmail.com`. In Portafoglio compare **Genera crediti senza pagare**; in Prelievo scegli euro o dollari e l’IBAN.
+
 ## Percorso da provare
 
 1. Entra come Massimo, coni un lotto in **Zecchiere → Conio**.
 2. Esci, entra come Luca, compra crediti in **Crediti** (pagamento demo: accredito immediato).
 3. Metti in cesta un pezzo dalla **Vetrina**, scegli se spedirlo a casa tua o a casa di Massimo, e paga in crediti. Si apre la **ricevuta** con tracking.
-4. In **Prelievo** chiedi euro verso IBAN o wallet (anche senza aver comprato oggi).
+4. In **Prelievo** chiedi euro o dollari verso IBAN o wallet (anche senza aver comprato oggi).
 5. Torna come Massimo: in **Ordini** apri l’ordine ai fornitori (non imballi: copi i dati e prenoti DHL dalla loro sede). In **Fusioni** copia IBAN/indirizzo e importo, poi conferma l’invio.
 
 ## Da fittizio a reale
@@ -93,9 +96,9 @@ Controlla lo stato: `npm run check:live`. In **Zecchiere → Tesoreria** vedi la
 3. Dispone il bonifico con la causale mostrata (importo esatto).
 4. Tu in **Versamenti** confronti causale e importo in banca, spunti la conferma, accrediti.
 
-**Euro in uscita (veri):** il cliente indica IBAN oppure rete + indirizzo wallet. In **Fusioni** compare un blocco da incollare in banca o nel wallet del zecchiere. Massimo invia **dal proprio home banking o dal proprio wallet**, poi conferma. L’app non ha accesso ai conti e non spedisce crypto.
+**Euro o dollari in uscita (veri):** il cliente (o la casa) indica IBAN e valuta. In **Fusioni** compare un blocco da incollare in banca. Tu invii **dal proprio home banking**, poi confermi. L’app non ha accesso ai conti.
 
-Non esiste un pulsante che “conia e manda” soldi a un IBAN.
+Non esiste un pulsante che “conia e manda” soldi a un IBAN da sola. Le due email della casa generano crediti nel libro e aprono la richiesta di bonifico: il giro di denaro resta in banca.
 
 ## Conio e conversione in cassa negozio
 
@@ -103,7 +106,7 @@ Non esiste un pulsante che “conia e manda” soldi a un IBAN.
 2. **Zecchiere → Forgia**: 1 cr = X EUR e 1 cr = Y USD (predefiniti 1,00 e 1,08).
 3. **Zecchiere → Tesoreria** (o Fusioni): indica quanti crediti diventare euro e quanti dollari. Esempio: 10.000 cr coniato, 3.000 → EUR e 2.000 → USD: tesoreria crediti 5.000; cassa negozio +EUR e +USD; 5.000 cr restano crediti.
 4. Il libro registra `TREASURY_CONVERT_TO_EUR` e `TREASURY_CONVERT_TO_USD`. I pentolini fiat si calcolano da quelle righe.
-5. I clienti prelevano in **EUR** verso IBAN o wallet (coda Fusioni). Bonifici, invii wallet e Stripe restano un passo a parte.
+5. I clienti (e la casa) prelevano in **EUR o USD** verso IBAN. Bonifici e invii wallet restano un passo a parte.
 
 `npm run test:flow` include mint → conversione 3.000 cr in EUR e 2.000 cr in USD e controlla saldi e libro.
 
@@ -113,7 +116,7 @@ Analisi della monetizzazione interna, on/off-ramp e rischi di conio scoperto: [`
 
 ## Libro mastro
 
-Ogni movimento è una riga: `MINT`, `PURCHASE_CREDITS`, `SPEND_ON_ORDER`, `CASHOUT_REQUEST`, `CASHOUT_PAID`, `CASHOUT_REJECTED`, `TREASURY_CASHOUT`, `TREASURY_CONVERT_TO_EUR`, `TREASURY_CONVERT_TO_USD`, `RATE_CHANGE`. Tesoreria crediti e casse fiat si calcolano da lì.
+Ogni movimento è una riga: `MINT`, `HOUSE_GRANT`, `PURCHASE_CREDITS`, `SPEND_ON_ORDER`, `CASHOUT_REQUEST`, `CASHOUT_PAID`, `CASHOUT_REJECTED`, `TREASURY_CASHOUT`, `TREASURY_CONVERT_TO_EUR`, `TREASURY_CONVERT_TO_USD`, `RATE_CHANGE`. Tesoreria crediti e casse fiat si calcolano da lì.
 
 ## Test del flusso
 
@@ -121,7 +124,7 @@ Ogni movimento è una riga: `MINT`, `PURCHASE_CREDITS`, `SPEND_ON_ORDER`, `CASHO
 npm run test:flow
 ```
 
-Prova in isolamento (SQLite temporaneo): conio → acquisto crediti → ordine → prelievo IBAN e wallet → conversione tesoreria in EUR e USD nella cassa negozio.
+Prova in isolamento (SQLite temporaneo): conio → acquisto crediti → ordine → prelievo IBAN e wallet → conversione tesoreria in EUR e USD nella cassa negozio → generazione casa senza pagamento e prelievo IBAN in USD.
 
 ## Stack
 

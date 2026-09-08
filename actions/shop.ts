@@ -106,6 +106,7 @@ export async function requestCashoutAction(
   if (!user) return { error: "Devi entrare per chiedere una fusione." };
   const credits = Number(formData.get("credits"));
   const payoutKind = String(formData.get("payoutKind") ?? "IBAN") === "WALLET" ? "WALLET" : "IBAN";
+  const currency = String(formData.get("currency") ?? "EUR") === "USD" ? "USD" : "EUR";
   const iban = String(formData.get("iban") ?? "");
   const ibanHolder = String(formData.get("ibanHolder") ?? "");
   const walletAddress = String(formData.get("walletAddress") ?? "");
@@ -116,6 +117,7 @@ export async function requestCashoutAction(
       role: user.role,
       credits,
       payoutKind,
+      currency,
       iban,
       ibanHolder,
       walletAddress,
@@ -128,7 +130,9 @@ export async function requestCashoutAction(
       ok:
         payoutKind === "WALLET"
           ? "Richiesta inviata. Massimo vedrà il tuo wallet e, se accetta, invierà da un wallet suo. Zecca non spedisce crypto da sola."
-          : "Richiesta inviata. Massimo vedrà il tuo IBAN e, se accetta, disporrà un bonifico dalla sua banca. Zecca non invia i soldi da sola.",
+          : currency === "USD"
+            ? "Richiesta inviata. Il bonifico in dollari va all’IBAN indicato. Zecca non invia i soldi da sola: lo fai tu dalla banca, poi confermi in Fusioni."
+            : "Richiesta inviata. Il bonifico in euro va all’IBAN indicato. Zecca non invia i soldi da sola: lo fai tu dalla banca, poi confermi in Fusioni.",
     };
   } catch (error) {
     return { error: isZeccaError(error) ? error.message : "Richiesta non riuscita." };

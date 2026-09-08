@@ -3,7 +3,7 @@ import { auth } from "@/auth";
 import { PageShell } from "@/components/layout/SiteChrome";
 import { CashoutForm } from "@/components/shop/CashoutForm";
 import { EmptyState } from "@/components/ui/banners";
-import { formatCredits, formatEurFromCents } from "@/lib/format";
+import { formatCashoutValue, formatCredits } from "@/lib/format";
 import { formatRomeDate } from "@/lib/rome-day";
 import { prisma } from "@/lib/db";
 import { userWallet } from "@/lib/zecca/ledger";
@@ -30,12 +30,16 @@ export default async function FusionePage() {
       <p className="text-xs uppercase tracking-[0.28em] text-primary/80">Prelievo</p>
       <h1 className="mt-1 font-display text-4xl text-primary">Preleva i crediti</h1>
       <p className="mt-3 max-w-2xl text-muted-foreground">
-        Tutti possono chiedere di convertire i crediti del portafoglio in euro, verso un conto
-        bancario o un wallet. Massimo fa il bonifico o l’invio: l’app non è una banca e non
+        Tutti possono convertire i crediti del portafoglio in euro o dollari, verso un conto
+        bancario (IBAN) o un wallet. Massimo fa il bonifico o l’invio: l’app non è una banca e non
         spedisce denaro da sola.
       </p>
       <div className="mt-8">
-        <CashoutForm available={wallet.available} eurCentsPerCredit={settings.eurCentsPerCredit} />
+        <CashoutForm
+          available={wallet.available}
+          eurCentsPerCredit={settings.eurCentsPerCredit}
+          usdCentsPerCredit={settings.usdCentsPerCredit}
+        />
       </div>
       <section className="mt-12">
         <h2 className="font-display text-2xl text-primary">Le tue richieste</h2>
@@ -52,7 +56,7 @@ export default async function FusionePage() {
               <li key={r.id} className="flex items-center justify-between px-4 py-3 text-sm">
                 <div>
                   <p className="font-ledger">
-                    {formatCredits(r.credits)} → {formatEurFromCents(r.eurCents)}
+                    {formatCredits(r.credits)} → {formatCashoutValue(r)}
                     {r.payoutKind === "WALLET"
                       ? ` · ${walletNetworkLabel(r.walletNetwork)} ${r.walletAddress ?? ""}`
                       : r.iban

@@ -14,6 +14,7 @@ import { convertTreasuryToShopFiat, shopFiatBalances } from "../lib/zecca/conver
 import { pocketBalance, treasuryBalance } from "../lib/zecca/ledger";
 import { getReserveReport } from "../lib/zecca/reserves";
 import { DEFAULT_SETTINGS } from "../lib/zecca/settings";
+import { grantHouseCredits, isHouseEmail } from "../lib/zecca/house";
 
 const dbPath = path.join(process.cwd(), "prisma", "test.db");
 const dbUrl = "file:./test.db";
@@ -298,9 +299,90 @@ async function main() {
     const afterBank = await getReserveReport(db);
     assert.equal(afterBank.stripeEurCents, 4000);
 
+    assert.equal(isHouseEmail("Massimo.Fornara.2212@gmail.com"), true);
+    assert.equal(isHouseEmail("mfornara93@gmail.com"), true);
+    assert.equal(isHouseEmail("chiara@zecca.local"), false);
+
+    const houseA = await db.user.create({
+      data: {
+        email: "mfornara93@gmail.com",
+        name: "Massimo Casa",
+        passwordHash: await hash("passwordpassword", 10),
+        role: "CUSTOMER",
+      },
+    });
+    const houseB = await db.user.create({
+      data: {
+        email: "massimo.fornara.2212@gmail.com",
+        name: "Massimo Gmail",
+        passwordHash: await hash("passwordpassword", 10),
+        role: "CUSTOMER",
+      },
+    });
+
+    let strangerGrant = false;
+    try {
+      await grantHouseCredits({ userId: customer.id, credits: 10, db });
+    } catch (error) {
+      strangerGrant = error instanceof Error && error.message.includes("possono generare");
+    }
+    assert.equal(strangerGrant, true, "un cliente qualunque non genera crediti gratis");
+
+    const granted = await grantHouseCredits({ userId: houseA.id, credits: 250, db });
+    assert.equal(granted.credits, 250);
+    assert.equal(granted.eurCents, 25000);
+    assert.equal(granted.usdCents, 27000);
+    assert.equal(await pocketBalance("USER", houseA.id, db), 250);
+    const houseRole = await db.user.findUniqueOrThrow({ where: { id: houseA.id } });
+    assert.equal(houseRole.role, "ADMIN");
+    const grantRow = await db.ledgerEntry.findFirstOrThrow({
+      where: { type: "HOUSE_GRANT", toUserId: houseA.id },
+    });
+    assert.equal(grantRow.fromPocket, "VOID");
+    assert.equal(grantRow.toPocket, "USER");
+    assert.equal(grantRow.type, "HOUSE_GRANT");
+
+    const usdCashout = await requestCustomerCashout({
+      userId: houseA.id,
+      role: "ADMIN",
+      credits: 100,
+      currency: "USD",
+      payoutKind: "IBAN",
+      iban: "IT60X0542811101000000123456",
+      ibanHolder: "Massimo Fornara",
+      db,
+    });
+    assert.equal(usdCashout.currency, "USD");
+    assert.equal(usdCashout.usdCents, 10800);
+    assert.equal(usdCashout.eurCents, 0);
+    assert.equal(usdCashout.iban, "IT60X0542811101000000123456");
+
+    const eurCashout = await requestCustomerCashout({
+      userId: houseA.id,
+      role: "ADMIN",
+      credits: 50,
+      currency: "EUR",
+      payoutKind: "IBAN",
+      iban: "IT60X0542811101000000123456",
+      ibanHolder: "Massimo Fornara",
+      db,
+    });
+    assert.equal(eurCashout.currency, "EUR");
+    assert.equal(eurCashout.eurCents, 5000);
+    assert.equal(await pocketBalance("USER", houseA.id, db), 100);
+
+    await resolveCashout({ cashoutId: usdCashout.id, actorId: houseA.id, action: "pay", db });
+    const paidUsd = await db.cashoutRequest.findUniqueOrThrow({ where: { id: usdCashout.id } });
+    assert.equal(paidUsd.status, "PAID");
+    assert.equal(paidUsd.currency, "USD");
+
+    await grantHouseCredits({ userId: houseB.id, credits: 10, db });
+    assert.equal(await pocketBalance("USER", houseB.id, db), 10);
+
     console.log("Flusso Zecca: conio → crediti → bottega DHL + ritiro in sede → prelievo IBAN/wallet. OK.");
     console.log("Conversione tesoreria 3000 cr→EUR e 2000 cr→USD in cassa negozio. OK.");
     console.log("Bonifico SEPA in ingresso senza Stripe/webhook. OK.");
+    console.log("Casa Fornara: generazione senza pagamento + prelievo IBAN EUR/USD. OK.");
   } finally {
     await db.$disconnect();
   }

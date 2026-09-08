@@ -1,32 +1,41 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useMemo, useState } from "react";
 import { requestCashoutAction } from "@/actions/shop";
 import { SubmitButton } from "@/components/forms/SubmitButton";
 import { ErrorBanner, OkBanner } from "@/components/ui/banners";
 import { Input } from "@/components/ui/input";
-import { formatCredits, formatEurFromCents } from "@/lib/format";
+import { formatCredits, formatEurFromCents, formatUsdFromCents } from "@/lib/format";
 import { WALLET_NETWORKS } from "@/lib/wallet";
 
 export function CashoutForm({
   available,
   eurCentsPerCredit,
+  usdCentsPerCredit,
 }: {
   available: number;
   percent?: number;
   eurCentsPerCredit: number;
+  usdCentsPerCredit: number;
 }) {
   const [state, action] = useActionState(requestCashoutAction, null);
+  const [credits, setCredits] = useState(Math.min(available, 20) || 1);
+  const [currency, setCurrency] = useState<"EUR" | "USD">("EUR");
   const disabled = available <= 0;
+  const amount = Number.isFinite(credits) && credits > 0 ? Math.floor(credits) : 0;
+  const preview = useMemo(() => {
+    if (currency === "USD") return formatUsdFromCents(amount * usdCentsPerCredit);
+    return formatEurFromCents(amount * eurCentsPerCredit);
+  }, [amount, currency, eurCentsPerCredit, usdCentsPerCredit]);
 
   return (
     <form action={action} className="metal-frame space-y-4 rounded-md bg-card p-5 md:p-7">
       <ErrorBanner message={state?.error} />
       <OkBanner message={state?.ok} />
       <p className="text-sm text-muted-foreground">
-        Chiunque abbia crediti può chiedere il prelievo: fino a {formatCredits(available)} (
-        {formatEurFromCents(available * eurCentsPerCredit)}). Massimo invia dal suo conto o dal suo
-        wallet. Zecca registra la richiesta, non muove i soldi da sola.
+        Chiunque abbia crediti può chiedere il prelievo: fino a {formatCredits(available)}. Scegli
+        euro o dollari e l’IBAN che deve ricevere il bonifico. Massimo (o tu, se sei della casa)
+        invia dalla banca. Zecca registra la richiesta, non muove i soldi da sola.
       </p>
 
       <p className="text-sm">Dove vuoi ricevere</p>
@@ -67,11 +76,47 @@ export function CashoutForm({
           type="number"
           min={1}
           max={Math.max(available, 1)}
-          defaultValue={Math.min(available, 20) || 1}
+          value={disabled ? "" : amount || ""}
+          onChange={(e) => setCredits(Number(e.target.value))}
           disabled={disabled}
           className="mt-1 max-w-xs"
         />
       </label>
+
+      <fieldset className="space-y-2">
+        <legend className="text-sm">Valuta del bonifico</legend>
+        <div className="flex flex-wrap gap-2">
+          <label className="metal-frame flex cursor-pointer items-center gap-2 rounded-md bg-background/40 px-3 py-2 text-sm has-[:checked]:bg-primary/15 has-[:checked]:text-primary has-[:checked]:ring-1 has-[:checked]:ring-primary/40">
+            <input
+              type="radio"
+              name="currency"
+              value="EUR"
+              checked={currency === "EUR"}
+              onChange={() => setCurrency("EUR")}
+              className="accent-primary"
+            />
+            Euro
+          </label>
+          <label className="metal-frame flex cursor-pointer items-center gap-2 rounded-md bg-background/40 px-3 py-2 text-sm has-[:checked]:bg-primary/15 has-[:checked]:text-primary has-[:checked]:ring-1 has-[:checked]:ring-primary/40">
+            <input
+              type="radio"
+              name="currency"
+              value="USD"
+              checked={currency === "USD"}
+              onChange={() => setCurrency("USD")}
+              className="accent-primary"
+            />
+            Dollari
+          </label>
+        </div>
+        <p className="font-ledger text-ember">
+          {formatCredits(amount)} → {preview}
+        </p>
+        <p className="text-xs text-muted-foreground">
+          Euro: bonifico SEPA. Dollari: bonifico SWIFT/estero nello stesso IBAN. Tasso: 1 cr ={" "}
+          {formatEurFromCents(eurCentsPerCredit)} · 1 cr = {formatUsdFromCents(usdCentsPerCredit)}.
+        </p>
+      </fieldset>
 
       <div className="block space-y-4 peer-checked/wallet:hidden">
         <label className="block text-sm">
@@ -124,7 +169,7 @@ export function CashoutForm({
       </div>
 
       <SubmitButton disabled={disabled}>
-        {disabled ? "Nessun credito da prelevare" : "Chiedi il prelievo al zecchiere"}
+        {disabled ? "Nessun credito da prelevare" : "Chiedi il bonifico all’IBAN indicato"}
       </SubmitButton>
     </form>
   );

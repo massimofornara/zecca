@@ -90,3 +90,7 @@ export async function saveSettings(
 export function creditsToEurCents(credits: number, eurCentsPerCredit: number) {
   return Math.round(credits * eurCentsPerCredit);
 }
+
+export function creditsToUsdCents(credits: number, usdCentsPerCredit: number) {
+  return Math.round(credits * usdCentsPerCredit);
+}

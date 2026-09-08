@@ -7,6 +7,7 @@ export const metadata = { title: "Libro mastro" };
 
 const TYPES: LedgerType[] = [
   "MINT",
+  "HOUSE_GRANT",
   "PURCHASE_CREDITS",
   "SPEND_ON_ORDER",
   "CASHOUT_REQUEST",
@@ -99,8 +100,10 @@ export default async function LibroMastroPage({
                 <td className="px-3 py-2 text-xs">{pocket(e.toPocket, e.toUser?.email)}</td>
                 <td className="px-3 py-2 font-ledger">{formatCredits(e.amountCredits)}</td>
                 <td className="px-3 py-2 font-ledger">
-                  {e.fiatCurrency === "USD" && e.usdCents
-                    ? `${e.type === "TREASURY_CASHOUT" || e.type === "CASHOUT_PAID" ? "−" : "+"}${formatFiatFromCents(e.usdCents, "USD")}`
+                  {e.type === "HOUSE_GRANT"
+                    ? `${formatEurFromCents(e.eurCents)} / ${formatFiatFromCents(e.usdCents, "USD")}`
+                    : e.fiatCurrency === "USD" && e.usdCents
+                    ? `${e.type === "TREASURY_CASHOUT" || e.type === "CASHOUT_PAID" || e.type === "CASHOUT_REQUEST" ? "−" : "+"}${formatFiatFromCents(e.usdCents, "USD")}`
                     : e.eurCents
                       ? `${e.eurDirection === "OUT" ? "−" : "+"}${formatEurFromCents(e.eurCents)}`
                       : "—"}

@@ -6,7 +6,7 @@ import { CopyField } from "@/components/copy/CopyField";
 import { SubmitButton } from "@/components/forms/SubmitButton";
 import { ErrorBanner, OkBanner } from "@/components/ui/banners";
 import { Input } from "@/components/ui/input";
-import { formatCredits, formatEurFromCents, formatFiatFromCents } from "@/lib/format";
+import { formatCashoutValue, formatCredits, formatEurFromCents, formatFiatFromCents } from "@/lib/format";
 import { destinationInstruction } from "@/lib/payout";
 import { walletNetworkLabel } from "@/lib/wallet";
 
@@ -85,6 +85,8 @@ export function PendingCashoutCard({
   email,
   credits,
   eurCents,
+  usdCents,
+  currency,
   payoutKind,
   iban,
   ibanHolder,
@@ -97,6 +99,8 @@ export function PendingCashoutCard({
   email: string;
   credits: number;
   eurCents: number;
+  usdCents: number;
+  currency: string;
   payoutKind: string;
   iban: string | null;
   ibanHolder: string | null;
@@ -106,6 +110,7 @@ export function PendingCashoutCard({
 }) {
   const [payState, payAction] = useActionState(resolveCashoutAction, null);
   const [rejectState, rejectAction] = useActionState(resolveCashoutAction, null);
+  const amountLabel = formatCashoutValue({ currency, eurCents, usdCents });
 
   const dest = destinationInstruction({
     payoutKind,
@@ -113,10 +118,13 @@ export function PendingCashoutCard({
     iban,
     walletAddress,
     walletNetwork,
+    currency,
     eurCents,
+    usdCents,
     cashoutId: id,
   });
   const isWallet = dest?.kind === "WALLET";
+  const isUsd = currency === "USD";
 
   return (
     <li className="metal-frame rounded-md bg-card p-4">
@@ -124,8 +132,8 @@ export function PendingCashoutCard({
         {name} <span className="text-muted-foreground">({email})</span>
       </p>
       <p className="font-ledger text-ember">
-        {formatCredits(credits)} → {formatEurFromCents(eurCents)}
-        {isWallet ? ` · ${walletNetworkLabel(walletNetwork)}` : " · IBAN"}
+        {formatCredits(credits)} → {amountLabel}
+        {isWallet ? ` · ${walletNetworkLabel(walletNetwork)}` : isUsd ? " · IBAN · USD" : " · IBAN · EUR"}
       </p>
       <p className="text-xs text-muted-foreground">{createdLabel}</p>
 
@@ -134,7 +142,7 @@ export function PendingCashoutCard({
           <p className="text-xs uppercase tracking-[0.2em] text-primary/80">Da incollare in banca</p>
           <CopyField label="Beneficiario" value={ibanHolder} />
           <CopyField label="IBAN" value={dest.ibanDisplay} mono />
-          <CopyField label="Importo" value={formatEurFromCents(eurCents)} mono />
+          <CopyField label="Importo" value={dest.amountLabel ?? amountLabel} mono />
           <CopyField label="Causale" value={dest.causal} mono />
           <CopyField label="Tutto il blocco" value={dest.text} />
         </div>
@@ -143,7 +151,7 @@ export function PendingCashoutCard({
           <p className="text-xs uppercase tracking-[0.2em] text-primary/80">Da incollare nel tuo wallet</p>
           <CopyField label="Rete" value={walletNetworkLabel(walletNetwork)} />
           <CopyField label="Indirizzo" value={walletAddress} mono />
-          <CopyField label="Importo" value={formatEurFromCents(eurCents)} mono />
+          <CopyField label="Importo" value={dest.amountLabel ?? amountLabel} mono />
           <CopyField label="Riferimento" value={dest.causal} mono />
           <CopyField label="Tutto il blocco" value={dest.text} />
         </div>
@@ -171,7 +179,9 @@ export function PendingCashoutCard({
             />
             {isWallet
               ? "Ho inviato da un wallet a mio nome verso questo indirizzo."
-              : "Ho disposto il bonifico SEPA da un conto a mio nome verso questo IBAN."}
+              : isUsd
+                ? "Ho disposto il bonifico in dollari (SWIFT/estero) da un conto a mio nome verso questo IBAN."
+                : "Ho disposto il bonifico SEPA da un conto a mio nome verso questo IBAN."}
           </label>
           <SubmitButton size="sm">
             {isWallet ? "Conferma invio eseguito" : "Conferma bonifico eseguito"}

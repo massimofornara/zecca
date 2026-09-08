@@ -22,8 +22,18 @@ export function formatSignedCredits(amount: number): string {
   return `${sign}${amount.toLocaleString("it-IT")} cr`;
 }
 
+export function formatCashoutValue(input: {
+  currency: string;
+  eurCents: number;
+  usdCents: number;
+}): string {
+  if (input.currency === "USD") return formatUsdFromCents(input.usdCents);
+  return formatEurFromCents(input.eurCents);
+}
+
 export const LEDGER_LABELS: Record<string, string> = {
   MINT: "Conio",
+  HOUSE_GRANT: "Generazione casa",
   PURCHASE_CREDITS: "Acquisto crediti",
   SPEND_ON_ORDER: "Spesa in bottega",
   CASHOUT_REQUEST: "Richiesta di prelievo",

@@ -22,6 +22,7 @@ enum Pocket {
 
 enum LedgerType {
   MINT
+  HOUSE_GRANT
   PURCHASE_CREDITS
   SPEND_ON_ORDER
   CASHOUT_REQUEST

@@ -1,4 +1,4 @@
-import { formatEurFromCents } from "@/lib/format";
+import { formatCashoutValue, formatFiatFromCents } from "@/lib/format";
 import { formatIbanDisplay } from "@/lib/iban";
 import { walletNetworkLabel } from "@/lib/wallet";
 import { sepaInstruction } from "@/lib/sepa";
@@ -6,17 +6,21 @@ import { sepaInstruction } from "@/lib/sepa";
 export function walletInstruction(input: {
   network: string;
   address: string;
-  eurCents: number;
+  amountCents: number;
+  currency?: "EUR" | "USD";
   cashoutId: string;
+  eurCents?: number;
 }) {
+  const currency = input.currency === "USD" ? "USD" : "EUR";
+  const amountCents = input.amountCents ?? input.eurCents ?? 0;
   const causal = `Zecca prelievo ${input.cashoutId.slice(0, 8)}`;
   const lines = [
     `Rete: ${walletNetworkLabel(input.network)}`,
     `Indirizzo: ${input.address}`,
-    `Importo da inviare: ${formatEurFromCents(input.eurCents)} (o equivalente sulla rete)`,
+    `Importo da inviare: ${formatFiatFromCents(amountCents, currency)} (o equivalente sulla rete)`,
     `Riferimento: ${causal}`,
   ];
-  return { causal, text: lines.join("\n") };
+  return { causal, text: lines.join("\n"), amountLabel: formatFiatFromCents(amountCents, currency) };
 }
 
 export function destinationInstruction(input: {
@@ -25,16 +29,21 @@ export function destinationInstruction(input: {
   iban: string | null;
   walletAddress: string | null;
   walletNetwork: string | null;
+  currency?: string;
   eurCents: number;
+  usdCents?: number;
   cashoutId: string;
 }) {
+  const currency = input.currency === "USD" ? "USD" : "EUR";
+  const amountCents = currency === "USD" ? (input.usdCents ?? 0) : input.eurCents;
   if (input.payoutKind === "WALLET" && input.walletAddress) {
     return {
       kind: "WALLET" as const,
       ...walletInstruction({
         network: input.walletNetwork ?? "OTHER",
         address: input.walletAddress,
-        eurCents: input.eurCents,
+        amountCents,
+        currency,
         cashoutId: input.cashoutId,
       }),
     };
@@ -45,10 +54,16 @@ export function destinationInstruction(input: {
       ...sepaInstruction({
         holder: input.holder,
         iban: input.iban,
-        eurCents: input.eurCents,
+        amountCents,
+        currency,
         cashoutId: input.cashoutId,
       }),
       ibanDisplay: formatIbanDisplay(input.iban),
+      amountLabel: formatCashoutValue({
+        currency,
+        eurCents: input.eurCents,
+        usdCents: input.usdCents ?? 0,
+      }),
     };
   }
   return null;

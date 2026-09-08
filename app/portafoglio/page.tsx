@@ -5,10 +5,13 @@ import { PageShell } from "@/components/layout/SiteChrome";
 import { ForgeMeter } from "@/components/forge/ForgeMeter";
 import { buttonVariants } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/banners";
-import { formatCredits, formatEurFromCents, LEDGER_LABELS } from "@/lib/format";
+import { HouseGrantForm } from "@/components/shop/HouseGrantForm";
+import { formatCredits, formatEurFromCents, formatFiatFromCents, LEDGER_LABELS } from "@/lib/format";
 import { formatRomeDate } from "@/lib/rome-day";
 import { prisma } from "@/lib/db";
 import { getForgeState } from "@/lib/zecca/forge";
+import { getSettings } from "@/lib/zecca/settings";
+import { isHouseEmail } from "@/lib/zecca/house";
 import { cn } from "@/lib/utils";
 
 export const metadata = { title: "Portafoglio" };
@@ -18,13 +21,17 @@ export default async function PortafoglioPage() {
   if (!session?.user) redirect("/accedi?callbackUrl=/portafoglio");
 
   const forge = await getForgeState({ userId: session.user.id, role: session.user.role });
-  const movements = await prisma.ledgerEntry.findMany({
-    where: {
-      OR: [{ fromUserId: session.user.id }, { toUserId: session.user.id }],
-    },
-    orderBy: { createdAt: "desc" },
-    take: 8,
-  });
+  const house = isHouseEmail(session.user.email);
+  const [movements, settings] = await Promise.all([
+    prisma.ledgerEntry.findMany({
+      where: {
+        OR: [{ fromUserId: session.user.id }, { toUserId: session.user.id }],
+      },
+      orderBy: { createdAt: "desc" },
+      take: 8,
+    }),
+    house ? getSettings() : Promise.resolve(null),
+  ]);
 
   return (
     <PageShell>
@@ -38,12 +45,23 @@ export default async function PortafoglioPage() {
         <ForgeMeter forge={forge} />
       </div>
 
+      {house && settings ? (
+        <div className="mt-8">
+          <HouseGrantForm
+            eurCentsPerCredit={settings.eurCentsPerCredit}
+            usdCentsPerCredit={settings.usdCentsPerCredit}
+          />
+        </div>
+      ) : null}
+
       <div className="mt-6 flex flex-wrap gap-3">
-        <Link href="/crediti" className={cn(buttonVariants({ size: "lg" }), "px-5")}>
-          Compra crediti
-        </Link>
-        <Link href="/fusione" className={cn(buttonVariants({ size: "lg", variant: "outline" }), "px-5")}>
-          Preleva euro
+        {house ? null : (
+          <Link href="/crediti" className={cn(buttonVariants({ size: "lg" }), "px-5")}>
+            Compra crediti
+          </Link>
+        )}
+        <Link href="/fusione" className={cn(buttonVariants({ size: "lg", variant: house ? "default" : "outline" }), "px-5")}>
+          Preleva euro o dollari
         </Link>
         <Link href="/vetrina" className={cn(buttonVariants({ size: "lg", variant: "ghost" }), "px-5")}>
           Vai in bottega
@@ -73,7 +91,13 @@ export default async function PortafoglioPage() {
                   <p className={`font-ledger ${incoming ? "text-ember" : "text-muted-foreground"}`}>
                     {incoming ? "+" : "−"}
                     {formatCredits(Math.abs(amount))}
-                    {m.eurCents > 0 ? ` · ${formatEurFromCents(m.eurCents)}` : ""}
+                    {m.type === "HOUSE_GRANT"
+                      ? ` · ${formatEurFromCents(m.eurCents)} / ${formatFiatFromCents(m.usdCents, "USD")}`
+                      : m.usdCents > 0 && m.fiatCurrency === "USD"
+                        ? ` · ${formatFiatFromCents(m.usdCents, "USD")}`
+                        : m.eurCents > 0
+                          ? ` · ${formatEurFromCents(m.eurCents)}`
+                          : ""}
                   </p>
                 </li>
               );

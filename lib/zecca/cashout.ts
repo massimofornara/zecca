@@ -4,15 +4,17 @@ import { ZeccaError } from "@/lib/errors";
 import { isValidIban, normalizeIban } from "@/lib/iban";
 import { isValidWalletAddress, normalizeWalletAddress, walletNetworkLabel } from "@/lib/wallet";
 import { appendLedger, pocketBalance } from "@/lib/zecca/ledger";
-import { creditsToEurCents, getSettings } from "@/lib/zecca/settings";
+import { creditsToEurCents, creditsToUsdCents, getSettings } from "@/lib/zecca/settings";
 
 export type PayoutKind = "IBAN" | "WALLET";
+export type CashoutCurrency = "EUR" | "USD";
 
 export async function requestCustomerCashout(input: {
   userId: string;
   role: Role;
   credits: number;
   payoutKind?: PayoutKind;
+  currency?: string;
   iban?: string;
   ibanHolder?: string;
   walletAddress?: string;
@@ -26,6 +28,7 @@ export async function requestCustomerCashout(input: {
   }
 
   const payoutKind: PayoutKind = input.payoutKind === "WALLET" ? "WALLET" : "IBAN";
+  const currency: CashoutCurrency = input.currency === "USD" ? "USD" : "EUR";
   let iban: string | null = null;
   let ibanHolder: string | null = null;
   let walletAddress: string | null = null;
@@ -39,7 +42,7 @@ export async function requestCustomerCashout(input: {
     }
     if (!isValidIban(input.iban ?? "")) {
       throw new ZeccaError(
-        "IBAN non valido. Usa un IBAN italiano (27 caratteri). Zecca non dispone il bonifico: lo fa il zecchiere dalla sua banca.",
+        "IBAN non valido. Controlla le cifre. Zecca non dispone il bonifico: lo fai tu dalla banca verso questo IBAN.",
         "INVALID_IBAN",
       );
     }
@@ -61,7 +64,12 @@ export async function requestCustomerCashout(input: {
   }
 
   const settings = await getSettings(db);
-  const eurCents = creditsToEurCents(credits, settings.eurCentsPerCredit);
+  const eurCents = currency === "EUR" ? creditsToEurCents(credits, settings.eurCentsPerCredit) : 0;
+  const usdCents = currency === "USD" ? creditsToUsdCents(credits, settings.usdCentsPerCredit) : 0;
+  const fiatLabel =
+    currency === "USD"
+      ? `${(usdCents / 100).toFixed(2)} USD`
+      : `${(eurCents / 100).toFixed(2)} EUR`;
 
   return db.$transaction(async (tx) => {
     const available = await pocketBalance("USER", input.userId, tx);
@@ -74,8 +82,8 @@ export async function requestCustomerCashout(input: {
         userId: input.userId,
         credits,
         eurCents,
-        usdCents: 0,
-        currency: "EUR",
+        usdCents,
+        currency,
         status: "PENDING",
         isTreasury: false,
         payoutKind,
@@ -97,8 +105,9 @@ export async function requestCustomerCashout(input: {
         actorId: input.userId,
         cashoutId: cashout.id,
         eurCents,
-        fiatCurrency: "EUR",
-        note: `Richiesta di prelievo: ${credits} cr → ${(eurCents / 100).toFixed(2)} EUR ${destinationNote}`,
+        usdCents,
+        fiatCurrency: currency,
+        note: `Richiesta di prelievo: ${credits} cr → ${fiatLabel} ${destinationNote}`,
       },
       tx,
     );
@@ -131,6 +140,8 @@ export async function resolveCashout(input: {
       throw new ZeccaError("Prelievo senza titolare.", "INVALID");
     }
 
+    const currency = cashout.currency === "USD" ? "USD" : "EUR";
+
     if (input.action === "pay") {
       await tx.cashoutRequest.update({
         where: { id: cashout.id },
@@ -151,9 +162,13 @@ export async function resolveCashout(input: {
           cashoutId: cashout.id,
           eurCents: cashout.eurCents,
           usdCents: cashout.usdCents,
-          fiatCurrency: (cashout.currency === "USD" ? "USD" : "EUR") as "EUR" | "USD",
-          eurDirection: cashout.currency === "USD" ? null : "OUT",
-          note: `Prelievo pagato: ${cashout.credits} cr`,
+          fiatCurrency: currency,
+          eurDirection: currency === "USD" ? null : "OUT",
+          note: `Prelievo pagato: ${cashout.credits} cr → ${
+            currency === "USD"
+              ? `${(cashout.usdCents / 100).toFixed(2)} USD`
+              : `${(cashout.eurCents / 100).toFixed(2)} EUR`
+          }`,
         },
         tx,
       );
