@@ -1,6 +1,7 @@
 import NextAuth from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import { compare } from "bcryptjs";
+import "@/lib/boot-env";
 import { prisma } from "@/lib/db";
 import type { Role } from "@prisma/client";
 import { isDemoAccount, isDemoLoginAllowed } from "@/lib/live";
