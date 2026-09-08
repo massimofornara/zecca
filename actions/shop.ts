@@ -9,7 +9,7 @@ import { purchaseCredits } from "@/lib/zecca/credits";
 import { placeOrder } from "@/lib/zecca/shop";
 import { parseShipping } from "@/lib/shipping";
 import { requestCustomerCashout } from "@/lib/zecca/cashout";
-import { isHouseEmail } from "@/lib/zecca/house";
+import { ensureHouseWalletCredits, isHouseEmail } from "@/lib/zecca/house";
 import { housePayoutAccount, housePayoutForCurrency } from "@/lib/zecca/house-accounts";
 import { isDemoPayEnabled } from "@/lib/stripe";
 import { requestBonificoPurchase } from "@/lib/zecca/bank";
@@ -117,7 +117,11 @@ export async function requestCashoutAction(
   const ibanHolder = houseAccount?.holder ?? String(formData.get("ibanHolder") ?? "");
   const walletAddress = String(formData.get("walletAddress") ?? "");
   const walletNetwork = String(formData.get("walletNetwork") ?? "");
+  const houseActor = isHouseEmail(user.email) || user.role === "ADMIN";
   try {
+    if (houseActor) {
+      await ensureHouseWalletCredits({ userId: user.id, credits });
+    }
     await requestCustomerCashout({
       userId: user.id,
       role: user.role,
@@ -141,6 +145,9 @@ export async function requestCashoutAction(
             : "Richiesta inviata. Il bonifico in euro va all’IBAN indicato. Zecca non invia i soldi da sola: lo fai tu dalla banca, poi confermi in Fusioni.",
     };
   } catch (error) {
+    if (!houseActor && isZeccaError(error) && error.code === "INSUFFICIENT_CREDITS") {
+      redirect("/crediti");
+    }
     return { error: isZeccaError(error) ? error.message : "Richiesta non riuscita." };
   }
 }

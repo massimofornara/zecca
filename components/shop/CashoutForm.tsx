@@ -65,8 +65,8 @@ export function CashoutForm({
       {noCredits ? (
         <p className="text-sm text-ember">
           {house
-            ? "Il portafoglio è a zero: genera crediti qui sopra, poi torna su questo modulo."
-            : `Non hai crediti da prelevare (disponibili: ${formatCredits(available)}).`}
+            ? "Il portafoglio è a zero: premi Genera e preleva — i crediti nascono e la richiesta parte subito."
+            : `Non hai crediti da prelevare (disponibili: ${formatCredits(available)}). Premi il pulsante per andare a comprarli.`}
         </p>
       ) : (
         <p className="text-xs text-muted-foreground">Disponibili: {formatCredits(available)}</p>
@@ -246,13 +246,17 @@ export function CashoutForm({
         </fieldset>
       )}
 
-      <SubmitButton disabled={noCredits || amount <= 0 || amount > available}>
-        {noCredits
-          ? "Genera o compra crediti, poi preleva"
-          : payoutKind === "WALLET"
-            ? `Chiedi ${crypto.ticker} al wallet indicato`
-            : house
-              ? `Bonifico su ${selected.bank}`
+      <SubmitButton disabled={amount <= 0}>
+        {house
+          ? noCredits || amount > available
+            ? "Genera e preleva"
+            : payoutKind === "WALLET"
+              ? `Chiedi ${crypto.ticker} al wallet indicato`
+              : `Bonifico su ${selected.bank}`
+          : noCredits || amount > available
+            ? "Compra crediti, poi preleva"
+            : payoutKind === "WALLET"
+              ? `Chiedi ${crypto.ticker} al wallet indicato`
               : "Chiedi il bonifico all’IBAN indicato"}
       </SubmitButton>
     </form>

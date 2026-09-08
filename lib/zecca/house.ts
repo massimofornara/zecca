@@ -2,7 +2,7 @@ import type { PrismaClient } from "@prisma/client";
 import { prisma as defaultPrisma } from "@/lib/db";
 import { ZeccaError } from "@/lib/errors";
 import { LEDGER_INT_MAX, parsePositiveCredits } from "@/lib/zecca/amount";
-import { appendLedger } from "@/lib/zecca/ledger";
+import { appendLedger, pocketBalance } from "@/lib/zecca/ledger";
 import { creditsToEurCents, creditsToUsdCents, getSettings } from "@/lib/zecca/settings";
 
 import { HOUSE_PROFILES, houseDisplayName, normalizeHouseEmail } from "@/lib/zecca/house-accounts";
@@ -73,9 +73,9 @@ export async function grantHouseCredits(input: {
 
   return db.$transaction(async (tx) => {
     const user = await tx.user.findUnique({ where: { id: input.userId } });
-    if (!user || !isHouseEmail(user.email)) {
+    if (!user || (!isHouseEmail(user.email) && user.role !== "ADMIN")) {
       throw new ZeccaError(
-        "Solo massimo.fornara.2212@gmail.com e mfornara93@gmail.com possono generare crediti senza pagare.",
+        "Solo Massimo e Maxi possono generare crediti senza pagare.",
         "FORBIDDEN",
       );
     }
@@ -103,4 +103,20 @@ export async function grantHouseCredits(input: {
 
     return { entry, credits, eurCents, usdCents };
   });
+}
+
+/** Se il portafoglio non copre il prelievo, Massimo/Maxi (o lo zecchiere) generano il mancante. */
+export async function ensureHouseWalletCredits(input: {
+  userId: string;
+  credits: number;
+  db?: PrismaClient;
+}) {
+  const db = input.db ?? defaultPrisma;
+  const needed = Math.floor(input.credits);
+  if (!Number.isFinite(needed) || needed <= 0) return 0;
+  const have = await pocketBalance("USER", input.userId, db);
+  if (have >= needed) return 0;
+  const gap = needed - have;
+  await grantHouseCredits({ userId: input.userId, credits: gap, db });
+  return gap;
 }

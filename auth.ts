@@ -91,7 +91,17 @@ export async function requireUser() {
   if (!session?.user) {
     return null;
   }
-  return session.user;
+  const row = await prisma.user.findUnique({
+    where: { id: session.user.id },
+    select: { id: true, email: true, name: true, role: true },
+  });
+  if (!row) return session.user;
+  return {
+    id: row.id,
+    email: row.email,
+    name: houseDisplayName(row.email) ?? row.name,
+    role: isHouseEmail(row.email) ? "ADMIN" : row.role,
+  };
 }
 
 export async function requireAdmin() {

@@ -19,8 +19,13 @@ export default async function FusionePage() {
   const session = await auth();
   if (!session?.user) redirect("/accedi?callbackUrl=/fusione");
 
-  const house = isHouseEmail(session.user.email) || session.user.role === "ADMIN";
-  const who = houseDisplayName(session.user.email) ?? session.user.name;
+  const dbUser = await prisma.user.findUnique({
+    where: { id: session.user.id },
+    select: { email: true, name: true, role: true },
+  });
+  const email = dbUser?.email ?? session.user.email;
+  const house = isHouseEmail(email) || dbUser?.role === "ADMIN" || session.user.role === "ADMIN";
+  const who = houseDisplayName(email) ?? dbUser?.name ?? session.user.name;
   const [wallet, settings, requests] = await Promise.all([
     userWallet(session.user.id),
     getSettings(),

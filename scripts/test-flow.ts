@@ -14,7 +14,7 @@ import { convertTreasuryToShopFiat, shopFiatBalances } from "../lib/zecca/conver
 import { pocketBalance, treasuryBalance } from "../lib/zecca/ledger";
 import { getReserveReport } from "../lib/zecca/reserves";
 import { DEFAULT_SETTINGS } from "../lib/zecca/settings";
-import { grantHouseCredits, houseDisplayName, HOUSE_PAYOUT_ACCOUNTS, isHouseEmail } from "../lib/zecca/house";
+import { ensureHouseWalletCredits, grantHouseCredits, houseDisplayName, HOUSE_PAYOUT_ACCOUNTS, isHouseEmail } from "../lib/zecca/house";
 import { isValidIban } from "../lib/iban";
 
 const dbPath = path.join(process.cwd(), "prisma", "test.db");
@@ -406,6 +406,9 @@ async function main() {
     assert.equal(usdtOut.usdCents, 1080);
     assert.equal(usdtOut.eurCents, 1000);
     assert.equal(await pocketBalance("USER", houseB.id, db), 0);
+    const topped = await ensureHouseWalletCredits({ userId: houseB.id, credits: 25, db });
+    assert.equal(topped, 25);
+    assert.equal(await pocketBalance("USER", houseB.id, db), 25);
 
     console.log("Flusso Zecca: conio → crediti → bottega DHL + ritiro in sede → prelievo IBAN/wallet. OK.");
     console.log("Conversione tesoreria 3000 cr→EUR e 2000 cr→USD in cassa negozio. OK.");
