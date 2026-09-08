@@ -226,9 +226,12 @@ model CreditPurchase {
   eurCents        Int
   method          String
   stripeSessionId String?  @unique
+  reference       String?  @unique
   status          String
   createdAt       DateTime @default(now())
   ledger          LedgerEntry[]
+
+  @@index([status])
 }
 
 model Setting {

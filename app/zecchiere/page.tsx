@@ -10,14 +10,14 @@ import { TreasuryConvertForm } from "@/components/zecchiere/FusioniForms";
 export const metadata = { title: "Tesoreria" };
 
 export default async function TesoreriaPage() {
-  const [flow, pending, loyal, reserve, settings] = await Promise.all([
+  const [flow, pending, loyal, reserve, settings, live] = await Promise.all([
     totals(),
     prisma.cashoutRequest.count({ where: { status: "PENDING" } }),
     loyalToday(),
     getReserveReport(),
     getSettings(),
+    getLiveReport(),
   ]);
-  const live = getLiveReport();
 
   return (
     <div>
@@ -26,14 +26,14 @@ export default async function TesoreriaPage() {
       <p className="mt-2 text-muted-foreground">
         Tre pentolini: crediti ancora da vendere, euro della cassa negozio, dollari della cassa
         negozio. Coniare e convertire aggiornano il libro mastro: <strong>non</strong> accreditano un
-        conto in banca. Bonifici e Stripe restano un passo a parte.
+        conto in banca. I bonifici SEPA li fai tu, in ingresso e in uscita.
       </p>
 
       <section className="metal-frame mt-6 rounded-md bg-card p-5">
         <p className="text-xs uppercase tracking-[0.2em] text-primary/80">Stato fondi</p>
         <p className="mt-1 font-display text-2xl text-primary">
           {live.readyForLive
-            ? "Carte live (Stripe)"
+            ? "Bonifico SEPA attivo"
             : live.readyForCardPayments
               ? "Carte in test Stripe"
               : "Dimostrativo"}
@@ -55,8 +55,8 @@ export default async function TesoreriaPage() {
           {reserve.fullyReserved ? "Coperta" : "Scoperta"} · {formatReserveRatio(reserve.reserveRatio)}
         </p>
         <p className="mt-2 text-sm text-muted-foreground">
-          Rapporto tra euro incassati con Stripe e i crediti già nei portafogli (passività). Il conio in
-          tesoreria non è riserva: è inventario. Senza carte vere il ratio è zero. Analisi:{" "}
+          Rapporto tra euro incassati (bonifico SEPA confermato, o Stripe se lo usi) e i crediti già nei portafogli (passività). Il conio in
+          tesoreria non è riserva: è inventario.
           <a href="/avvertenze" className="underline hover:text-primary">
             Avvertenze
           </a>
@@ -72,7 +72,7 @@ export default async function TesoreriaPage() {
             <p className="font-ledger">{formatEurFromCents(reserve.liabilityCents)}</p>
           </div>
           <div>
-            <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">Riserva Stripe</p>
+            <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">Riserva euro incassati</p>
             <p className="font-ledger">{formatEurFromCents(reserve.stripeEurCents)}</p>
           </div>
         </div>
@@ -82,24 +82,19 @@ export default async function TesoreriaPage() {
         <h2 className="font-display text-2xl">Da fittizio a reale — cosa resta a te</h2>
         <ol className="mt-4 list-decimal space-y-3 pl-5 text-sm leading-relaxed">
           <li>
-            Apri un account su <strong>stripe.com</strong>, verifica l’identità e collega il conto
-            bancario su cui vuoi ricevere i pagamenti con carta.
+            In <strong>Versamenti</strong> indica l’IBAN vero della zecca (il conto Unicredit o
+            quello della ditta). I clienti lo vedono quando comprano crediti.
           </li>
           <li>
-            Copia nel <span className="font-ledger">.env</span> (mai in chat){" "}
-            <span className="font-ledger">STRIPE_SECRET_KEY</span> e{" "}
-            <span className="font-ledger">STRIPE_WEBHOOK_SECRET</span>. Prima <span className="font-ledger">sk_test_</span>,
-            poi <span className="font-ledger">sk_live_</span>.
+            Il cliente dispone un bonifico SEPA con la causale <span className="font-ledger">ZECCA-XXXXXX</span>.
+            Tu confronti importo e causale in banca, poi premi «Accredita i crediti». Nessun webhook.
           </li>
           <li>
-            Pubblica il sito in HTTPS e imposta <span className="font-ledger">AUTH_URL</span> e un{" "}
-            <span className="font-ledger">AUTH_SECRET</span> nuovo. Webhook:{" "}
-            <span className="font-ledger">/api/stripe/webhook</span> → evento{" "}
-            <span className="font-ledger">checkout.session.completed</span>.
+            Le fusioni in uscita: copia IBAN e importo, disponi il SEPA dal tuo home banking, poi
+            spunta «Ho disposto il bonifico».
           </li>
           <li>
-            Le fusioni: apri <strong>Fusioni</strong>, copia IBAN e importo, disponi il SEPA dal tuo
-            home banking, poi spunta «Ho disposto il bonifico».
+            Stripe resta facoltativo (carte). Non serve per muovere euro.
           </li>
           <li>
             Se vendi in Italia, parla col commercialista (Partita IVA, scontrini, privacy). I crediti

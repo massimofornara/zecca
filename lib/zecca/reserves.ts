@@ -20,7 +20,7 @@ export type ReserveReport = {
 export async function getReserveReport(
   db: PrismaClient = defaultPrisma,
 ): Promise<ReserveReport> {
-  const [flow, settings, stripe, demo] = await Promise.all([
+  const [flow, settings, stripe, demo, bank] = await Promise.all([
     totals(db),
     getSettings(db),
     db.creditPurchase.aggregate({
@@ -31,19 +31,25 @@ export async function getReserveReport(
       where: { method: "demo", status: "completed" },
       _sum: { eurCents: true, credits: true },
     }),
+    db.creditPurchase.aggregate({
+      where: { method: "bonifico", status: "completed" },
+      _sum: { eurCents: true, credits: true },
+    }),
   ]);
 
   const outstandingCredits = flow.inWallets + flow.inEscrow;
   const liabilityCents = outstandingCredits * settings.eurCentsPerCredit;
   const stripeEurCents = stripe._sum.eurCents ?? 0;
-  const reserveRatio = liabilityCents <= 0 ? null : stripeEurCents / liabilityCents;
+  const bankEurCents = bank._sum.eurCents ?? 0;
+  const receivedEurCents = stripeEurCents + bankEurCents;
+  const reserveRatio = liabilityCents <= 0 ? null : receivedEurCents / liabilityCents;
 
   return {
     outstandingCredits,
     treasuryCredits: flow.treasury,
     mintedCredits: flow.minted,
     liabilityCents,
-    stripeEurCents,
+    stripeEurCents: receivedEurCents,
     demoEurCents: demo._sum.eurCents ?? 0,
     stripeCredits: stripe._sum.credits ?? 0,
     demoCredits: demo._sum.credits ?? 0,

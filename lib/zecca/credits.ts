@@ -8,7 +8,7 @@ import { creditsToEurCents, getSettings } from "@/lib/zecca/settings";
 export async function purchaseCredits(input: {
   userId: string;
   credits: number;
-  method: "demo" | "stripe";
+  method: "demo" | "stripe" | "bonifico";
   stripeSessionId?: string | null;
   /** Importo già verificato (es. da Stripe). Se assente, si calcola dal tasso corrente. */
   eurCents?: number;
@@ -54,14 +54,62 @@ export async function purchaseCredits(input: {
         creditPurchaseId: purchase.id,
         eurCents,
         eurDirection: "IN",
-        note:
-          input.method === "demo"
-            ? `Acquisto dimostrativo di ${credits} crediti`
-            : `Acquisto Stripe di ${credits} crediti`,
+        note: purchaseNote(input.method, credits),
       },
       tx,
     );
 
     return { purchase, entry, eurCents };
+  });
+}
+
+function purchaseNote(method: string, credits: number) {
+  if (method === "demo") return `Acquisto dimostrativo di ${credits} crediti`;
+  if (method === "bonifico") return `Acquisto bonifico SEPA di ${credits} crediti`;
+  return `Acquisto Stripe di ${credits} crediti`;
+}
+
+export async function completePendingPurchase(input: {
+  purchaseId: string;
+  actorId: string;
+  db?: PrismaClient;
+}) {
+  const db = input.db ?? defaultPrisma;
+  return db.$transaction(async (tx) => {
+    const purchase = await tx.creditPurchase.findUnique({ where: { id: input.purchaseId } });
+    if (!purchase || purchase.method !== "bonifico") {
+      throw new ZeccaError("Versamento non trovato.", "NOT_FOUND");
+    }
+    if (purchase.status !== "pending") {
+      throw new ZeccaError("Questo bonifico è già stato chiuso.", "INVALID_AMOUNT");
+    }
+
+    const minter =
+      (await tx.user.findFirst({ where: { role: "ADMIN" }, select: { id: true } }))?.id ??
+      input.actorId;
+    await ensureTreasury({ needed: purchase.credits, actorId: minter, db: tx });
+
+    const updated = await tx.creditPurchase.update({
+      where: { id: purchase.id },
+      data: { status: "completed" },
+    });
+
+    const entry = await appendLedger(
+      {
+        type: "PURCHASE_CREDITS",
+        amountCredits: purchase.credits,
+        fromPocket: "TREASURY",
+        toPocket: "USER",
+        toUserId: purchase.userId,
+        actorId: input.actorId,
+        creditPurchaseId: purchase.id,
+        eurCents: purchase.eurCents,
+        eurDirection: "IN",
+        note: `Bonifico ${purchase.reference ?? purchase.id.slice(-6).toUpperCase()} ricevuto: ${purchase.credits} crediti`,
+      },
+      tx,
+    );
+
+    return { purchase: updated, entry, eurCents: purchase.eurCents };
   });
 }

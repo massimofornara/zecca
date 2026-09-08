@@ -4,7 +4,7 @@ import { getLiveReport } from "../lib/live";
 
 loadEnvConfig(process.cwd());
 
-const report = getLiveReport();
+const report = await getLiveReport();
 console.log("Zecca — stato fondi\n");
 for (const check of report.checks) {
   console.log(`${check.ok ? "[ok]" : "[manca]"} ${check.title}`);
@@ -13,12 +13,12 @@ for (const check of report.checks) {
 console.log("");
 console.log(
   report.readyForLive
-    ? "Pronto per carte live (Stripe live + webhook + HTTPS + segreto). I bonifici restano tuoi."
+    ? "Bonifico SEPA pronto: i clienti versano sul tuo IBAN, tu confermi. Stripe non serve."
     : report.readyForCardPayments
-      ? "Pronto per carte in test Stripe. Per il live servono sk_live_, webhook live e AUTH_URL https."
-      : "Ancora dimostrativo: senza chiavi Stripe nessun euro entra.",
+      ? "Carte Stripe in test. Per i soldi veri imposta l’IBAN in Zecchiere → Versamenti."
+      : "Ancora dimostrativo: senza IBAN della zecca nessun euro entra.",
 );
 console.log("");
 console.log("Suggerimento AUTH_SECRET (copialo tu nel .env, non in chat):");
 console.log(randomBytes(32).toString("base64url"));
-process.exit(report.readyForCardPayments ? 0 : 2);
+process.exit(report.readyForLive || report.readyForCardPayments ? 0 : 2);

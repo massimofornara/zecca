@@ -10,6 +10,7 @@ import { placeOrder } from "@/lib/zecca/shop";
 import { parseShipping } from "@/lib/shipping";
 import { requestCustomerCashout } from "@/lib/zecca/cashout";
 import { isDemoPayEnabled } from "@/lib/stripe";
+import { requestBonificoPurchase } from "@/lib/zecca/bank";
 
 export async function addToCartAction(formData: FormData) {
   const productId = String(formData.get("productId") ?? "");
@@ -25,6 +26,25 @@ export async function updateCartAction(formData: FormData) {
   const quantity = Number(formData.get("quantity") ?? 0);
   await updateCartQuantity(productId, quantity);
   revalidatePath("/carrello");
+}
+
+export async function requestBonificoAction(
+  _prev: { error?: string } | null,
+  formData: FormData,
+): Promise<{ error?: string }> {
+  const user = await requireUser();
+  if (!user) return { error: "Devi entrare per comprare crediti." };
+  const credits = Number(formData.get("credits"));
+  let purchaseId = "";
+  try {
+    const result = await requestBonificoPurchase({ userId: user.id, credits });
+    purchaseId = result.purchase.id;
+  } catch (error) {
+    return { error: isZeccaError(error) ? error.message : "Richiesta bonifico non riuscita." };
+  }
+  revalidatePath("/crediti");
+  revalidatePath("/zecchiere/versamenti");
+  redirect(`/crediti?versamento=${purchaseId}`);
 }
 
 export async function demoBuyCreditsAction(

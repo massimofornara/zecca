@@ -6,6 +6,7 @@ import { hash } from "bcryptjs";
 import { PrismaClient } from "@prisma/client";
 import { mintCredits, ensureTreasury } from "../lib/zecca/mint";
 import { purchaseCredits } from "../lib/zecca/credits";
+import { requestBonificoPurchase, confirmBonificoPurchase, saveShopBank } from "../lib/zecca/bank";
 import { lastCustomerAddress, placeOrder, refreshOrderTracking } from "../lib/zecca/shop";
 import { getForgeState } from "../lib/zecca/forge";
 import { requestCustomerCashout, resolveCashout } from "../lib/zecca/cashout";
@@ -274,8 +275,32 @@ async function main() {
     assert.equal(convertRows[1].amountCredits, 2000);
     assert.equal(convertRows[1].usdCents, 216000);
 
+    const payer = await db.user.create({
+      data: {
+        email: "payer@test.local",
+        name: "Payer Test",
+        passwordHash: await hash("passwordpassword", 10),
+        role: "CUSTOMER",
+      },
+    });
+    await saveShopBank(
+      { iban: "IT60X0542811101000000123456", holder: "NeoNoble Test", bankName: "Banca Test" },
+      db,
+    );
+    const asked = await requestBonificoPurchase({ userId: payer.id, credits: 40, db });
+    assert.equal(asked.purchase.status, "pending");
+    assert.ok(asked.purchase.reference?.startsWith("ZECCA-"));
+    assert.equal(await pocketBalance("USER", payer.id, db), 0);
+    await confirmBonificoPurchase({ purchaseId: asked.purchase.id, actorId: admin.id, db });
+    assert.equal(await pocketBalance("USER", payer.id, db), 40);
+    const banked = await db.creditPurchase.findUniqueOrThrow({ where: { id: asked.purchase.id } });
+    assert.equal(banked.status, "completed");
+    const afterBank = await getReserveReport(db);
+    assert.equal(afterBank.stripeEurCents, 4000);
+
     console.log("Flusso Zecca: conio → crediti → bottega DHL + ritiro in sede → prelievo IBAN/wallet. OK.");
     console.log("Conversione tesoreria 3000 cr→EUR e 2000 cr→USD in cassa negozio. OK.");
+    console.log("Bonifico SEPA in ingresso senza Stripe/webhook. OK.");
   } finally {
     await db.$disconnect();
   }

@@ -71,40 +71,27 @@ Chiara ha già speso oggi in bottega. Luca ha crediti e può già chiedere un pr
 
 ## Da fittizio a reale
 
-Zecca **non diventa una banca**. I crediti restano un libro mastro. Per muovere euro veri servono Stripe (ingresso) e il tuo home banking (uscita). Nessun agente, me compreso, può inventare le chiavi o disporre un SEPA.
+Zecca **non diventa una banca**. I crediti restano un libro mastro. Gli euro veri entrano con un **bonifico SEPA** sul conto della zecca (Massimo conferma a mano). Escono con un bonifico o un invio wallet che fai tu dal home banking. Stripe è facoltativo. Nessun webhook.
 
 Cosa serve, e chi lo può fare:
 
 | Passo | Chi |
 | --- | --- |
-| Account Stripe, verifica identità, conto collegato | Tu, su stripe.com |
-| `STRIPE_SECRET_KEY` (`sk_test_` poi `sk_live_`) e `STRIPE_WEBHOOK_SECRET` nel `.env` | Tu (non inviarle in chat) |
-| Webhook `checkout.session.completed` → `https://tuo-dominio/api/stripe/webhook` | Tu |
-| Sito in HTTPS + `AUTH_URL` + `AUTH_SECRET` nuovo | Tu (hosting / Publish) |
-| Partita IVA / inquadramento se vendi in Italia | Tu (commercialista) |
+| IBAN della zecca in **Zecchiere → Versamenti** | Tu |
+| Bonifico del cliente con causale `ZECCA-XXXXXX` | Il cliente, dalla sua banca |
+| Conferma incasso in **Versamenti** | Tu, dopo aver visto l’accredito |
 | Bonifici ai clienti (fusioni) | Tu, dal home banking |
-| Codice (Checkout, webhook firmato, IBAN, blocco demo, checklist, blocco SEPA copiabile) | Questo repo |
+| Sito in HTTPS + `AUTH_SECRET` | Tu (hosting / Vercel) |
+| Partita IVA / inquadramento se vendi in Italia | Tu (commercialista) |
 
 Controlla lo stato: `npm run check:live`. In **Zecchiere → Tesoreria** vedi la stessa lista.
 
-Senza le chiavi Stripe **nessuno**, me compreso, può far entrare euro veri.
+**Euro in ingresso (veri):** bonifico SEPA, senza Stripe e senza webhook.
 
-**Euro in ingresso (veri):** Stripe Checkout.
-
-1. Crea un account Stripe e le chiavi.
-2. Nel `.env`:
-
-```
-AUTH_URL="https://tuo-dominio"
-AUTH_SECRET="…generato da npm run check:live"
-STRIPE_SECRET_KEY="sk_live_..."
-STRIPE_WEBHOOK_SECRET="whsec_..."
-```
-
-3. Webhook su `/api/stripe/webhook` per `checkout.session.completed`.
-4. Riavvia. In **Crediti** compare *Paga in euro veri (Stripe)*. Il pagamento demo e i conti `@zecca.local` si spengono con la chiave live.
-
-Senza queste variabili resta solo il pagamento dimostrativo: nessun euro si muove.
+1. Entra come zecchiere → **Versamenti** → salva IBAN e intestatario.
+2. Il cliente in **Crediti** sceglie i crediti e preme *Paga con bonifico SEPA*.
+3. Dispone il bonifico con la causale mostrata (importo esatto).
+4. Tu in **Versamenti** confronti causale e importo in banca, spunti la conferma, accrediti.
 
 **Euro in uscita (veri):** il cliente indica IBAN oppure rete + indirizzo wallet. In **Fusioni** compare un blocco da incollare in banca o nel wallet del zecchiere. Massimo invia **dal proprio home banking o dal proprio wallet**, poi conferma. L’app non ha accesso ai conti e non spedisce crypto.
 

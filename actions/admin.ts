@@ -7,6 +7,7 @@ import { mintCredits } from "@/lib/zecca/mint";
 import { resolveCashout } from "@/lib/zecca/cashout";
 import { convertTreasuryToShopFiat } from "@/lib/zecca/convert";
 import { saveSettings, type ForgeTier } from "@/lib/zecca/settings";
+import { cancelBonificoPurchase, confirmBonificoPurchase, saveShopBank } from "@/lib/zecca/bank";
 import { prisma } from "@/lib/db";
 import { fulfillDhlOrder, markSupplierShipped, refreshOrderTracking } from "@/lib/zecca/shop";
 import { CATALOG_SEED } from "@/lib/catalog";
@@ -110,6 +111,62 @@ export async function resolveCashoutAction(
   } catch (error) {
     return { error: isZeccaError(error) ? error.message : "Operazione non riuscita." };
   }
+}
+
+export async function saveShopBankAction(
+  _prev: { error?: string; ok?: string } | null,
+  formData: FormData,
+): Promise<{ error?: string; ok?: string }> {
+  const admin = await requireAdmin();
+  if (!admin) return { error: "Solo il zecchiere può impostare il conto." };
+  try {
+    await saveShopBank({
+      iban: String(formData.get("iban") ?? ""),
+      holder: String(formData.get("holder") ?? ""),
+      bankName: String(formData.get("bankName") ?? ""),
+    });
+    revalidatePath("/zecchiere/versamenti");
+    revalidatePath("/crediti");
+    return { ok: "Conto della zecca salvato. I clienti vedono IBAN e causale." };
+  } catch (error) {
+    return { error: isZeccaError(error) ? error.message : "Conto non salvato." };
+  }
+}
+
+export async function confirmBonificoAction(
+  _prev: { error?: string; ok?: string } | null,
+  formData: FormData,
+): Promise<{ error?: string; ok?: string }> {
+  const admin = await requireAdmin();
+  if (!admin) return { error: "Solo il zecchiere può confermare un versamento." };
+  if (formData.get("bankConfirm") !== "on") {
+    return { error: "Conferma di aver visto il bonifico sul tuo conto. Zecca non interroga la banca." };
+  }
+  try {
+    const result = await confirmBonificoPurchase({
+      purchaseId: String(formData.get("purchaseId") ?? ""),
+      actorId: admin.id,
+    });
+    revalidatePath("/zecchiere/versamenti");
+    revalidatePath("/zecchiere/libro-mastro");
+    revalidatePath("/crediti");
+    revalidatePath("/portafoglio");
+    return {
+      ok: `Accreditati ${result.purchase.credits.toLocaleString("it-IT")} cr. Euro arrivati sul tuo conto, non da un webhook.`,
+    };
+  } catch (error) {
+    return { error: isZeccaError(error) ? error.message : "Conferma non riuscita." };
+  }
+}
+
+export async function cancelBonificoAction(formData: FormData) {
+  const admin = await requireAdmin();
+  if (!admin) return;
+  await cancelBonificoPurchase({ purchaseId: String(formData.get("purchaseId") ?? "") }).catch(
+    () => undefined,
+  );
+  revalidatePath("/zecchiere/versamenti");
+  revalidatePath("/crediti");
 }
 
 export async function saveForgeSettingsAction(
