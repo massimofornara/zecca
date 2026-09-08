@@ -17,18 +17,21 @@ export default async function TracciaPage({ params }: { params: Promise<{ code: 
 
   const shipment = await prisma.shipment.findFirst({
     where: { trackingNumber: tracking },
-    include: { items: { include: { product: true } }, order: true, supplier: true },
+    include: { items: { include: { product: true } }, supplier: true },
   });
-  const order =
-    shipment?.order ??
-    (await prisma.order.findFirst({
-      where: { trackingNumber: tracking },
-      include: { items: { include: { product: true } } },
-    }));
+  const order = await prisma.order.findFirst({
+    where: shipment ? { id: shipment.orderId } : { trackingNumber: tracking },
+    include: { items: { include: { product: true } } },
+  });
   if (!order) notFound();
 
   const dest = formatShipping(order);
-  const progress = shipProgress(shipment ?? order);
+  const progress = shipProgress({
+    shipStatus: shipment?.shipStatus ?? order.shipStatus,
+    shipTo: order.shipTo,
+    dhlTrackStatus: shipment?.dhlTrackStatus ?? order.dhlTrackStatus,
+    dhlTrackDetail: shipment?.dhlTrackDetail ?? order.dhlTrackDetail,
+  });
   const items = shipment?.items ?? order.items;
   const trackingNumber = shipment?.trackingNumber ?? order.trackingNumber;
   const trackingUrl = shipment?.trackingUrl ?? order.trackingUrl;

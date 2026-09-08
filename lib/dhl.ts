@@ -281,29 +281,28 @@ export async function fetchDhlTracking(trackingNumber: string): Promise<DhlTrack
   };
 }
 
-export function shipProgress(order: {
-  carrier: string;
+export function shipProgress(record: {
   shipStatus: string;
-  shipTo?: string;
+  shipTo?: string | null;
   dhlTrackStatus?: string | null;
   dhlTrackDetail?: string | null;
 }) {
-  if (order.dhlTrackStatus) {
+  if (record.dhlTrackStatus) {
     return {
-      status: order.dhlTrackStatus,
-      detail: order.dhlTrackDetail || "Stato dal fornitore o da DHL.",
+      status: record.dhlTrackStatus,
+      detail: record.dhlTrackDetail || "Stato dal fornitore o da DHL.",
     };
   }
-  if (order.shipStatus === "SHIPPED") {
+  if (record.shipStatus === "SHIPPED") {
     return {
       status: "In viaggio",
       detail:
-        order.shipTo === "MASSIMO"
+        record.shipTo === "MASSIMO"
           ? "Il fornitore ha spedito verso casa di Massimo."
           : "Il fornitore ha consegnato il collo a DHL.",
     };
   }
-  if (order.shipStatus === "BOOKED") {
+  if (record.shipStatus === "BOOKED") {
     return { status: "Ritiro prenotato", detail: "DHL passa dalla sede del fornitore." };
   }
   return {
