@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev --port 4731 --hostname 0.0.0.0",
-    "build": "next build",
+    "build": "node scripts/vercel-build.mjs",
     "start": "next start --port 4731 --hostname 0.0.0.0",
     "lint": "eslint",
     "postinstall": "prisma generate",

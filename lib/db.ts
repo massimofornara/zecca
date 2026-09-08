@@ -1,4 +1,27 @@
+import { copyFileSync, existsSync } from "node:fs";
+import { join } from "node:path";
 import { Prisma, PrismaClient } from "@prisma/client";
+
+function resolveDatabaseUrl() {
+  const configured = process.env.DATABASE_URL?.trim();
+  if (configured && !process.env.VERCEL) {
+    return configured;
+  }
+  if (configured?.startsWith("postgres")) {
+    return configured;
+  }
+  if (process.env.VERCEL) {
+    const dest = "/tmp/zecca.db";
+    const bundled = join(process.cwd(), "prisma", "dev.db");
+    if (existsSync(bundled) && !existsSync(dest)) {
+      copyFileSync(bundled, dest);
+    }
+    return `file:${dest}`;
+  }
+  return configured || "file:./dev.db";
+}
+
+process.env.DATABASE_URL = resolveDatabaseUrl();
 
 const schemaSig = Prisma.dmmf.datamodel.models
   .map((model) => `${model.name}:${model.fields.map((field) => field.name).join(",")}`)

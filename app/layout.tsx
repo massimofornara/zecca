@@ -36,6 +36,8 @@ export const metadata: Metadata = {
     "La zecca conia i crediti. Tu li compri, li spendi in bottega su oggetti della casa, e puoi prelevarli verso un conto o un wallet.",
 };
 
+export const dynamic = "force-dynamic";
+
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html
