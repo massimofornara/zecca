@@ -21,7 +21,7 @@ export default async function PortafoglioPage() {
   if (!session?.user) redirect("/accedi?callbackUrl=/portafoglio");
 
   const forge = await getForgeState({ userId: session.user.id, role: session.user.role });
-  const house = isHouseEmail(session.user.email);
+  const house = isHouseEmail(session.user.email) || session.user.role === "ADMIN";
   const [movements, settings] = await Promise.all([
     prisma.ledgerEntry.findMany({
       where: {

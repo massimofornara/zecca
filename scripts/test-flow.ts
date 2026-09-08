@@ -301,9 +301,11 @@ async function main() {
     assert.equal(afterBank.stripeEurCents, 4000);
 
     assert.equal(isHouseEmail("Massimo.Fornara.2212@gmail.com"), true);
+    assert.equal(isHouseEmail("massimo@zecca.local"), true);
     assert.equal(isHouseEmail("mfornara93@gmail.com"), true);
     assert.equal(isHouseEmail("chiara@zecca.local"), false);
     assert.equal(houseDisplayName("massimo.fornara.2212@gmail.com"), "Massimo");
+    assert.equal(houseDisplayName("massimo@zecca.local"), "Massimo");
     assert.equal(houseDisplayName("mfornara93@gmail.com"), "Maxi");
     for (const account of HOUSE_PAYOUT_ACCOUNTS) {
       assert.equal(isValidIban(account.iban), true, `${account.bank} IBAN deve essere valido`);

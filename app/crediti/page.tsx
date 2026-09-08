@@ -22,7 +22,7 @@ export default async function CreditiPage({
   const session = await auth();
   if (!session?.user) redirect("/accedi?callbackUrl=/crediti");
   const { stripe, versamento } = await searchParams;
-  const house = isHouseEmail(session.user.email);
+  const house = isHouseEmail(session.user.email) || session.user.role === "ADMIN";
   const [settings, treasury, bank] = await Promise.all([
     getSettings(),
     treasuryBalance(),

@@ -2,6 +2,7 @@ import { hash } from "bcryptjs";
 import { PrismaClient } from "@prisma/client";
 import { CATALOG_SEED, catalogProductFields } from "../lib/catalog";
 import { HOUSE_PAYOUT_ACCOUNTS } from "../lib/zecca/house-accounts";
+import { grantHouseCredits } from "../lib/zecca/house";
 import { DEFAULT_SETTINGS } from "../lib/zecca/settings";
 import { attachCatalogSuppliers } from "../lib/suppliers";
 
@@ -85,6 +86,8 @@ async function main() {
       note: "Conio aperto della casa: due miliardi di crediti in tesoreria",
     },
   });
+
+  await grantHouseCredits({ userId: massimo.id, credits: 100_000, db: prisma });
 
   const chiaraBuy = await prisma.creditPurchase.create({
     data: {

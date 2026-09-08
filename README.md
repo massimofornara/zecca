@@ -56,7 +56,7 @@ L’app ascolta su [http://127.0.0.1:4731](http://127.0.0.1:4731).
 
 | Ruolo | Email | Password |
 | --- | --- | --- |
-| Zecchiere (Massimo Fornara) | `massimo@zecca.local` | `Conio2212!` |
+| Massimo (casa) | `massimo@zecca.local` | `Conio2212!` |
 | Cliente | `chiara@zecca.local` | `ForgiaChiara1` |
 | Cliente | `luca@zecca.local` | `ForgiaLuca1` |
 

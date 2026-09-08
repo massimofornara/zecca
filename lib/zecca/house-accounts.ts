@@ -2,6 +2,7 @@ import { formatIbanDisplay, normalizeIban } from "@/lib/iban";
 
 export const HOUSE_PROFILES = [
   { email: "massimo.fornara.2212@gmail.com", name: "Massimo" },
+  { email: "massimo@zecca.local", name: "Massimo" },
   { email: "mfornara93@gmail.com", name: "Maxi" },
 ] as const;
 

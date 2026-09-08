@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { PageShell } from "@/components/layout/SiteChrome";
 import { CashoutForm } from "@/components/shop/CashoutForm";
+import { HouseGrantForm } from "@/components/shop/HouseGrantForm";
 import { EmptyState } from "@/components/ui/banners";
 import { formatCashoutValue, formatCredits } from "@/lib/format";
 import { formatRomeDate } from "@/lib/rome-day";
@@ -18,7 +19,7 @@ export default async function FusionePage() {
   const session = await auth();
   if (!session?.user) redirect("/accedi?callbackUrl=/fusione");
 
-  const house = isHouseEmail(session.user.email);
+  const house = isHouseEmail(session.user.email) || session.user.role === "ADMIN";
   const who = houseDisplayName(session.user.email) ?? session.user.name;
   const [wallet, settings, requests] = await Promise.all([
     userWallet(session.user.id),
@@ -38,6 +39,14 @@ export default async function FusionePage() {
           ? `${who}, indica quanti crediti prelevare. Bonifico su UniCredit o Wise, oppure crypto (BTC, ETH, USDT, USDC) verso il wallet che scrivi: la finestra mostra il valore da inviare.`
           : "Tutti possono convertire i crediti del portafoglio in euro, dollari o crypto, verso un conto bancario o un wallet. Massimo fa il bonifico o l’invio: l’app non è una banca e non spedisce da sola."}
       </p>
+      {house ? (
+        <div className="mt-8">
+          <HouseGrantForm
+            eurCentsPerCredit={settings.eurCentsPerCredit}
+            usdCentsPerCredit={settings.usdCentsPerCredit}
+          />
+        </div>
+      ) : null}
       <div className="mt-8">
         <CashoutForm
           available={wallet.available}
