@@ -11,9 +11,10 @@ import { userWallet } from "@/lib/zecca/ledger";
 import { getSettings } from "@/lib/zecca/settings";
 import { walletNetworkLabel } from "@/lib/wallet";
 import { houseDisplayName, housePayoutLabel } from "@/lib/zecca/house-accounts";
-import { isHouseEmail } from "@/lib/zecca/house";
+import { ensureHouseAdmin, isHouseEmail } from "@/lib/zecca/house";
 
 export const metadata = { title: "Prelievo" };
+export const dynamic = "force-dynamic";
 
 export default async function FusionePage() {
   const session = await auth();
@@ -24,8 +25,15 @@ export default async function FusionePage() {
     select: { email: true, name: true, role: true },
   });
   const email = dbUser?.email ?? session.user.email;
-  const house = isHouseEmail(email) || dbUser?.role === "ADMIN" || session.user.role === "ADMIN";
-  const who = houseDisplayName(email) ?? dbUser?.name ?? session.user.name;
+  if (isHouseEmail(email) || isHouseEmail(session.user.email)) {
+    await ensureHouseAdmin({ userId: session.user.id, email: email || session.user.email });
+  }
+  const house =
+    isHouseEmail(email) ||
+    isHouseEmail(session.user.email) ||
+    dbUser?.role === "ADMIN" ||
+    session.user.role === "ADMIN";
+  const who = houseDisplayName(email) ?? houseDisplayName(session.user.email) ?? dbUser?.name ?? session.user.name;
   const [wallet, settings, requests] = await Promise.all([
     userWallet(session.user.id),
     getSettings(),

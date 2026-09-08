@@ -7,7 +7,7 @@ import { z } from "zod";
 import { signIn, signOut } from "@/auth";
 import { prisma } from "@/lib/db";
 import { isDemoAccount, isDemoLoginAllowed } from "@/lib/live";
-import { houseDisplayName, isHouseEmail } from "@/lib/zecca/house";
+import { findUserByLoginEmail, houseDisplayName, isHouseEmail } from "@/lib/zecca/house";
 
 const credentialsSchema = z.object({
   email: z.string().min(3),
@@ -51,7 +51,7 @@ export async function registerAction(_prev: { error?: string } | null, formData:
   if (!email.includes("@")) return { error: "Indica un’email valida." };
   if (password.length < 8) return { error: "La password deve avere almeno 8 caratteri." };
 
-  const exists = await prisma.user.findUnique({ where: { email } });
+  const exists = await findUserByLoginEmail(email);
   if (exists) return { error: "Questa email è già iscritta alla zecca." };
 
   await prisma.user.create({

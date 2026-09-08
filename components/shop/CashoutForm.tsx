@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { formatCredits, formatEurFromCents, formatUsdFromCents } from "@/lib/format";
 import { formatIbanDisplay } from "@/lib/iban";
 import { CRYPTO_ASSETS, cryptoAsset } from "@/lib/wallet";
+import { LEDGER_INT_MAX } from "@/lib/zecca/amount";
 import {
   HOUSE_PAYOUT_ACCOUNTS,
   housePayoutForCurrency,
@@ -32,7 +33,9 @@ export function CashoutForm({
   houseName?: string | null;
 }) {
   const [state, action] = useActionState(requestCashoutAction, null);
-  const [credits, setCredits] = useState(Math.min(Math.max(available, 1), 20));
+  const [credits, setCredits] = useState(
+    house ? (available > 0 ? available : 10_000) : Math.min(Math.max(available, 1), 20),
+  );
   const [payoutKind, setPayoutKind] = useState<"IBAN" | "WALLET">("IBAN");
   const [currency, setCurrency] = useState<"EUR" | "USD">("EUR");
   const [accountId, setAccountId] = useState<HousePayoutAccount["id"]>("unicredit");
@@ -106,11 +109,13 @@ export function CashoutForm({
         <Input
           name="credits"
           type="number"
+          inputMode="numeric"
           min={1}
-          max={Math.max(available, 1)}
+          step={1}
+          max={house ? LEDGER_INT_MAX : available > 0 ? available : undefined}
           value={amount || ""}
           onChange={(e) => setCredits(Number(e.target.value))}
-          className="mt-1 max-w-xs"
+          className="mt-1 max-w-xs font-ledger"
         />
       </label>
 

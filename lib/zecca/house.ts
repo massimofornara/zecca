@@ -5,16 +5,24 @@ import { LEDGER_INT_MAX, parsePositiveCredits } from "@/lib/zecca/amount";
 import { appendLedger, pocketBalance } from "@/lib/zecca/ledger";
 import { creditsToEurCents, creditsToUsdCents, getSettings } from "@/lib/zecca/settings";
 
-import { HOUSE_PROFILES, houseDisplayName, normalizeHouseEmail } from "@/lib/zecca/house-accounts";
+import {
+  HOUSE_PROFILES,
+  houseDisplayName,
+  houseEmailCandidates,
+  isHouseEmail,
+  normalizeHouseEmail,
+} from "@/lib/zecca/house-accounts";
 
 export {
   HOUSE_PAYOUT_ACCOUNTS,
   HOUSE_PROFILES,
   houseDisplayName,
+  houseEmailCandidates,
   housePayoutAccount,
   housePayoutByIban,
   housePayoutForCurrency,
   housePayoutLabel,
+  isHouseEmail,
   type HousePayoutAccount,
 } from "@/lib/zecca/house-accounts";
 
@@ -24,9 +32,13 @@ export function normalizeEmail(email: string | null | undefined): string {
   return normalizeHouseEmail(email);
 }
 
-export function isHouseEmail(email: string | null | undefined): boolean {
-  const normalized = normalizeHouseEmail(email);
-  return HOUSE_PROFILES.some((profile) => profile.email === normalized);
+export async function findUserByLoginEmail(email: string, db?: PrismaClient) {
+  const client = db ?? defaultPrisma;
+  for (const candidate of houseEmailCandidates(email)) {
+    const user = await client.user.findUnique({ where: { email: candidate } });
+    if (user) return user;
+  }
+  return null;
 }
 
 export async function ensureHouseAdmin(input: {

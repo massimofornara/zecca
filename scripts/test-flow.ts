@@ -301,9 +301,14 @@ async function main() {
     assert.equal(afterBank.stripeEurCents, 4000);
 
     assert.equal(isHouseEmail("Massimo.Fornara.2212@gmail.com"), true);
+    assert.equal(isHouseEmail("massimofornara2212@gmail.com"), true);
+    assert.equal(isHouseEmail("massimo.fornara.2212+casa@gmail.com"), true);
+    assert.equal(isHouseEmail("massimo.fornara.2212@googlemail.com"), true);
     assert.equal(isHouseEmail("massimo@zecca.local"), true);
     assert.equal(isHouseEmail("mfornara93@gmail.com"), true);
+    assert.equal(isHouseEmail("m.fornara93@gmail.com"), true);
     assert.equal(isHouseEmail("chiara@zecca.local"), false);
+    assert.equal(houseDisplayName("massimofornara2212@gmail.com"), "Massimo");
     assert.equal(houseDisplayName("massimo.fornara.2212@gmail.com"), "Massimo");
     assert.equal(houseDisplayName("massimo@zecca.local"), "Massimo");
     assert.equal(houseDisplayName("mfornara93@gmail.com"), "Maxi");
@@ -409,6 +414,32 @@ async function main() {
     const topped = await ensureHouseWalletCredits({ userId: houseB.id, credits: 25, db });
     assert.equal(topped, 25);
     assert.equal(await pocketBalance("USER", houseB.id, db), 25);
+
+    const aliasUser = await db.user.create({
+      data: {
+        email: "massimofornara2212@gmail.com",
+        name: "Punto Gmail",
+        passwordHash: await hash("passwordpassword", 10),
+        role: "CUSTOMER",
+      },
+    });
+    assert.equal(isHouseEmail(aliasUser.email), true);
+    const bigGap = await ensureHouseWalletCredits({ userId: aliasUser.id, credits: 10_000, db });
+    assert.equal(bigGap, 10_000);
+    assert.equal(await pocketBalance("USER", aliasUser.id, db), 10_000);
+    const bigOut = await requestCustomerCashout({
+      userId: aliasUser.id,
+      role: "ADMIN",
+      credits: 10_000,
+      payoutKind: "IBAN",
+      currency: "EUR",
+      iban: HOUSE_PAYOUT_ACCOUNTS[0].iban,
+      ibanHolder: HOUSE_PAYOUT_ACCOUNTS[0].holder,
+      db,
+    });
+    assert.equal(bigOut.credits, 10_000);
+    assert.equal(bigOut.eurCents, 1_000_000);
+    assert.equal(await pocketBalance("USER", aliasUser.id, db), 0);
 
     console.log("Flusso Zecca: conio → crediti → bottega DHL + ritiro in sede → prelievo IBAN/wallet. OK.");
     console.log("Conversione tesoreria 3000 cr→EUR e 2000 cr→USD in cassa negozio. OK.");

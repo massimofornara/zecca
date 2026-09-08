@@ -10,9 +10,45 @@ export function normalizeHouseEmail(email: string | null | undefined): string {
   return (email ?? "").toLowerCase().trim();
 }
 
-export function houseDisplayName(email: string | null | undefined): string | null {
+/**
+ * Gmail ignora punti e +tag. In produzione Massimo/Maxi restano casa
+ * anche se l’account è scritto senza punti o con un alias.
+ */
+export function emailIdentity(email: string | null | undefined): string {
   const normalized = normalizeHouseEmail(email);
-  return HOUSE_PROFILES.find((profile) => profile.email === normalized)?.name ?? null;
+  const at = normalized.lastIndexOf("@");
+  if (at < 1) return normalized;
+  const local = normalized.slice(0, at);
+  const domain = normalized.slice(at + 1);
+  if (domain === "gmail.com" || domain === "googlemail.com") {
+    const bare = local.split("+")[0]?.replace(/\./g, "") ?? "";
+    return `${bare}@gmail.com`;
+  }
+  return normalized;
+}
+
+export function isHouseEmail(email: string | null | undefined): boolean {
+  const identity = emailIdentity(email);
+  if (!identity) return false;
+  return HOUSE_PROFILES.some((profile) => emailIdentity(profile.email) === identity);
+}
+
+export function houseDisplayName(email: string | null | undefined): string | null {
+  const identity = emailIdentity(email);
+  return HOUSE_PROFILES.find((profile) => emailIdentity(profile.email) === identity)?.name ?? null;
+}
+
+/** Varianti con cui l’utente può essersi iscritto o accedere. */
+export function houseEmailCandidates(email: string | null | undefined): string[] {
+  const normalized = normalizeHouseEmail(email);
+  if (!normalized) return [];
+  const found = new Set<string>([normalized, emailIdentity(normalized)]);
+  for (const profile of HOUSE_PROFILES) {
+    if (emailIdentity(profile.email) === emailIdentity(normalized)) {
+      found.add(profile.email);
+    }
+  }
+  return [...found];
 }
 
 export type HousePayoutAccount = {
