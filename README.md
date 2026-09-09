@@ -130,6 +130,8 @@ Su Vercel il SQLite in `/tmp` è per istanza. Senza `DATABASE_URL` Postgres il l
 
 Analisi della monetizzazione interna, on/off-ramp e rischi di conio scoperto: [`docs/architettura-monetizzazione.md`](docs/architettura-monetizzazione.md). Pipeline esecutiva mint / liquidity / Wise / SEPA: [`docs/pipeline-settlement.md`](docs/pipeline-settlement.md). Check provider: `npm run check:settlement`.
 
+Deploy on-chain di `ZeccaToken` (solo se il signer ha gas; **non** inventa `tx_hash`): `npm run token:balances` poi `ZECCA_TOKEN_CHAIN_ID=1 npm run token:deploy`. Il constructor assegna `DEFAULT_ADMIN_ROLE` e `MINTER_ROLE` all’admin KMS/sealed. Senza ETH/BNB sul firmatario lo script esce con `NO_GAS`. Gli euro su UniCredit restano `pain.001` finché non c’è `ZECCA_SEPA_GATEWAY_*` o un conto ordinante `ZECCA_SEPA_DEBTOR_IBAN`.
+
 ## Libro mastro
 
 Ogni movimento è una riga: `MINT`, `HOUSE_GRANT`, `PURCHASE_CREDITS`, `SPEND_ON_ORDER`, `CASHOUT_REQUEST`, `CASHOUT_PAID`, `CASHOUT_REJECTED`, `TREASURY_CASHOUT`, `TREASURY_CONVERT_TO_EUR`, `TREASURY_CONVERT_TO_USD`, `TREASURY_CONVERT_TO_CHF`, `TREASURY_CONVERT_TO_CRYPTO`, `TREASURY_CRYPTO_WITHDRAW`, `RATE_CHANGE`. Tesoreria crediti, casse fiat e wallet interni crypto si calcolano da lì.

@@ -15,7 +15,9 @@
     "test:flow": "tsx scripts/test-flow.ts",
     "withdraw:50k": "tsx scripts/run-50k-withdrawals.ts",
     "check:live": "tsx scripts/check-live.ts",
-    "check:settlement": "tsx scripts/check-settlement-providers.ts"
+    "check:settlement": "tsx scripts/check-settlement-providers.ts",
+    "token:balances": "tsx scripts/print-signer-balances.ts",
+    "token:deploy": "tsx scripts/deploy-and-mint-zecca-token.ts"
   },
   "dependencies": {
     "@base-ui/react": "^1.7.0",
