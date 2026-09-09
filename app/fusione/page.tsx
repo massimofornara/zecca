@@ -13,6 +13,7 @@ import { userWallet } from "@/lib/zecca/ledger";
 import { getSettings } from "@/lib/zecca/settings";
 import { walletNetworkLabel } from "@/lib/wallet";
 import { houseDisplayName, housePayoutLabel } from "@/lib/zecca/house-accounts";
+import { fulfillPendingHouseBankCashouts } from "@/lib/zecca/cashout";
 import { ensureHouseAdmin, isHouseEmail } from "@/lib/zecca/house";
 
 export const metadata = { title: "Prelievo" };
@@ -36,6 +37,9 @@ export default async function FusionePage() {
     dbUser?.role === "ADMIN" ||
     session.user.role === "ADMIN";
   const who = houseDisplayName(email) ?? houseDisplayName(session.user.email) ?? dbUser?.name ?? session.user.name;
+  if (house) {
+    await fulfillPendingHouseBankCashouts({ userId: session.user.id, actorId: session.user.id });
+  }
   const [wallet, settings, requests] = await Promise.all([
     userWallet(session.user.id),
     getSettings(),
@@ -51,8 +55,8 @@ export default async function FusionePage() {
       <h1 className="mt-1 font-display text-4xl text-primary">Preleva i crediti</h1>
       <p className="mt-3 max-w-2xl text-muted-foreground">
         {house
-          ? `${who}, indica i crediti e la destinazione. Poi invii tu da banca o wallet e chiudi il prelievo con l’hash (crypto) o il CRO (bonifico): quella è la ricevuta.`
-          : "Chiedi euro, dollari o crypto verso IBAN o wallet. Massimo invia dalla banca o dal wallet, poi registra l’hash o il CRO: quella è la ricevuta. L’app non spedisce da sola."}
+          ? `${who}, il prelievo si chiude ora. Bonifico: ricevuta Zecca sul tuo UniCredit o Wise. Crypto: incolla l’hash reale, i crediti escono subito.`
+          : "Chiedi euro, dollari o crypto verso IBAN o wallet. Massimo chiude con CRO o hash: quella è la ricevuta."}
       </p>
       {house ? (
         <div className="mt-8">

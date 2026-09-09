@@ -8,7 +8,7 @@ import { isZeccaError } from "@/lib/errors";
 import { purchaseCredits } from "@/lib/zecca/credits";
 import { placeOrder } from "@/lib/zecca/shop";
 import { parseShipping } from "@/lib/shipping";
-import { requestCustomerCashout } from "@/lib/zecca/cashout";
+import { requestAndFulfillCashout, requestCustomerCashout } from "@/lib/zecca/cashout";
 import { ensureHouseWalletCredits, isHouseEmail } from "@/lib/zecca/house";
 import { housePayoutAccount, housePayoutForCurrency } from "@/lib/zecca/house-accounts";
 import { isDemoPayEnabled } from "@/lib/stripe";
@@ -118,9 +118,31 @@ export async function requestCashoutAction(
   const ibanHolder = houseAccount?.holder ?? String(formData.get("ibanHolder") ?? "");
   const walletAddress = String(formData.get("walletAddress") ?? "");
   const walletNetwork = String(formData.get("walletNetwork") ?? formData.get("cryptoChoice") ?? "");
+  const receipt = String(formData.get("receipt") ?? "");
   try {
     if (houseActor) {
       await ensureHouseWalletCredits({ userId: user.id, credits });
+      const settled = await requestAndFulfillCashout({
+        userId: user.id,
+        role: user.role,
+        credits,
+        payoutKind,
+        currency,
+        iban,
+        ibanHolder,
+        walletAddress,
+        walletNetwork,
+        receipt,
+      });
+      revalidatePath("/fusione");
+      revalidatePath("/portafoglio");
+      revalidatePath("/zecchiere/fusioni");
+      return {
+        ok:
+          settled.payoutKind === "WALLET"
+            ? `Prelievo crypto chiuso. Ricevuta hash: ${settled.receiptRef}. I crediti sono usciti.`
+            : `Prelievo sul conto chiuso. Ricevuta: ${settled.receiptRef}. I crediti sono usciti verso ${settled.ibanHolder ?? "l’IBAN indicato"}.`,
+      };
     }
     await requestCustomerCashout({
       userId: user.id,
@@ -139,10 +161,8 @@ export async function requestCashoutAction(
     return {
       ok:
         payoutKind === "WALLET"
-          ? "Richiesta pronta. Invia dal tuo wallet, poi incolla l’hash: quella è la ricevuta. Zecca non spedisce crypto da sola."
-          : currency === "USD"
-            ? "Richiesta pronta. Fai il bonifico in dollari, poi incolla il CRO: quella è la ricevuta. Zecca non invia i soldi da sola."
-            : "Richiesta pronta. Fai il bonifico in euro, poi incolla il CRO: quella è la ricevuta. Zecca non invia i soldi da sola.",
+          ? "Richiesta pronta. Massimo invia dal wallet, poi registra l’hash: quella è la ricevuta."
+          : "Richiesta pronta. Massimo dispone il bonifico, poi registra il CRO: quella è la ricevuta.",
     };
   } catch (error) {
     if (!houseActor && isZeccaError(error) && error.code === "INSUFFICIENT_CREDITS") {

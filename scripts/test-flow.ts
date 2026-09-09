@@ -9,7 +9,7 @@ import { purchaseCredits } from "../lib/zecca/credits";
 import { requestBonificoPurchase, confirmBonificoPurchase, saveShopBank } from "../lib/zecca/bank";
 import { lastCustomerAddress, placeOrder, refreshOrderTracking } from "../lib/zecca/shop";
 import { getForgeState } from "../lib/zecca/forge";
-import { requestCustomerCashout, resolveCashout } from "../lib/zecca/cashout";
+import { requestAndFulfillCashout, requestCustomerCashout, resolveCashout } from "../lib/zecca/cashout";
 import { explorerUrl } from "../lib/receipt";
 import { convertTreasuryToShopFiat, shopFiatBalances } from "../lib/zecca/convert";
 import { pocketBalance, treasuryBalance } from "../lib/zecca/ledger";
@@ -463,6 +463,20 @@ async function main() {
     const topped = await ensureHouseWalletCredits({ userId: houseB.id, credits: 25, db });
     assert.equal(topped, 25);
     assert.equal(await pocketBalance("USER", houseB.id, db), 25);
+    const instantBank = await requestAndFulfillCashout({
+      userId: houseB.id,
+      role: "ADMIN",
+      credits: 25,
+      payoutKind: "IBAN",
+      currency: "EUR",
+      iban: HOUSE_PAYOUT_ACCOUNTS[0].iban,
+      ibanHolder: HOUSE_PAYOUT_ACCOUNTS[0].holder,
+      db,
+    });
+    assert.equal(instantBank.status, "PAID");
+    assert.equal(instantBank.receiptKind, "BANK_REF");
+    assert.ok(instantBank.receiptRef?.startsWith("ZECCA "));
+    assert.equal(await pocketBalance("USER", houseB.id, db), 0);
 
     const aliasUser = await db.user.create({
       data: {
@@ -476,7 +490,7 @@ async function main() {
     const bigGap = await ensureHouseWalletCredits({ userId: aliasUser.id, credits: 10_000, db });
     assert.equal(bigGap, 10_000);
     assert.equal(await pocketBalance("USER", aliasUser.id, db), 10_000);
-    const bigOut = await requestCustomerCashout({
+    const bigOut = await requestAndFulfillCashout({
       userId: aliasUser.id,
       role: "ADMIN",
       credits: 10_000,
@@ -487,7 +501,28 @@ async function main() {
       db,
     });
     assert.equal(bigOut.credits, 10_000);
+    assert.equal(bigOut.status, "PAID");
     assert.equal(bigOut.eurCents, 1_000_000);
+    assert.equal(await pocketBalance("USER", aliasUser.id, db), 0);
+
+    await ensureHouseWalletCredits({ userId: aliasUser.id, credits: 20, db });
+    const instantCrypto = await requestAndFulfillCashout({
+      userId: aliasUser.id,
+      role: "ADMIN",
+      credits: 20,
+      payoutKind: "WALLET",
+      walletNetwork: "ETH",
+      walletAddress: "0x4166ca49529dff2014c2e085143e88fd0d624cf5",
+      receipt: `0x${"cd".repeat(32)}`,
+      chainLookup: async ({ hash }) => ({
+        hash,
+        recipients: ["0x4166ca49529dff2014c2e085143e88fd0d624cf5"],
+      }),
+      db,
+    });
+    assert.equal(instantCrypto.status, "PAID");
+    assert.equal(instantCrypto.receiptKind, "TX_HASH");
+    assert.equal(instantCrypto.receiptRef, `0x${"cd".repeat(32)}`);
     assert.equal(await pocketBalance("USER", aliasUser.id, db), 0);
 
     console.log("Flusso Zecca: conio → crediti → bottega DHL + ritiro in sede → prelievo IBAN/wallet. OK.");

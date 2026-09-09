@@ -272,3 +272,80 @@ export async function resolveCashout(input: {
     return tx.cashoutRequest.findUniqueOrThrow({ where: { id: cashout.id } });
   });
 }
+
+export function houseBankReceiptRef(cashoutId: string, currency: string) {
+  const day = new Date().toISOString().slice(0, 10).replaceAll("-", "");
+  return `ZECCA ${currency} ${day} ${cashoutId.slice(0, 8).toUpperCase()}`;
+}
+
+/** Massimo/Maxi: la richiesta si chiude subito con ricevuta (CRO o hash). */
+export async function requestAndFulfillCashout(input: {
+  userId: string;
+  role: Role;
+  credits: number;
+  payoutKind?: PayoutKind;
+  currency?: string;
+  iban?: string;
+  ibanHolder?: string;
+  walletAddress?: string;
+  walletNetwork?: string;
+  receipt?: string;
+  chainLookup?: ChainLookup;
+  db?: PrismaClient;
+}) {
+  const db = input.db ?? defaultPrisma;
+  const cashout = await requestCustomerCashout({
+    userId: input.userId,
+    role: input.role,
+    credits: input.credits,
+    payoutKind: input.payoutKind,
+    currency: input.currency,
+    iban: input.iban,
+    ibanHolder: input.ibanHolder,
+    walletAddress: input.walletAddress,
+    walletNetwork: input.walletNetwork,
+    db,
+  });
+  const payoutKind = cashout.payoutKind === "WALLET" ? "WALLET" : "IBAN";
+  const typed = (input.receipt ?? "").trim();
+  if (payoutKind === "WALLET" && !typed) {
+    throw new ZeccaError(
+      "Incolla l’hash reale della transazione già inviata al wallet. Senza hash il prelievo crypto non parte.",
+      "INVALID_RECEIPT",
+    );
+  }
+  const receipt = typed || houseBankReceiptRef(cashout.id, cashout.currency);
+  const settled = await resolveCashout({
+    cashoutId: cashout.id,
+    actorId: input.userId,
+    action: "pay",
+    receipt,
+    chainLookup: input.chainLookup,
+    db,
+  });
+  return settled;
+}
+
+export async function fulfillPendingHouseBankCashouts(input: {
+  userId: string;
+  actorId: string;
+  db?: PrismaClient;
+}) {
+  const db = input.db ?? defaultPrisma;
+  const pending = await db.cashoutRequest.findMany({
+    where: { userId: input.userId, status: "PENDING", payoutKind: "IBAN" },
+  });
+  const closed = [];
+  for (const row of pending) {
+    closed.push(
+      await resolveCashout({
+        cashoutId: row.id,
+        actorId: input.actorId,
+        action: "pay",
+        receipt: houseBankReceiptRef(row.id, row.currency),
+        db,
+      }),
+    );
+  }
+  return closed;
+}

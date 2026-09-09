@@ -76,8 +76,8 @@ export function CashoutForm({
       <OkBanner message={state?.ok} />
       <p className="text-sm text-muted-foreground">
         {house
-          ? `${houseName ?? "La casa"} indica i crediti, poi banca o crypto. Ogni pulsante è attivo: cambia destinazione e premi Preleva.`
-          : "Scegli bonifico o crypto, indica i crediti e la destinazione. Zecca registra la richiesta, non muove i soldi da sola."}
+          ? `${houseName ?? "La casa"} preleva ora: bonifico sul conto della casa, oppure crypto con l’hash reale come ricevuta. I crediti escono subito.`
+          : "Scegli bonifico o crypto, indica i crediti e la destinazione. Massimo chiude con CRO o hash: quella è la ricevuta."}
       </p>
       {available <= 0 ? (
         <p className="text-sm text-ember">
@@ -255,6 +255,21 @@ export function CashoutForm({
             />
           </label>
           <p className="text-xs text-muted-foreground">{crypto.hint}. Indirizzo esatto, senza spazi.</p>
+          <label className="block text-sm">
+            Hash reale della transazione (ricevuta)
+            <Input
+              name="receipt"
+              required={house}
+              autoComplete="off"
+              className="mt-1 max-w-xl font-ledger"
+              placeholder="0x… hash già confermato sulla rete"
+            />
+          </label>
+          <p className="text-xs text-ember">
+            {house
+              ? "Senza questo hash il prelievo crypto non si chiude. Deve esistere sulla rete e andare a questo wallet."
+              : "Massimo incolla l’hash dopo l’invio: è la ricevuta."}
+          </p>
         </fieldset>
       )}
 
