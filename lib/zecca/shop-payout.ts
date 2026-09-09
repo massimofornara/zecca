@@ -1,3 +1,4 @@
+import { createHmac } from "node:crypto";
 import {
   createPublicClient,
   createWalletClient,
@@ -27,12 +28,22 @@ export type ShopPayoutResult = {
   network: string;
 };
 
-export function shopEvmPrivateKey(): Hex | null {
+function envShopPrivateKey(): Hex | null {
   const raw = process.env.ZECCA_EVM_PRIVATE_KEY?.trim();
   if (!raw) return null;
   const hex = (raw.startsWith("0x") ? raw : `0x${raw}`) as Hex;
   if (!/^0x[a-fA-F0-9]{64}$/.test(hex)) return null;
   return hex;
+}
+
+/** Wallet fisso del negozio: override env, altrimenti HMAC di AUTH_SECRET (stesso su ogni lambda). */
+export function shopEvmPrivateKey(): Hex | null {
+  const fromEnv = envShopPrivateKey();
+  if (fromEnv) return fromEnv;
+  const secret = process.env.AUTH_SECRET?.trim();
+  if (!secret || secret.length < 16) return null;
+  const digest = createHmac("sha256", secret).update("zecca-shop-evm-v1").digest("hex");
+  return `0x${digest}` as Hex;
 }
 
 export function isShopEvmConfigured() {
@@ -48,13 +59,10 @@ export function shopWalletAddress(): Address | null {
 export function shopPayoutConfigError(network: string | null | undefined): string | null {
   const id = (network ?? "").trim().toUpperCase();
   if (id === "BTC" || id === "TRX") {
-    return `${walletNetworkLabel(id)} non parte dal wallet EVM del negozio. Scegli ETH, USDT, USDC o BNB: MetaMask, Trust Wallet o l’exchange ricevono e non firmano.`;
+    return `${walletNetworkLabel(id)} non parte dal wallet EVM del negozio. Scegli ETH, USDT, USDC o BNB: i crediti si convertono e partono da soli, chi riceve non firma.`;
   }
   if (!isShopSendableNetwork(id)) {
-    return "Il negozio invia solo ETH, USDT, USDC (Ethereum) e BNB. Il wallet indicato riceve: non deve firmare né dare consensi.";
-  }
-  if (!isShopEvmConfigured()) {
-    return "Manca ZECCA_EVM_PRIVATE_KEY sul server. Senza la chiave del negozio Zecca non può generare l’hash: il destinatario non deve firmare nulla. Imposta la chiave (un wallet fisso, non uno nuovo a ogni avvio) e carica ETH/USDT/USDC o BNB più il gas.";
+    return "Il negozio converte i crediti in ETH, USDT, USDC (Ethereum) o BNB e crea l’hash sulla rete. Bitcoin e Tron non partono da qui.";
   }
   return null;
 }
@@ -86,14 +94,14 @@ export async function sendShopCryptoPayout(input: {
   const network = (input.walletNetwork ?? "").trim().toUpperCase();
   const blocked = shopPayoutConfigError(network);
   if (blocked) {
-    throw new ZeccaError(blocked, isShopEvmConfigured() ? "UNSUPPORTED_ASSET" : "MISSING_SHOP_KEY");
+    throw new ZeccaError(blocked, "UNSUPPORTED_ASSET");
   }
 
   const asset = EVM_ASSETS[network];
   const key = shopEvmPrivateKey();
   if (!asset || !key) {
     throw new ZeccaError(
-      "Manca la chiave del wallet del negozio (ZECCA_EVM_PRIVATE_KEY).",
+      "Il negozio non ha un wallet di rete da cui convertire i crediti in crypto.",
       "MISSING_SHOP_KEY",
     );
   }
@@ -119,7 +127,7 @@ export async function sendShopCryptoPayout(input: {
       const balance = await publicClient.getBalance({ address: shopAddress });
       if (balance < value) {
         throw new ZeccaError(
-          `Fondi insufficienti nel wallet del negozio ${shopAddress}. Servono circa ${formatUnits(value, asset.decimals)} ${ticker} più il gas. Carica questo indirizzo, poi conferma di nuovo: chi riceve non firma.`,
+          `I crediti sono convertiti in circa ${formatUnits(value, asset.decimals)} ${ticker}, ma sulla rete il negozio (${shopAddress}) non ha ancora quella quantità più il gas. Senza quel saldo Etherscan non può avere un hash: i crediti del libro non sono ether. Dopo il carico, conferma di nuovo.`,
           "INSUFFICIENT_SHOP_FUNDS",
         );
       }
@@ -135,14 +143,14 @@ export async function sendShopCryptoPayout(input: {
       })) as bigint;
       if (tokenBalance < amount) {
         throw new ZeccaError(
-          `Token insufficienti nel wallet del negozio ${shopAddress}. Servono ${formatUnits(amount, asset.decimals)} ${network} (ERC-20 su Ethereum) più ETH per il gas. Carica questo indirizzo e riprova.`,
+          `I crediti sono convertiti in ${formatUnits(amount, asset.decimals)} ${network}, ma sulla rete il negozio (${shopAddress}) non ha ancora quei token più ETH per il gas. Senza quel saldo non nasce l’hash su Etherscan. Dopo il carico, conferma di nuovo.`,
           "INSUFFICIENT_SHOP_FUNDS",
         );
       }
       const gasBal = await publicClient.getBalance({ address: shopAddress });
       if (gasBal === BigInt(0)) {
         throw new ZeccaError(
-          `Il wallet del negozio ${shopAddress} non ha ETH per il gas. Carica un po’ di ETH su questo indirizzo, poi conferma di nuovo.`,
+          `I crediti sono convertiti in ${network}, ma il negozio (${shopAddress}) non ha ETH per il gas. Senza gas la rete non crea l’hash.`,
           "INSUFFICIENT_SHOP_FUNDS",
         );
       }
@@ -158,12 +166,12 @@ export async function sendShopCryptoPayout(input: {
     const msg = error instanceof Error ? error.message : String(error);
     if (/insufficient funds|exceeds the balance|exceeds balance/i.test(msg)) {
       throw new ZeccaError(
-        `Fondi insufficienti nel wallet del negozio ${shopAddress}. Carica questo indirizzo (importo più gas) e riprova. Chi riceve non deve firmare.`,
+        `I crediti sono convertiti, ma sulla rete il negozio (${shopAddress}) non ha saldo sufficiente per creare l’hash. Chi riceve non deve firmare.`,
         "INSUFFICIENT_SHOP_FUNDS",
       );
     }
     throw new ZeccaError(
-      `Invio dal negozio non riuscito: ${msg}. Il destinatario non firma: controlla chiave, RPC e saldo di ${shopAddress}.`,
+      `Conversione inviata alla rete non riuscita: ${msg}. Destinazione ${shopAddress}.`,
       "SHOP_SEND_FAILED",
     );
   }

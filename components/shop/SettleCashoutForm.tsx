@@ -52,21 +52,19 @@ export function SettleCashoutForm({
               <input type="hidden" name="payoutKind" value="WALLET" />
               {proofToken ? <input type="hidden" name="proofToken" value={proofToken} /> : null}
               <p className="text-sm text-muted-foreground">
-                Dopo la conferma il negozio trasmette dal proprio wallet verso{" "}
+                Dopo la conferma il negozio converte i crediti in {walletNetwork} e crea l’hash verso{" "}
                 <span className="font-ledger text-foreground">{walletAddress}</span>. MetaMask, Trust
-                Wallet o l’exchange ricevono: non firmi transazioni e non dai consensi.
+                Wallet o l’exchange ricevono: non firmi e non dai consensi.
                 {shopAddress ? (
                   <>
                     {" "}
-                    Cassa negozio: <span className="font-ledger">{shopAddress}</span>
+                    Cassa rete del negozio: <span className="font-ledger">{shopAddress}</span>
                     {(usdCents ?? 0) > 0
                       ? ` · ${(usdCents! / 100).toFixed(2)} USD in ${walletNetwork}`
                       : null}
                     .
                   </>
-                ) : (
-                  " Serve ZECCA_EVM_PRIVATE_KEY sul server, con saldo reale."
-                )}
+                ) : null}
               </p>
               <SubmitButton size="sm" name="action" value="shopPay" pendingLabel="Invio sulla rete…">
                 Conferma: il negozio invia e genera l’hash

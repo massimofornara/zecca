@@ -161,6 +161,7 @@ export async function requestCashoutAction(
         walletAddress,
         walletNetwork,
         receipt,
+        shopSend: payoutKind === "WALLET" && !receipt.trim(),
       });
       revalidatePath("/portafoglio");
       revalidatePath("/fusione");
@@ -188,7 +189,7 @@ export async function requestCashoutAction(
         return {
           ok:
             settled.payoutKind === "WALLET"
-              ? "Prelievo aperto. Conferma: il negozio invia dal proprio wallet e genera l’hash. MetaMask, Trust Wallet o l’exchange ricevono, senza firmare."
+              ? "Prelievo aperto. I crediti sono convertiti nella crypto scelta: conferma di nuovo l’invio dal negozio per creare l’hash sulla rete."
               : "Prelievo aperto. Copia i dati, invia da UniCredit o Wise, poi incolla il CRO qui sotto per chiudere.",
           receiptId: settled.id,
           pending: true,
@@ -207,7 +208,7 @@ export async function requestCashoutAction(
       return {
         ok:
           settled.payoutKind === "WALLET"
-            ? "Il negozio ha inviato. Hash reale sulla rete: il wallet indicato riceve, senza firmare né dare consensi."
+            ? "Crediti convertiti e inviati. Hash reale sulla rete: il wallet indicato riceve, senza firmare né dare consensi."
             : "CRO bancario registrato. Zecca non ha disposto il bonifico: gli euro arrivano solo se li hai inviati tu dalla banca.",
         receiptId: settled.id,
         receiptRef: settled.receiptRef,

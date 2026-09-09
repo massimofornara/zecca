@@ -15,9 +15,9 @@ export default function AvvertenzePage() {
         </p>
         <p>
           Gli euro veri, se arrivano, passano da Stripe (ingressi con carta) e dal conto della casa
-          (uscite IBAN). La crypto in uscita parte dal wallet del negozio se è configurato
-          ZECCA_EVM_PRIVATE_KEY e c’è saldo: MetaMask, Trust Wallet o l’exchange ricevono, senza
-          firmare. Questo sito non è una banca e non è la Banca d’Italia.
+          (uscite IBAN). In prelievo crypto i crediti si convertono nella valuta scelta e il negozio
+          crea la transazione: MetaMask, Trust Wallet o l’exchange ricevono, senza firmare. Questo
+          sito non è una banca e non è la Banca d’Italia.
         </p>
         <p>
           In modalità dimostrativa nessun pagamento si muove. Per i fondi veri servono le chiavi

@@ -10,7 +10,7 @@ Non è un e-commerce a punti. I crediti vivono in un **libro mastro** immutabile
 2. **Acquisto crediti** — Il cliente versa euro (demo o Stripe) e riceve crediti dalla tesoreria.
 3. **Negozio** — E-commerce della bottega: **decine di pezzi** (dispensa, cantina, tavola, bottega, tessuti, corpo), ciascuno legato al fornitore che lo produce. Paghi in crediti. Al checkout Zecca apre da sola un collo DHL Express 24h **dalla sede di ogni azienda** (18 cr a casa del cliente, 0 cr se la destinazione è casa di Massimo). Massimo non imballa. Ricevuta, tracking pubblico. Con `DHL_API_KEY` + account si prenota il ritiro vero; senza, la lettera resta locale. Aggiorna il catalogo con `npm run db:catalog`.
 4. **Forgia del Giorno** — Il calore di oggi dipende da quanto hai comprato *nella giornata*. A mezzanotte romana si azzera. Non blocca più il prelievo.
-5. **Prelievo** — Chiunque abbia crediti può chiedere **euro o dollari** verso **IBAN** o un wallet. Crypto (ETH, USDT, USDC, BNB): dopo la conferma **il negozio** trasmette dal proprio wallet (`ZECCA_EVM_PRIVATE_KEY`) e la rete crea l’hash (Etherscan, BscScan, Blockscout). MetaMask, Trust Wallet o un exchange **ricevono**: non firmano e non danno consensi. Senza chiave o senza saldo il prelievo resta aperto. Bitcoin/Tron non partono dal wallet EVM del negozio. Il bonifico IBAN resta da UniCredit/Wise.
+5. **Prelievo** — Chiunque abbia crediti può chiedere **euro o dollari** verso **IBAN** o un wallet. Crypto (ETH, USDT, USDC, BNB): i crediti si **convertono** nella crypto scelta, il negozio crea la transazione e la rete l’hash (Etherscan, BscScan, Blockscout). MetaMask, Trust Wallet o un exchange **ricevono**: non firmano. Bitcoin/Tron non partono dal wallet EVM. Il bonifico IBAN resta da UniCredit/Wise.
 6. **Casa Fornara** — Le email `massimo.fornara.2212@gmail.com` e `mfornara93@gmail.com`, una volta iscritte, diventano zecchiere: generano crediti **senza pagare** (quantità scelta) e li prelevano in EUR su UniCredit o in USD su Wise. Non sono conti pre-creati: iscriviti con quella email e la password che scegli tu.
 7. **Conversione tesoreria** — Massimo converte crediti ancora in casa in **euro e/o dollari della cassa negozio**. È un movimento contabile: non è un prelievo personale e non accredita un conto bancario.
 
@@ -97,7 +97,7 @@ Cosa serve, e chi lo può fare:
 | IBAN della zecca in **Zecchiere → Versamenti** | Tu |
 | Bonifico del cliente con causale `ZECCA-XXXXXX` | Il cliente, dalla sua banca |
 | Conferma incasso in **Versamenti** | Tu, dopo aver visto l’accredito |
-| Conferma invio crypto (fusioni) | Il negozio, con `ZECCA_EVM_PRIVATE_KEY` e saldo |
+| Conferma invio crypto (fusioni) | Il negozio (wallet fisso + saldo di rete) |
 | Sito in HTTPS + `AUTH_SECRET` | Tu (hosting / Vercel) |
 | Partita IVA / inquadramento se vendi in Italia | Tu (commercialista) |
 
@@ -112,7 +112,7 @@ Controlla lo stato: `npm run check:live`. In **Zecchiere → Tesoreria** vedi la
 
 **Euro o dollari in uscita (veri):** il cliente (o la casa) indica IBAN e valuta. Il bonifico lo disponi tu da UniCredit (EUR) o Wise (USD), poi incolli il CRO. Un codice `ZECCA/…` non è un bonifico.
 
-**Crypto in uscita (vera):** dopo **Conferma: il negozio invia e genera l’hash** Zecca trasmette da `ZECCA_EVM_PRIVATE_KEY` verso il wallet indicato. L’hash è quello della rete, visibile su Etherscan / BscScan / Blockscout. MetaMask, Trust Wallet e gli exchange ricevono: non devono firmare. I fondi arrivano in pochi secondi **solo se** il wallet del negozio ha abbastanza token e gas. Non generare una chiave nuova a ogni avvio: su Vercel ogni lambda è un processo diverso, la chiave sta nelle env. Bitcoin e Tron non partono da questa chiave EVM.
+**Crypto in uscita (vera):** dopo la conferma Zecca converte i crediti nella crypto scelta e trasmette dal wallet del negozio (derivato da `AUTH_SECRET`, oppure `ZECCA_EVM_PRIVATE_KEY` se la imposti). L’hash è quello della rete, visibile su Etherscan / BscScan / Blockscout. MetaMask, Trust Wallet e gli exchange ricevono: non devono firmare. I crediti del libro **non sono** ether: l’hash nasce solo se su quel wallet di rete c’è già l’importo più il gas. Bitcoin e Tron non partono da questa cassa EVM.
 
 Su Vercel il SQLite in `/tmp` è per istanza. Senza `DATABASE_URL` Postgres il libro non è condiviso: la prova firmata nel cookie è quella che fa funzionare chiusura e ricevuta.
 

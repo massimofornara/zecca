@@ -32,17 +32,15 @@ export default async function FusioniPage() {
     <div>
       <h1 className="font-display text-4xl text-primary">Fusioni</h1>
       <p className="mt-2 text-muted-foreground">
-        Per la crypto premi <strong>Conferma: il negozio invia e genera l’hash</strong>. Parte dal
-        wallet della zecca; MetaMask, Trust Wallet o l’exchange ricevono, senza firmare. Il bonifico
-        IBAN lo disponi tu da UniCredit o Wise, poi chiudi con il CRO.
+        Per la crypto i crediti si convertono e il negozio crea l’hash (Etherscan, BscScan,
+        Blockscout). MetaMask, Trust Wallet o l’exchange ricevono, senza firmare. Il bonifico IBAN
+        lo disponi tu da UniCredit o Wise, poi chiudi con il CRO.
         {shopAddress ? (
           <>
             {" "}
-            Wallet del negozio: <span className="font-ledger">{shopAddress}</span>.
+            Cassa rete del negozio: <span className="font-ledger">{shopAddress}</span>.
           </>
-        ) : (
-          <> Manca ZECCA_EVM_PRIVATE_KEY: senza quella chiave l’invio crypto non parte.</>
-        )}
+        ) : null}
       </p>
 
       <section className="metal-frame mt-8 rounded-md bg-card p-5">

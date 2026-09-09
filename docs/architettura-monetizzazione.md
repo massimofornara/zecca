@@ -14,7 +14,7 @@ Le quattro direttrici (emissione interna, crediti d’acquisto, convertibilità,
 | Token on-chain con riserva mista / paniere | Sì, con autorizzazione | MiCA: *asset-referenced token* (ART). Riserva segregata, white paper, fondi propri. |
 | **Conio illimitato + prelievo EUR o crypto** | No | Iperemissione: passività > cassa. Insolvenza e, in UE, attività riservata senza copertura. |
 
-Zecca in questo repository è un **libro mastro chiuso** (pockets `VOID → TREASURY → USER → ESCROW → BURN`). Non è una blockchain e non è una banca. Il bonifico SEPA resta manuale. L’invio crypto EVM, se `ZECCA_EVM_PRIVATE_KEY` è impostata e il wallet è finanziato, parte dal negozio: chi riceve non firma.
+Zecca in questo repository è un **libro mastro chiuso** (pockets `VOID → TREASURY → USER → ESCROW → BURN`). Non è una blockchain e non è una banca. Il bonifico SEPA resta manuale. L’invio crypto EVM converte i crediti in un importo di rete e parte dal wallet del negozio: chi riceve non firma. L’hash su Etherscan esiste solo dopo un invio on-chain con saldo reale.
 
 ## Tre oggetti diversi (non mescolarli)
 

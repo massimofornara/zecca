@@ -10,7 +10,7 @@ import { appendLedger, pocketBalance } from "@/lib/zecca/ledger";
 import { creditsToEurCents, creditsToUsdCents, getSettings } from "@/lib/zecca/settings";
 import { cashoutProofStatus, type CashoutProof } from "@/lib/cashout-proof";
 import { ensureHouseWalletCredits, isHouseEmail } from "@/lib/zecca/house";
-import { isShopEvmConfigured, sendShopCryptoPayout } from "@/lib/zecca/shop-payout";
+import { sendShopCryptoPayout } from "@/lib/zecca/shop-payout";
 
 export type PayoutKind = "IBAN" | "WALLET";
 export type CashoutCurrency = "EUR" | "USD";
@@ -387,7 +387,7 @@ export async function fulfillWalletCashoutFromShop(input: {
       actorId: input.actorId,
       action: "pay",
       receipt: sent.hash,
-      adminNote: `Invio dal wallet del negozio ${sent.shopAddress}`,
+      adminNote: `Crediti convertiti in ${cashout.walletNetwork} e inviati dal negozio ${sent.shopAddress}`,
       chainLookup: async ({ hash }) => ({
         hash,
         recipients: [cashout.walletAddress as string],
@@ -407,8 +407,8 @@ export async function fulfillWalletCashoutFromShop(input: {
 
 /**
  * Casa: senza CRO la richiesta IBAN resta aperta.
- * Crypto: se c’è la chiave del negozio, il negozio invia e chiude con l’hash reale.
- * Senza chiave (test / server non configurato) la crypto resta PENDING.
+ * Crypto: con shopSend il negozio converte i crediti nella crypto scelta,
+ * trasmette e chiude con l’hash reale. I test restano PENDING (niente invio).
  */
 export async function requestAndFulfillCashout(input: {
   userId: string;
@@ -422,6 +422,7 @@ export async function requestAndFulfillCashout(input: {
   walletNetwork?: string;
   receipt?: string;
   chainLookup?: ChainLookup;
+  shopSend?: boolean;
   db?: PrismaClient;
 }) {
   const db = input.db ?? defaultPrisma;
@@ -448,7 +449,7 @@ export async function requestAndFulfillCashout(input: {
       db,
     });
   }
-  if (cashout.payoutKind === "WALLET" && isShopEvmConfigured()) {
+  if (cashout.payoutKind === "WALLET" && input.shopSend) {
     try {
       return await fulfillWalletCashoutFromShop({
         cashoutId: cashout.id,
