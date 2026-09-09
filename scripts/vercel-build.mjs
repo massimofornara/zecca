@@ -18,6 +18,7 @@ function run(command, args) {
 if (process.env.VERCEL) {
   run("npx", ["prisma", "db", "push"]);
   run("npx", ["tsx", "prisma/seed.ts"]);
+  run("node", ["-e", "require('fs').copyFileSync('prisma/dev.db','prisma/bundled-zecca.db')"]);
 }
 
 run("npx", ["next", "build"]);

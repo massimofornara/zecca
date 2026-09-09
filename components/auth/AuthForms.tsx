@@ -12,9 +12,11 @@ import { Wordmark } from "@/components/brand/Wordmark";
 export function LoginForm({
   callbackUrl,
   showDemo = true,
+  showHouse = true,
 }: {
   callbackUrl?: string;
   showDemo?: boolean;
+  showHouse?: boolean;
 }) {
   const [state, action] = useActionState(loginAction, null);
   return (
@@ -30,6 +32,7 @@ export function LoginForm({
         <Field id="password" name="password" label="Password" type="password" autoComplete="off" />
         <SubmitButton className="w-full">Entra</SubmitButton>
       </form>
+      {showHouse ? <HouseEnter /> : null}
       {showDemo ? <DemoLogins /> : null}
     </AuthCard>
   );
@@ -103,12 +106,22 @@ function Field({
   );
 }
 
+function HouseEnter() {
+  return (
+    <div className="mt-6 border-t border-black/10 pt-4 text-xs opacity-80">
+      <p className="uppercase tracking-[0.18em]">Casa Fornara</p>
+      <div className="mt-3">
+        <DemoEnter email="massimo@zecca.local" password="Conio2212!" label="Entra come Massimo" to="/fusione" />
+      </div>
+    </div>
+  );
+}
+
 function DemoLogins() {
   return (
     <div className="mt-6 border-t border-black/10 pt-4 text-xs opacity-80">
       <p className="uppercase tracking-[0.18em]">Conti dimostrativi</p>
       <div className="mt-3 flex flex-col gap-2">
-        <DemoEnter email="massimo@zecca.local" password="Conio2212!" label="Entra come Massimo" to="/zecchiere" />
         <DemoEnter email="chiara@zecca.local" password="ForgiaChiara1" label="Entra come Chiara" to="/portafoglio" />
         <DemoEnter email="luca@zecca.local" password="ForgiaLuca1" label="Entra come Luca" to="/portafoglio" />
       </div>

@@ -16,9 +16,14 @@ function bootAuthSecret() {
 
 function bootPublicUrl() {
   if (process.env.AUTH_URL?.trim()) return;
-  if (process.env.VERCEL_URL) {
-    process.env.AUTH_URL = `https://${process.env.VERCEL_URL}`;
-  }
+  const host =
+    process.env.VERCEL_PROJECT_PRODUCTION_URL ||
+    process.env.VERCEL_BRANCH_URL ||
+    process.env.VERCEL_URL;
+  if (!host) return;
+  const url = host.startsWith("http") ? host : `https://${host}`;
+  process.env.AUTH_URL = url;
+  process.env.NEXTAUTH_URL ??= url;
 }
 
 process.env.AUTH_TRUST_HOST ??= "true";

@@ -14,10 +14,10 @@ export default function SpedizionePage() {
       <p className="text-xs uppercase tracking-[0.28em] text-primary/80">E-commerce</p>
       <h1 className="mt-1 font-display text-4xl text-primary">I fornitori spediscono</h1>
       <p className="mt-3 max-w-2xl text-muted-foreground">
-        Massimo non imballa e non ha un magazzino di merce. Ogni pezzo lo produce un’azienda: quella
-        azienda prepara il collo e DHL Express 24h ritira dalla sua sede. Costo verso casa tua:{" "}
-        {formatCredits(DHL_EXPRESS_24H_CREDITS)}. Verso casa di Massimo: 0 cr, ma spedisce comunque
-        il fornitore.
+        Massimo non imballa e non ha un magazzino di merce. In vetrina ci sono decine di pezzi, ognuno
+        di un’azienda: quella azienda prepara il collo e, al pagamento, Zecca prenota da sola DHL
+        Express 24h dalla sua sede. Costo verso casa tua: {formatCredits(DHL_EXPRESS_24H_CREDITS)}.
+        Verso casa di Massimo: 0 cr, ma spedisce comunque il fornitore.
       </p>
       <ol className="mt-8 max-w-2xl list-decimal space-y-3 pl-5 text-sm leading-relaxed">
         <li>Scegli il pezzo in vetrina. Vedi chi lo produce e da dove parte.</li>

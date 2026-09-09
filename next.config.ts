@@ -3,7 +3,7 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   allowedDevOrigins: ["127.0.0.1"],
   outputFileTracingIncludes: {
-    "/**": ["./prisma/dev.db", "./prisma/schema.prisma"],
+    "/**": ["./prisma/bundled-zecca.db", "./prisma/dev.db", "./prisma/schema.prisma"],
   },
 };
 

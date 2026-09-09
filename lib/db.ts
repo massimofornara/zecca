@@ -1,6 +1,24 @@
-import { copyFileSync, existsSync } from "node:fs";
+import { copyFileSync, existsSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { Prisma, PrismaClient } from "@prisma/client";
+
+function bundledDatabaseCandidates() {
+  return [
+    join(process.cwd(), "prisma", "bundled-zecca.db"),
+    join(process.cwd(), "prisma", "dev.db"),
+  ];
+}
+
+function installBundledDatabase() {
+  const bundled = bundledDatabaseCandidates().find(
+    (path) => existsSync(path) && statSync(path).size > 8_000,
+  );
+  if (!bundled) return;
+  const dest = "/tmp/zecca.db";
+  const destBytes = existsSync(dest) ? statSync(dest).size : 0;
+  if (destBytes > 8_000) return;
+  copyFileSync(bundled, dest);
+}
 
 function resolveDatabaseUrl() {
   const configured = process.env.DATABASE_URL?.trim();
@@ -11,12 +29,8 @@ function resolveDatabaseUrl() {
     return configured;
   }
   if (process.env.VERCEL) {
-    const dest = "/tmp/zecca.db";
-    const bundled = join(process.cwd(), "prisma", "dev.db");
-    if (existsSync(bundled) && !existsSync(dest)) {
-      copyFileSync(bundled, dest);
-    }
-    return `file:${dest}`;
+    installBundledDatabase();
+    return "file:/tmp/zecca.db";
   }
   return configured || "file:./dev.db";
 }

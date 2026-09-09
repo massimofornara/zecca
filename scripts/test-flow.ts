@@ -17,6 +17,8 @@ import { getReserveReport } from "../lib/zecca/reserves";
 import { DEFAULT_SETTINGS } from "../lib/zecca/settings";
 import { ensureHouseWalletCredits, grantHouseCredits, houseDisplayName, HOUSE_PAYOUT_ACCOUNTS, isHouseEmail } from "../lib/zecca/house";
 import { isValidIban } from "../lib/iban";
+import { CATALOG_SEED, catalogProductFields, SHOP_CATEGORIES } from "../lib/catalog";
+import { attachCatalogSuppliers, SUPPLIER_SEED } from "../lib/suppliers";
 
 const dbPath = path.join(process.cwd(), "prisma", "test.db");
 const dbUrl = "file:./test.db";
@@ -172,6 +174,62 @@ async function main() {
     const stillCustomerAddress = await lastCustomerAddress(customer.id, db);
     assert.equal(stillCustomerAddress?.shipCity, "Genova");
 
+    const supplierSlugs = new Set<string>(SUPPLIER_SEED.map((supplier) => supplier.slug));
+    const catalogSlugs = new Set<string>();
+    assert.ok(CATALOG_SEED.length >= 36, "la vetrina deve avere decine di pezzi");
+    assert.equal(SHOP_CATEGORIES.length, 6);
+    for (const product of CATALOG_SEED) {
+      assert.ok(supplierSlugs.has(product.supplierSlug), `${product.slug} senza fornitore`);
+      assert.ok(!catalogSlugs.has(product.slug), `slug doppio ${product.slug}`);
+      catalogSlugs.add(product.slug);
+      assert.ok(product.priceCredits > 0);
+      assert.ok(product.stock > 0);
+    }
+
+    const catalogSuppliers = await attachCatalogSuppliers(db);
+    const shopSeeds = CATALOG_SEED.filter((product) =>
+      ["sale-della-macchia", "inchiostro-di-noce", "tisana-del-crinale"].includes(product.slug),
+    );
+    const shopLines = [];
+    for (const seed of shopSeeds) {
+      const created = await db.product.upsert({
+        where: { slug: seed.slug },
+        create: {
+          ...catalogProductFields(seed),
+          active: true,
+          supplierId: catalogSuppliers.get(seed.supplierSlug)?.id,
+        },
+        update: {
+          ...catalogProductFields(seed),
+          active: true,
+          supplierId: catalogSuppliers.get(seed.supplierSlug)?.id,
+        },
+      });
+      shopLines.push({ productId: created.id, quantity: 1 });
+    }
+    await purchaseCredits({ userId: customer.id, credits: 200, method: "demo", db });
+    const shopOrder = await placeOrder({
+      userId: customer.id,
+      items: shopLines,
+      shipping: {
+        shipTo: "CUSTOMER",
+        shipName: "Chiara Test",
+        shipStreet: "Via Roma 12",
+        shipCity: "Genova",
+        shipPostal: "16121",
+        shipPhone: "+390101234567",
+      },
+      db,
+    });
+    const shopShipments = await db.shipment.findMany({ where: { orderId: shopOrder.id } });
+    assert.equal(shopShipments.length, 3);
+    assert.ok(shopShipments.every((shipment) => shipment.trackingNumber));
+    assert.ok(shopShipments.every((shipment) => shipment.supplierCity));
+    const shopCities = new Set(shopShipments.map((shipment) => shipment.supplierCity));
+    assert.ok(shopCities.has("Andora"));
+    assert.ok(shopCities.has("Noli"));
+    assert.ok(shopCities.has("Pigna"));
+
     const cashout = await requestCustomerCashout({
       userId: customer.id,
       role: "CUSTOMER",
@@ -181,7 +239,7 @@ async function main() {
       ibanHolder: "Chiara Test",
       db,
     });
-    assert.equal(await pocketBalance("USER", customer.id, db), 50);
+    assert.equal(await pocketBalance("USER", customer.id, db), 148);
     assert.equal(await pocketBalance("ESCROW", customer.id, db), 80);
 
     let badIban = false;
@@ -214,7 +272,7 @@ async function main() {
       db,
     });
     assert.equal(walletOut.payoutKind, "WALLET");
-    assert.equal(await pocketBalance("USER", customer.id, db), 30);
+    assert.equal(await pocketBalance("USER", customer.id, db), 128);
     assert.equal(await pocketBalance("ESCROW", customer.id, db), 100);
 
     let badWallet = false;

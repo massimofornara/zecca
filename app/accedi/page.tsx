@@ -9,5 +9,5 @@ export default async function AccediPage({
   searchParams: Promise<{ callbackUrl?: string }>;
 }) {
   const { callbackUrl } = await searchParams;
-  return <LoginForm callbackUrl={callbackUrl} showDemo={isDemoLoginAllowed()} />;
+  return <LoginForm callbackUrl={callbackUrl} showDemo={isDemoLoginAllowed()} showHouse />;
 }

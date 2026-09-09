@@ -4,6 +4,7 @@ import { addToCartAction } from "@/actions/shop";
 import { ProductArt } from "@/components/brand/ProductArt";
 import { SubmitButton } from "@/components/forms/SubmitButton";
 import { PageShell } from "@/components/layout/SiteChrome";
+import { categoryOf, shopCategoryLabel } from "@/lib/catalog";
 import { formatCredits } from "@/lib/format";
 import { prisma } from "@/lib/db";
 
@@ -34,7 +35,10 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
           <ProductArt imageKey={product.imageKey} alt={product.name} className="min-h-[320px]" />
         </div>
         <div>
-          <h1 className="font-display text-4xl text-primary">{product.name}</h1>
+          <p className="text-xs uppercase tracking-[0.2em] text-primary/80">
+            {shopCategoryLabel(categoryOf(product.slug))}
+          </p>
+          <h1 className="mt-1 font-display text-4xl text-primary">{product.name}</h1>
           <p className="mt-4 text-muted-foreground">{product.description}</p>
           <p className="mt-6 font-ledger text-3xl text-ember">{formatCredits(product.priceCredits)}</p>
           <p className="mt-1 text-sm text-muted-foreground">

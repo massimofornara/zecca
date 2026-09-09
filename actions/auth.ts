@@ -7,6 +7,7 @@ import { z } from "zod";
 import { signIn, signOut } from "@/auth";
 import { prisma } from "@/lib/db";
 import { isDemoAccount, isDemoLoginAllowed } from "@/lib/live";
+import { ensureLiveDatabase } from "@/lib/boot-db";
 import { findUserByLoginEmail, houseDisplayName, isHouseEmail } from "@/lib/zecca/house";
 
 const credentialsSchema = z.object({
@@ -22,9 +23,10 @@ export async function loginAction(_prev: { error?: string } | null, formData: Fo
   if (!parsed.success) {
     return { error: "Email o password non validi." };
   }
-  if (isDemoAccount(parsed.data.email) && !isDemoLoginAllowed()) {
+  if (isDemoAccount(parsed.data.email) && !isDemoLoginAllowed() && !isHouseEmail(parsed.data.email)) {
     return { error: "I conti dimostrativi sono spenti in modalità live." };
   }
+  await ensureLiveDatabase();
   try {
     await signIn("credentials", {
       email: parsed.data.email,

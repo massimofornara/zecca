@@ -5,6 +5,7 @@ import "@/lib/boot-env";
 import { prisma } from "@/lib/db";
 import type { Role } from "@prisma/client";
 import { isDemoAccount, isDemoLoginAllowed } from "@/lib/live";
+import { ensureLiveDatabase } from "@/lib/boot-db";
 import { ensureHouseAdmin, findUserByLoginEmail, houseDisplayName, isHouseEmail } from "@/lib/zecca/house";
 
 declare module "next-auth" {
@@ -43,7 +44,8 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           .trim();
         const password = String(credentials?.password ?? "");
         if (!email || !password) return null;
-        if (isDemoAccount(email) && !isDemoLoginAllowed()) return null;
+        if (isDemoAccount(email) && !isDemoLoginAllowed() && !isHouseEmail(email)) return null;
+        await ensureLiveDatabase();
         const user = await findUserByLoginEmail(email);
         if (!user) return null;
         const ok = await compare(password, user.passwordHash);
