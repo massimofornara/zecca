@@ -310,7 +310,9 @@ async function main() {
         db,
       });
     } catch (error) {
-      badIban = error instanceof Error && error.message.includes("IBAN non valido");
+      badIban =
+        error instanceof Error &&
+        (error.message.includes("IBAN non valido") || error.message.includes("IBAN italiano"));
     }
     assert.equal(badIban, true, "IBAN invalido deve fallire");
 
@@ -1424,7 +1426,8 @@ async function main() {
     });
     assert.match(disposedLedger.note ?? "", /IT60/);
     assert.match(disposedLedger.note ?? "", /••••/);
-    assert.equal((disposedLedger.metadata as { ibanMasked?: string } | null)?.ibanMasked, maskIban(sepaAsk.iban ?? ""));
+    const disposedMeta = JSON.parse(disposedLedger.metadata ?? "{}") as { ibanMasked?: string };
+    assert.equal(disposedMeta.ibanMasked, maskIban(sepaAsk.iban ?? ""));
 
     const usdcAsk = await requestCustomerCashout({
       userId: customer.id,
