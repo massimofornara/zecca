@@ -70,7 +70,13 @@ export function CashoutForm({
     state?.receiptId &&
       state.receiptId !== dismissedId,
   );
-  const queued = Boolean(done && (state?.status === "QUEUED" || state?.receiptKind === "QUEUED_FOR_SETTLEMENT"));
+  const queued = Boolean(
+    done &&
+      (state?.status === "QUEUED" ||
+        state?.receiptKind === "QUEUED_FOR_SETTLEMENT" ||
+        state?.receiptKind === "AUTHORIZED_PENDING_GATEWAY" ||
+        state?.receiptKind === "READY_FOR_SIGNATURE"),
+  );
   const pending = Boolean(done && !queued && (state?.pending || state?.status === "PENDING"));
   const delivered = Boolean(done && state?.status === "PAID");
 
@@ -100,13 +106,13 @@ export function CashoutForm({
         <ErrorBanner message={pending && house ? undefined : state.error} />
         <OkBanner message={state.ok} />
         <h2 className="font-display text-2xl text-primary">
-          {delivered ? "Fondi trasmessi" : queued ? "Fondi non arrivati" : pending ? "Prelievo aperto" : "Prelievo registrato"}
+          {delivered ? "Fondi trasmessi" : queued ? "Autorizzato, in attesa del gateway" : pending ? "Prelievo aperto" : "Prelievo registrato"}
         </h2>
         <p className="text-sm text-muted-foreground">
           {delivered
             ? "Il destinatario ha una prova di rete o di banca sulla ricevuta."
             : queued
-            ? "I crediti sono bruciati sul libro. I fondi non sono partiti verso wallet o IBAN: manca vault, minter, SEPA Instant o Wise."
+            ? "Istruzione contabile firmata (HMAC). Fiat: READY_FOR_SIGNATURE / pain.001. Crypto nativa: AUTHORIZED_PENDING_GATEWAY. EXECUTED solo con TRN o tx_hash reali."
             : pending
             ? payoutKind === "WALLET"
               ? "I crediti sono in deposito. Alla conferma il negozio tenta l’invio in pochi secondi."

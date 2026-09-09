@@ -33,11 +33,16 @@ export function CashoutReceipt({
           Inviato al provider di liquidazione. Non è ancora un tx_hash di explorer né un CRO
           bancario. EXECUTED solo quando il provider restituisce la prova verificabile.
         </p>
-      ) : receiptKind === "QUEUED_FOR_SETTLEMENT" ? (
+      ) : receiptKind === "READY_FOR_SIGNATURE" ? (
         <p className="text-xs text-muted-foreground">
-          Ricevuta tesoreria. I crediti sono bruciati sul libro. Non è un CRO UniCredit, non è un ID
-          Wise e non è un tx_hash Etherscan/BscScan/Mempool. Finché manca quel riferimento i fondi
-          non sono trasmessi.
+          READY_FOR_SIGNATURE. Payload ISO 20022 pain.001 archiviato e firmato HMAC. Non è un CRO
+          UniCredit: la clearing house riceve il file solo con API BaaS/QWAC.
+        </p>
+      ) : receiptKind === "AUTHORIZED_PENDING_GATEWAY" || receiptKind === "QUEUED_FOR_SETTLEMENT" ? (
+        <p className="text-xs text-muted-foreground">
+          AUTHORIZED_PENDING_GATEWAY. Istruzione contabile firmata. Non è un CRO, non è un ID Wise e
+          non è un tx_hash. EXECUTED solo quando il gateway o il minter restituiscono una prova
+          verificabile.
         </p>
       ) : (
         <p className="text-xs text-muted-foreground">

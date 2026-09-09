@@ -15,6 +15,8 @@ import type { SettlementLine } from "@/lib/zecca/settlement";
 function phaseLabel(phase: SettlementLine["phase"]) {
   if (phase === "FONDI_TRASMESSI") return "EXECUTED · fondi trasmessi";
   if (phase === "INVIATO_AL_PROVIDER") return "Inviato al provider";
+  if (phase === "READY_FOR_SIGNATURE") return "READY_FOR_SIGNATURE";
+  if (phase === "AUTHORIZED_PENDING_GATEWAY") return "AUTHORIZED_PENDING_GATEWAY";
   return "Ricevuta tesoreria (libro)";
 }
 

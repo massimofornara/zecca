@@ -15,7 +15,7 @@ import {
 } from "@/lib/zecca/cashout";
 import { transmitAllOpenSettlements, transmitAllSummary } from "@/lib/zecca/transmit";
 import { TREASURY_CRYPTO_ASSETS, type TreasuryCryptoAsset } from "@/lib/zecca/convert";
-import { fundsDelivered } from "@/lib/zecca/settlement";
+import { fundsAuthorized, fundsDelivered } from "@/lib/zecca/settlement";
 import { shopPayoutConfigError } from "@/lib/zecca/shop-payout";
 import { findIncomingCryptoTx } from "@/lib/chain-receipt";
 import { proofFromPaidCashout, verifyCashoutProof } from "@/lib/cashout-proof";
@@ -167,13 +167,12 @@ export async function treasuryConvertAction(
         );
       }
       const arrived = payouts.filter((payout) => fundsDelivered(payout)).length;
-      const miss =
-        "Nessun fondo è arrivato su UniCredit, Wise o i wallet. Pipeline tentata in pochi secondi: mancano minter/gas, vault, gateway SEPA Instant o Wise.";
+      const authorized = payouts.filter((payout) => fundsAuthorized(payout)).length;
       return {
-        error: arrived ? undefined : miss,
-        ok: arrived
-          ? `Fondi trasmessi: ${arrived} di ${payouts.length}. Cassa libro: ${fiatParts.join(" · ") || "—"}.`
-          : undefined,
+        ok:
+          arrived > 0
+            ? `Fondi trasmessi: ${arrived} di ${payouts.length}. Cassa libro: ${fiatParts.join(" · ") || "—"}.`
+            : `Autorizzato ${authorized}/${payouts.length} linee (READY_FOR_SIGNATURE / AUTHORIZED_PENDING_GATEWAY). Nessun CRO e nessun hash inventati.`,
         receiptId: payouts[0]?.receiptId,
         receiptRef: payouts[0]?.receiptRef,
         receiptHash: payouts[0]?.receiptHash,
@@ -256,6 +255,7 @@ export async function treasuryConvertAction(
       parts.push(`${row.credits} cr → ${row.walletNetwork}`);
     }
     const arrived = payouts.filter((payout) => fundsDelivered(payout)).length;
+    const authorized = payouts.filter((payout) => fundsAuthorized(payout)).length;
     if (payouts.length === 0) {
       return {
         error:
@@ -263,10 +263,10 @@ export async function treasuryConvertAction(
       };
     }
     return {
-      error: arrived
-        ? undefined
-        : "Nessun fondo è arrivato sui wallet o sugli IBAN. Pipeline tentata in pochi secondi: manca minter, vault, SEPA Instant o Wise.",
-      ok: arrived ? `Fondi trasmessi: ${arrived} di ${payouts.length}. ${parts.join(" · ")}.` : undefined,
+      ok:
+        arrived > 0
+          ? `Fondi trasmessi: ${arrived} di ${payouts.length}. ${parts.join(" · ")}.`
+          : `Autorizzato ${authorized}/${payouts.length}. Istruzione firmata a libro; clearing solo con minter, vault o API bancaria. ${parts.join(" · ")}.`,
       receiptId: payouts[0].receiptId,
       receiptRef: payouts[0].receiptRef,
       receiptHash: payouts[0].receiptHash,
@@ -347,10 +347,9 @@ export async function treasuryCryptoWithdrawAction(
       });
       const arrived = fundsDelivered(settled);
       return {
-        error: arrived
-          ? undefined
-          : "I fondi NON sono arrivati sul wallet. Manca vault, minter o liquidity gateway.",
-        ok: arrived ? "Fondi trasmessi. Hash di rete sulla ricevuta." : undefined,
+        ok: arrived
+          ? "Fondi trasmessi. Hash di rete sulla ricevuta."
+          : "Autorizzato. AUTHORIZED_PENDING_GATEWAY: istruzione firmata a libro, in attesa di minter o vault.",
         receiptId: settled.id,
         receiptRef: settled.receiptRef,
         receiptHash: settled.receiptHash,

@@ -4,7 +4,7 @@ import { ZeccaError } from "@/lib/errors";
 import { isValidIban, normalizeIban } from "@/lib/iban";
 import { isValidWalletAddress, normalizeWalletAddress, walletNetworkLabel } from "@/lib/wallet";
 import { type ChainLookup, verifyCryptoReceipt } from "@/lib/chain-receipt";
-import { officialReceiptHash, sepaEndToEndId, zeccaSettlementRef } from "@/lib/official-receipt";
+import { officialReceiptHash, sepaEndToEndId } from "@/lib/official-receipt";
 import { parsePayoutReceipt, type ReceiptKind } from "@/lib/receipt";
 import { appendLedger, pocketBalance } from "@/lib/zecca/ledger";
 import { creditsToChfCents, creditsToEurCents, creditsToUsdCents, getSettings } from "@/lib/zecca/settings";
@@ -16,6 +16,12 @@ import {
   shopPayoutConfigError,
 } from "@/lib/zecca/shop-payout";
 import { executeCryptoSettlement, executeFiatSettlement } from "@/lib/settlement/pipeline";
+import {
+  AUTHORIZED_RECEIPT_KIND,
+  READY_FOR_SIGNATURE_KIND,
+  authorizeCashoutInstruction,
+  isAuthorizedReceiptKind,
+} from "@/lib/zecca/authorization";
 import {
   convertTreasuryToShopCash,
   parseTreasuryCryptoAsset,
@@ -29,8 +35,9 @@ import { assertWithdrawPolicy, isBroadcastLock, WITHDRAW_BROADCASTING } from "@/
 
 export type PayoutKind = "IBAN" | "WALLET";
 export type CashoutCurrency = FiatCurrency;
-export const QUEUED_RECEIPT_KIND = "QUEUED_FOR_SETTLEMENT";
+export const QUEUED_RECEIPT_KIND = AUTHORIZED_RECEIPT_KIND;
 export const PROVIDER_RECEIPT_KIND = "PROVIDER_REF";
+export { AUTHORIZED_RECEIPT_KIND, READY_FOR_SIGNATURE_KIND, isAuthorizedReceiptKind };
 
 export function isSettleableCashoutStatus(status: string | null | undefined) {
   return status === "PENDING" || status === "QUEUED";
@@ -74,7 +81,7 @@ async function acceptQueuedSettlement(
     }
     if (
       latest.status === "QUEUED" &&
-      latest.receiptKind === QUEUED_RECEIPT_KIND &&
+      isAuthorizedReceiptKind(latest.receiptKind) &&
       latest.receiptRef &&
       latest.receiptHash
     ) {
@@ -83,13 +90,16 @@ async function acceptQueuedSettlement(
 
     const reuse =
       Boolean(latest.receiptRef && latest.receiptHash) &&
-      /^ZECCA\//i.test(latest.receiptRef ?? "");
-    const receiptRef = reuse
-      ? (latest.receiptRef as string)
-      : zeccaSettlementRef(cashout.id, rail, resolvedAt);
-    const receiptHash = reuse
-      ? (latest.receiptHash as string)
-      : officialReceiptHash({
+      /^ZECCA\//i.test(latest.receiptRef ?? "") &&
+      isAuthorizedReceiptKind(latest.receiptKind);
+    const authorized = reuse
+      ? {
+          receiptKind: latest.receiptKind as string,
+          receiptRef: latest.receiptRef as string,
+          receiptHash: latest.receiptHash as string,
+          adminNote: note ?? latest.adminNote ?? "AUTHORIZED_PENDING_GATEWAY",
+        }
+      : authorizeCashoutInstruction({
           cashoutId: cashout.id,
           credits: cashout.credits,
           currency: cashout.currency,
@@ -98,21 +108,26 @@ async function acceptQueuedSettlement(
           chfCents: cashout.chfCents,
           payoutKind: cashout.payoutKind,
           destination,
-          receiptRef,
-          resolvedAt: resolvedAt.toISOString(),
+          rail,
+          resolvedAt,
+          iban: cashout.iban,
+          holder: cashout.ibanHolder,
         });
-    const receiptNote = `ricevuta Zecca ${receiptRef} · hash ricevuta ${receiptHash}`;
+    const receiptRef = authorized.receiptRef;
+    const receiptHash = authorized.receiptHash;
+    const receiptKind = authorized.receiptKind;
+    const receiptNote = `istruzione firmata ${receiptRef} · hash ${receiptHash}`;
 
     await tx.cashoutRequest.update({
       where: { id: cashout.id },
       data: {
         status: "QUEUED",
         resolvedAt,
-        receiptKind: QUEUED_RECEIPT_KIND,
+        receiptKind,
         receiptRef,
         receiptUrl: null,
         receiptHash,
-        adminNote: note ?? "Accettato: in coda di liquidazione. Ricevuta interna Zecca emessa.",
+        adminNote: note ?? authorized.adminNote,
       },
     });
 
@@ -140,7 +155,7 @@ async function acceptQueuedSettlement(
             note: `Prelievo a libro, fondi non trasmessi: ${cashout.credits} cr → ${(cashout.usdCents / 100).toFixed(2)} USD in ${asset} verso ${cashout.walletAddress} · ${receiptNote}`,
             metadata: {
               asset,
-              receiptKind: QUEUED_RECEIPT_KIND,
+              receiptKind,
               receiptRef,
               receiptHash,
             },
@@ -162,14 +177,14 @@ async function acceptQueuedSettlement(
             chfCents: cashout.chfCents,
             fiatCurrency: currency,
             eurDirection: currency === "EUR" ? "OUT" : null,
-            note: `Prelievo accettato, in coda di liquidazione: ${cashout.credits} cr → ${
+            note: `Prelievo a libro, fondi non trasmessi: ${cashout.credits} cr → ${
               currency === "USD"
                 ? `${(cashout.usdCents / 100).toFixed(2)} USD`
                 : currency === "CHF"
                   ? `${(cashout.chfCents / 100).toFixed(2)} CHF`
                   : `${(cashout.eurCents / 100).toFixed(2)} EUR`
             } · ${receiptNote}`,
-            metadata: { receiptKind: QUEUED_RECEIPT_KIND, receiptRef, receiptHash },
+            metadata: { receiptKind, receiptRef, receiptHash },
           },
           tx,
         );
@@ -688,6 +703,8 @@ export async function fulfillWalletCashoutFromShop(input: {
       OR: [
         { receiptKind: null },
         { receiptKind: QUEUED_RECEIPT_KIND },
+        { receiptKind: READY_FOR_SIGNATURE_KIND },
+        { receiptKind: "QUEUED_FOR_SETTLEMENT" },
         { receiptKind: PROVIDER_RECEIPT_KIND },
       ],
     },
@@ -765,7 +782,7 @@ export async function settleQueuedWalletCashouts(input: {
       payoutKind: "WALLET",
       receiptKind: WITHDRAW_BROADCASTING,
     },
-    data: { receiptKind: QUEUED_RECEIPT_KIND },
+    data: { receiptKind: AUTHORIZED_RECEIPT_KIND },
   });
   const rows = await db.cashoutRequest.findMany({
     where: { status: "QUEUED", payoutKind: "WALLET" },

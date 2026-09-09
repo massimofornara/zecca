@@ -81,14 +81,18 @@ export function TreasuryConvertForm({
         {delivered ? (
           <OkBanner message={state?.ok} />
         ) : (
-          <ErrorBanner message="Nessun fondo è arrivato sui wallet o sugli IBAN. I crediti sono a libro. Manca minter, vault, Wise o gateway SEPA — niente hash e niente CRO inventati." />
+          <OkBanner message={state?.ok || "Autorizzato. In attesa del gateway (pain.001 / minter / vault). Nessun CRO e nessun hash inventati."} />
         )}
         {payouts.map((payout) => (
           <div key={payout.receiptId}>
             <p className="text-sm text-muted-foreground">
               {payout.payoutKind === "IBAN" ? "IBAN" : payout.walletNetwork} ·{" "}
               <span className="font-ledger">{payout.walletAddress}</span>
-              {payout.status === "PAID" ? " · EXECUTED" : " · non arrivato al destinatario"}
+              {payout.status === "PAID"
+                ? " · EXECUTED"
+                : payout.receiptKind === "READY_FOR_SIGNATURE"
+                  ? " · READY_FOR_SIGNATURE"
+                  : " · AUTHORIZED_PENDING_GATEWAY"}
             </p>
             <CashoutReceipt
               cashoutId={payout.receiptId}
@@ -126,9 +130,9 @@ export function TreasuryConvertForm({
       <ErrorBanner message={formError || state?.error} />
       <OkBanner message={state?.ok} />
       <p className="text-sm text-muted-foreground">
-        Euro, dollari e franchi partono subito verso UniCredit (SEPA Instant) e Wise. BTC, ETH,
-        USDT, USDC e BNB partono con mint o transfer. Senza binario pronto i fondi non arrivano:
-        resta solo la ricevuta di libro, non un CRO e non un hash.
+        Euro, dollari e franchi: burn a libro e stato READY_FOR_SIGNATURE (pain.001 ISO 20022) o
+        AUTHORIZED_PENDING_GATEWAY. Crypto: mint on-chain se il KMS firma; altrimenti istruzione
+        autorizzata in attesa di vault. EXECUTED solo con TRN o tx_hash reali.
       </p>
       <div className="grid gap-4 sm:grid-cols-3">
         <label className="text-sm">
@@ -279,13 +283,13 @@ export function InternalCryptoWithdrawForm({
         {delivered ? (
           <OkBanner message={state.ok} />
         ) : (
-          <ErrorBanner message={state.error || "I fondi non sono arrivati sul wallet."} />
+          <OkBanner message={state.ok || "Autorizzato. AUTHORIZED_PENDING_GATEWAY."} />
         )}
         <p className="text-sm text-muted-foreground">
           Destinazione <span className="font-ledger">{state.walletAddress}</span>.
           {delivered
             ? " Hash di rete sulla ricevuta."
-            : " Ricevuta di libro: non è un tx_hash. Ritenta da Liquidazione quando il binario è acceso."}
+            : " Istruzione firmata a libro. Mint on-chain quando il KMS e il contratto rispondono."}
         </p>
         <CashoutReceipt
           cashoutId={state.receiptId}
@@ -469,8 +473,8 @@ export function PendingCashoutCard({
       {status === "QUEUED" ? (
         <div className="mt-2 space-y-2">
           <p className="text-sm text-muted-foreground">
-            Prelievo a libro, fondi non trasmessi. La ricevuta tesoreria non è un CRO e non è un
-            tx_hash. Ritenta da Liquidazione.
+            Prelievo autorizzato. READY_FOR_SIGNATURE o AUTHORIZED_PENDING_GATEWAY: non è un CRO e
+            non è un tx_hash. Liquidazione ritenta il gateway senza inventare prove.
           </p>
           <CashoutReceipt
             cashoutId={id}

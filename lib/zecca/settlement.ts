@@ -13,10 +13,18 @@ import { buildPain001Document, buildPaymentCsv, sepaDebtorBlocker, sepaDebtorCon
 import { wiseDispatchBlocker, wiseApiConfig } from "@/lib/zecca/wise-dispatch";
 import { settlementProviderHealth } from "@/lib/settlement/pipeline";
 import { sepaGatewayConfig } from "@/lib/settlement/gateways";
+import {
+  AUTHORIZED_RECEIPT_KIND,
+  READY_FOR_SIGNATURE_KIND,
+  isAuthorizedReceiptKind,
+} from "@/lib/zecca/authorization";
 
-const QUEUED_RECEIPT_KIND = "QUEUED_FOR_SETTLEMENT";
-
-export type SettlementPhase = "RICEVUTA_TESORERIA" | "INVIATO_AL_PROVIDER" | "FONDI_TRASMESSI";
+export type SettlementPhase =
+  | "READY_FOR_SIGNATURE"
+  | "AUTHORIZED_PENDING_GATEWAY"
+  | "INVIATO_AL_PROVIDER"
+  | "FONDI_TRASMESSI"
+  | "RICEVUTA_TESORERIA";
 
 export type SettlementLine = {
   id: string;
@@ -47,6 +55,26 @@ export type SettlementBlocker = {
   code: string;
   message: string;
 };
+
+export function fundsAuthorized(row: {
+  status?: string | null;
+  receiptKind?: string | null;
+  receiptRef?: string | null;
+  payoutKind?: string | null;
+}): boolean {
+  const phase = settlementPhase({
+    status: row.status ?? "",
+    receiptKind: row.receiptKind ?? null,
+    receiptRef: row.receiptRef ?? null,
+    payoutKind: row.payoutKind ?? "",
+  });
+  return (
+    phase === "FONDI_TRASMESSI" ||
+    phase === "AUTHORIZED_PENDING_GATEWAY" ||
+    phase === "READY_FOR_SIGNATURE" ||
+    phase === "INVIATO_AL_PROVIDER"
+  );
+}
 
 export function fundsDelivered(row: {
   status?: string | null;
@@ -85,12 +113,16 @@ export function settlementPhase(row: {
     return "RICEVUTA_TESORERIA";
   }
   if (row.receiptKind === "PROVIDER_REF" && row.receiptRef) return "INVIATO_AL_PROVIDER";
+  if (row.receiptKind === READY_FOR_SIGNATURE_KIND) return "READY_FOR_SIGNATURE";
+  if (isAuthorizedReceiptKind(row.receiptKind)) return "AUTHORIZED_PENDING_GATEWAY";
   return "RICEVUTA_TESORERIA";
 }
 
 export function phaseLabel(phase: SettlementPhase) {
   if (phase === "FONDI_TRASMESSI") return "EXECUTED · fondi trasmessi";
   if (phase === "INVIATO_AL_PROVIDER") return "Inviato al provider (in attesa di hash/TRN)";
+  if (phase === "READY_FOR_SIGNATURE") return "READY_FOR_SIGNATURE · pain.001 ISO 20022";
+  if (phase === "AUTHORIZED_PENDING_GATEWAY") return "AUTHORIZED_PENDING_GATEWAY";
   return "Ricevuta tesoreria (libro)";
 }
 
@@ -146,7 +178,9 @@ export function classifyCashout(row: {
   const rail = row.payoutKind === "WALLET" ? "WALLET" : "IBAN";
   const phase = settlementPhase(row);
   const zeccaRef =
-    row.receiptKind === QUEUED_RECEIPT_KIND ||
+    row.receiptKind === AUTHORIZED_RECEIPT_KIND ||
+    row.receiptKind === READY_FOR_SIGNATURE_KIND ||
+    row.receiptKind === "QUEUED_FOR_SETTLEMENT" ||
     row.receiptKind === "PROVIDER_REF" ||
     isZeccaLedgerBankRef(row.receiptRef ?? "")
       ? row.receiptRef

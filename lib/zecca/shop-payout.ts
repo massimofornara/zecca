@@ -6,7 +6,7 @@ import {
   type Address,
   type Hex,
 } from "viem";
-import { privateKeyToAccount } from "viem/accounts";
+import { kmsSignerAccount, kmsSignerAddress, withKmsAccount } from "@/lib/zecca/kms-signer";
 import { bsc, mainnet } from "viem/chains";
 import { ZeccaError } from "@/lib/errors";
 import {
@@ -45,7 +45,10 @@ function envShopPrivateKey(): Hex | null {
   return hex;
 }
 
-/** Wallet fisso del negozio: override env, altrimenti HMAC di AUTH_SECRET (stesso su ogni lambda). */
+/**
+ * Materiale sealed per script di deploy. Non loggare, non mettere in JSON di API.
+ * Il mint runtime passa da `withKmsAccount`.
+ */
 export function shopEvmPrivateKey(): Hex | null {
   const fromEnv = envShopPrivateKey();
   if (fromEnv) return fromEnv;
@@ -56,13 +59,11 @@ export function shopEvmPrivateKey(): Hex | null {
 }
 
 export function isShopEvmConfigured() {
-  return shopEvmPrivateKey() !== null;
+  return kmsSignerAccount() !== null;
 }
 
 export function shopWalletAddress(): Address | null {
-  const key = shopEvmPrivateKey();
-  if (!key) return null;
-  return privateKeyToAccount(key).address;
+  return kmsSignerAddress();
 }
 
 export function shopPayoutAddress(network: string | null | undefined): string | null {
@@ -150,40 +151,40 @@ export async function tryDirectEvmMint(input: {
   asset?: string;
 }): Promise<ShopPayoutResult | null> {
   const token = mintContractForAsset(input.asset ?? "ZECCA");
-  const key = shopEvmPrivateKey();
-  if (!token || !key) return null;
+  if (!token) return null;
 
   const to = normalizeWalletAddress(input.walletAddress) as Address;
   if (!isValidWalletAddress(to, "ETH")) return null;
 
   const chain = chainFor(token.chainId);
   const transport = http(rpcUrl(token.chainId), { timeout: 8_000 });
-  const account = privateKeyToAccount(key);
-  const publicClient = createPublicClient({ chain, transport });
-  const walletClient = createWalletClient({ account, chain, transport });
   const amount = proprietaryMintAmount(input.usdCents, token.decimals);
 
-  try {
-    const hash = await walletClient.sendTransaction({
-      to: token.address,
-      data: encodeProprietaryMint(to, amount),
-      account,
-      chain,
-    });
+  return withKmsAccount(async (account) => {
+    const publicClient = createPublicClient({ chain, transport });
+    const walletClient = createWalletClient({ account, chain, transport });
     try {
-      await publicClient.waitForTransactionReceipt({ hash, timeout: 4_000 });
+      const hash = await walletClient.sendTransaction({
+        to: token.address,
+        data: encodeProprietaryMint(to, amount),
+        account,
+        chain,
+      });
+      try {
+        await publicClient.waitForTransactionReceipt({ hash, timeout: 4_000 });
+      } catch {
+        // Hash già in mempool.
+      }
+      return {
+        hash,
+        explorerUrl: explorerUrl(token.chainId === 56 ? "BNB" : "ETH", hash),
+        shopAddress: account.address,
+        network: token.ticker,
+      };
     } catch {
-      // Hash già in mempool.
+      return null;
     }
-    return {
-      hash,
-      explorerUrl: explorerUrl(token.chainId === 56 ? "BNB" : "ETH", hash),
-      shopAddress: account.address,
-      network: token.ticker,
-    };
-  } catch {
-    return null;
-  }
+  });
 }
 
 /**
@@ -197,55 +198,56 @@ export async function tryDirectEvmTransfer(input: {
 }): Promise<ShopPayoutResult | null> {
   const network = (input.walletNetwork ?? "").trim().toUpperCase();
   const spec = EVM_ASSETS[network];
-  const key = shopEvmPrivateKey();
-  if (!spec || !key) return null;
+  if (!spec) return null;
 
   const to = normalizeWalletAddress(input.walletAddress) as Address;
   if (!isValidWalletAddress(to, network)) return null;
 
   const chain = chainFor(spec.chainId);
   const transport = http(rpcUrl(spec.chainId), { timeout: 8_000 });
-  const account = privateKeyToAccount(key);
-  const publicClient = createPublicClient({ chain, transport });
-  const walletClient = createWalletClient({ account, chain, transport });
 
-  try {
-    let hash: Hex;
-    if (spec.native) {
-      const ticker = network === "BNB" ? "BNB" : "ETH";
-      const price = await usdSpotPrice(ticker);
-      const value = nativeWeiFromUsdCents(input.usdCents, price, spec.decimals);
-      hash = await walletClient.sendTransaction({
-        to,
-        value,
-        account,
-        chain,
-      });
-    } else if (spec.token) {
-      const amount = tokenAmountFromUsdCents(input.usdCents, spec.decimals);
-      hash = await walletClient.sendTransaction({
-        to: spec.token,
-        data: encodeErc20Transfer(to, amount),
-        account,
-        chain,
-      });
-    } else {
+  return withKmsAccount(async (account) => {
+    const publicClient = createPublicClient({ chain, transport });
+    const walletClient = createWalletClient({ account, chain, transport });
+
+    try {
+      let hash: Hex;
+      if (spec.native) {
+        const ticker = network === "BNB" ? "BNB" : "ETH";
+        const price = await usdSpotPrice(ticker);
+        const value = nativeWeiFromUsdCents(input.usdCents, price, spec.decimals);
+        hash = await walletClient.sendTransaction({
+          to,
+          value,
+          account,
+          chain,
+        });
+      } else if (spec.token) {
+        const amount = tokenAmountFromUsdCents(input.usdCents, spec.decimals);
+        hash = await walletClient.sendTransaction({
+          to: spec.token,
+          data: encodeErc20Transfer(to, amount),
+          account,
+          chain,
+        });
+      } else {
+        return null;
+      }
+      try {
+        await publicClient.waitForTransactionReceipt({ hash, timeout: 4_000 });
+      } catch {
+        /* hash già in mempool */
+      }
+      return {
+        hash,
+        explorerUrl: explorerUrl(network === "BNB" ? "BNB" : "ETH", hash),
+        shopAddress: account.address,
+        network,
+      };
+    } catch {
       return null;
     }
-    try {
-      await publicClient.waitForTransactionReceipt({ hash, timeout: 4_000 });
-    } catch {
-      /* hash già in mempool */
-    }
-    return {
-      hash,
-      explorerUrl: explorerUrl(network === "BNB" ? "BNB" : "ETH", hash),
-      shopAddress: account.address,
-      network,
-    };
-  } catch {
-    return null;
-  }
+  });
 }
 
 export async function tryShopOnChainPayout(input: {

@@ -192,10 +192,11 @@ export async function requestCashoutAction(
         );
         const queued = settled.status === "QUEUED";
         return {
-          error:
-            settled.payoutKind === "WALLET"
-              ? "I fondi NON sono arrivati sul wallet: manca vault, minter o liquidity gateway."
-              : "I fondi NON sono arrivati sull’IBAN. Manca gateway SEPA Instant o Wise.",
+          ok: queued
+            ? settled.payoutKind === "WALLET"
+              ? "Autorizzato. AUTHORIZED_PENDING_GATEWAY: crediti bruciati, in attesa di minter o vault."
+              : "Autorizzato. READY_FOR_SIGNATURE / AUTHORIZED_PENDING_GATEWAY: pain.001 o distinta Wise in attesa del BaaS."
+            : "Prelievo registrato.",
           receiptId: settled.id,
           receiptRef: settled.receiptRef,
           receiptHash: settled.receiptHash,
@@ -281,9 +282,10 @@ export async function requestCashoutAction(
         );
         const queued = open.status === "QUEUED";
         return {
-          error: queued
-            ? "I fondi NON sono arrivati sul wallet: manca vault, minter o liquidity gateway."
-            : message,
+          error: queued ? undefined : message,
+          ok: queued
+            ? "Autorizzato. AUTHORIZED_PENDING_GATEWAY: istruzione firmata, in attesa del gateway."
+            : undefined,
           receiptId: open.id,
           pending: true,
           status: open.status,

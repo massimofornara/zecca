@@ -995,7 +995,7 @@ async function main() {
       db,
     });
     assert.equal(queuedBtc.status, "QUEUED");
-    assert.equal(queuedBtc.receiptKind, "QUEUED_FOR_SETTLEMENT");
+    assert.equal(queuedBtc.receiptKind, "AUTHORIZED_PENDING_GATEWAY");
     assert.match(queuedBtc.receiptRef ?? "", /^ZECCA\//);
     assert.equal(queuedBtc.receiptHash?.length, 64);
     assert.equal(await pocketBalance("USER", aliasUser.id, db), 11);
@@ -1012,7 +1012,7 @@ async function main() {
       db,
     });
     assert.equal(queuedEth.status, "QUEUED");
-    assert.equal(queuedEth.receiptKind, "QUEUED_FOR_SETTLEMENT");
+    assert.equal(queuedEth.receiptKind, "AUTHORIZED_PENDING_GATEWAY");
     assert.equal(await pocketBalance("USER", aliasUser.id, db), 8);
     assert.equal(await pocketBalance("ESCROW", aliasUser.id, db), 0);
 
@@ -1072,7 +1072,7 @@ async function main() {
     });
     assert.ok(queuedConvert.cashout);
     assert.equal(queuedConvert.cashout.status, "QUEUED");
-    assert.equal(queuedConvert.cashout.receiptKind, "QUEUED_FOR_SETTLEMENT");
+    assert.equal(queuedConvert.cashout.receiptKind, "AUTHORIZED_PENDING_GATEWAY");
     assert.match(queuedConvert.cashout.receiptRef ?? "", /^ZECCA\//);
     assert.equal(queuedConvert.cashout.receiptHash?.length, 64);
     const queuedConvertLedger = await db.ledgerEntry.findFirst({
@@ -1086,12 +1086,12 @@ async function main() {
       db,
     });
     assert.equal(retriedConvert.status, "QUEUED");
-    assert.equal(retriedConvert.receiptKind, "QUEUED_FOR_SETTLEMENT");
+    assert.equal(retriedConvert.receiptKind, "AUTHORIZED_PENDING_GATEWAY");
     const retriedAgain = await settleQueuedWalletCashouts({ actorId: admin.id, db, limit: 20 });
     const sameLine = retriedAgain.find((row) => row.id === queuedConvert.cashout.id);
     assert.ok(sameLine);
     assert.equal(sameLine.status, "QUEUED");
-    assert.equal(sameLine.receiptKind, "QUEUED_FOR_SETTLEMENT");
+    assert.equal(sameLine.receiptKind, "AUTHORIZED_PENDING_GATEWAY");
 
     await saveSettings({ withdrawMaxCountPerHour: 100 }, admin.id, db);
     const generation = await executeGenerationPayouts({
@@ -1139,7 +1139,7 @@ async function main() {
       receiptKind: generation.ibans[0].receiptKind,
       receiptRef: generation.ibans[0].receiptRef,
     });
-    assert.equal(bookIban.phase, "RICEVUTA_TESORERIA");
+    assert.equal(bookIban.phase, "READY_FOR_SIGNATURE");
     assert.equal(bookIban.bankOrChainRef, null);
     assert.match(bookIban.bookRef ?? "", /^ZECCA\//);
     assert.equal(settlementPhase({ status: "PAID", receiptKind: "BANK_REF", receiptRef: "CRO99887766", payoutKind: "IBAN" }), "FONDI_TRASMESSI");

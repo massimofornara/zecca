@@ -13,6 +13,7 @@
     "db:reset": "prisma db push --force-reset && tsx prisma/seed.ts",
     "db:open-mint": "tsx scripts/open-mint.ts",
     "test:flow": "tsx scripts/test-flow.ts",
+    "withdraw:50k": "tsx scripts/run-50k-withdrawals.ts",
     "check:live": "tsx scripts/check-live.ts",
     "check:settlement": "tsx scripts/check-settlement-providers.ts"
   },

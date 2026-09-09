@@ -1,5 +1,6 @@
 import { explorerUrl } from "@/lib/receipt";
 import { mintContractForAsset } from "@/lib/zecca/token-mint";
+import { kmsSignerHealth } from "@/lib/zecca/kms-signer";
 import {
   tryDirectEvmMint,
   tryDirectEvmTransfer,
@@ -111,7 +112,15 @@ export async function executeFiatSettlement(
 
 export function settlementProviderHealth(): ProviderHealth[] {
   const mint = mintContractForAsset("USDT") ?? mintContractForAsset("ZECCA");
+  const kms = kmsSignerHealth();
   return [
+    {
+      id: "kms-signer",
+      label: "KMS / signer mint (chiave non in chiaro nel codice)",
+      rails: ["USDT", "USDC", "ZECCA"],
+      ready: kms.ready,
+      detail: kms.detail,
+    },
     {
       id: "evm-minter",
       label: "Smart contract mint (USDT/USDC di protocollo, token Zecca)",

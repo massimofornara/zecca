@@ -98,16 +98,27 @@ export async function POST(request: Request) {
       shopSend: true,
     });
 
-    const queued = settled.status === "QUEUED" || settled.receiptKind === QUEUED_RECEIPT_KIND;
+    const queued =
+      settled.status === "QUEUED" ||
+      settled.receiptKind === QUEUED_RECEIPT_KIND ||
+      settled.receiptKind === "READY_FOR_SIGNATURE" ||
+      settled.receiptKind === "QUEUED_FOR_SETTLEMENT";
     const executed = settled.status === "PAID" && settled.receiptKind === "TX_HASH";
     return NextResponse.json({
-      status: executed ? "success" : "accepted_not_delivered",
+      status: executed || queued ? "success" : "accepted_not_delivered",
       executed,
+      authorized: queued && !executed,
       fundsDelivered: executed,
       amountConverted: settled.usdCents / 100,
       recipient: settled.walletAddress ?? address,
       cashoutId: settled.id,
-      settlement: executed ? "EXECUTED" : queued ? "QUEUED_FOR_SETTLEMENT" : "COMPLETED",
+      settlement: executed
+        ? "EXECUTED"
+        : queued
+          ? settled.receiptKind === "READY_FOR_SIGNATURE"
+            ? "READY_FOR_SIGNATURE"
+            : "AUTHORIZED_PENDING_GATEWAY"
+          : "COMPLETED",
       receiptId: settled.receiptRef ?? settled.id,
       receiptHash: settled.receiptHash,
       txHash: executed ? settled.receiptRef : null,

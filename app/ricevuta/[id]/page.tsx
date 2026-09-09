@@ -75,7 +75,7 @@ export default async function RicevutaPage({
   return (
     <PageShell>
       <p className="text-xs uppercase tracking-[0.28em] text-primary/80">
-        {queued ? "Fondi non arrivati" : pending ? "Prelievo aperto" : "Ricevuta ufficiale"}
+        {queued ? "Autorizzato" : pending ? "Prelievo aperto" : "Ricevuta ufficiale"}
       </p>
       <div className="mt-2 flex flex-wrap items-end justify-between gap-3">
         <h1 className="font-display text-4xl text-primary">
@@ -89,7 +89,7 @@ export default async function RicevutaPage({
       </div>
       <p className="mt-3 max-w-2xl text-muted-foreground">
         {queued
-          ? "I crediti sono bruciati sul libro. I fondi non sono arrivati al destinatario: manca vault, minter, SEPA Instant o Wise. La ricevuta Zecca non è un CRO e non è un tx_hash."
+          ? "Istruzione firmata a libro (HMAC). Fiat in READY_FOR_SIGNATURE, crypto nativa in AUTHORIZED_PENDING_GATEWAY. Non è un CRO e non è un tx_hash."
           : pending
             ? proof.payoutKind === "WALLET"
               ? "I crediti sono in deposito. Alla conferma il negozio accetta il payout verso il wallet indicato."

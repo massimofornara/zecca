@@ -31,7 +31,7 @@ async function main() {
   const chain = chainId === 56 ? bsc : mainnet;
   const account = privateKeyToAccount(key);
   const client = createWalletClient({ account, chain, transport: http() });
-  console.log("Deploy richiede bytecode compilato. Usa Foundry: forge create contracts/ZeccaMinter.sol:ZeccaMinter --constructor-args \"Zecca USD\" \"zUSDT\" 6", account.address);
+  console.log("Deploy richiede bytecode compilato. Usa Foundry: forge create contracts/ZeccaToken.sol:ZeccaToken --constructor-args \"Zecca USD\" \"zUSD\" 6", account.address);
   void client;
   const hex = "0x" as Hex;
   void hex;
