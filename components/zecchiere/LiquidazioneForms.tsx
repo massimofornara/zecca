@@ -1,7 +1,7 @@
 "use client";
 
 import { useActionState } from "react";
-import { settleQueuedCashoutsAction, resolveCashoutAction } from "@/actions/admin";
+import { settleQueuedCashoutsAction, resolveCashoutAction, transmitAllFundsAction } from "@/actions/admin";
 import { SubmitButton } from "@/components/forms/SubmitButton";
 import { CashoutReceipt } from "@/components/shop/CashoutReceipt";
 import { CopyField } from "@/components/copy/CopyField";
@@ -17,19 +17,28 @@ function phaseLabel(phase: SettlementLine["phase"]) {
 }
 
 export function RetryOnChainForm() {
-  const [state, action] = useActionState(settleQueuedCashoutsAction, null);
+  const [state, action] = useActionState(transmitAllFundsAction, null);
+  const [retryState, retryAction] = useActionState(settleQueuedCashoutsAction, null);
   return (
-    <form action={action} className="space-y-2">
-      <ErrorBanner message={state?.error} />
-      <OkBanner message={state?.ok} />
-      <SubmitButton size="sm" pendingLabel="Ritentativo in corso…">
-        Ritenta uscite on-chain
-      </SubmitButton>
-      <p className="text-xs text-muted-foreground">
-        Tenta mint del token Zecca o trasferimento da cassa di rete. Se vault e contratto restano
-        vuoti, lo stato non cambia e non viene scritto nessun hash.
-      </p>
-    </form>
+    <div className="space-y-4">
+      <form action={action} className="space-y-2">
+        <ErrorBanner message={state?.error} />
+        <OkBanner message={state?.ok} />
+        <SubmitButton pendingLabel="Trasmissione in corso…">Trasmetti tutti i fondi</SubmitButton>
+        <p className="text-xs text-muted-foreground">
+          Tenta ogni linea aperta: mint/transfer on-chain, SEPA se c’è il conto ordinante, Wise se
+          c’è il token API. Senza cassa di rete o banca collegata lo stato resta ricevuta tesoreria:
+          nessun CRO e nessun hash inventato.
+        </p>
+      </form>
+      <form action={retryAction} className="space-y-2">
+        <ErrorBanner message={retryState?.error} />
+        <OkBanner message={retryState?.ok} />
+        <SubmitButton size="sm" variant="outline" pendingLabel="Ritentativo in corso…">
+          Solo crypto on-chain
+        </SubmitButton>
+      </form>
+    </div>
   );
 }
 

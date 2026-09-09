@@ -25,6 +25,7 @@ import { assertWithdrawPolicy, WITHDRAW_BROADCASTING } from "../lib/zecca/withdr
 import { cashoutProofStatus, proofFromPaidCashout, signCashoutProof, verifyCashoutProof } from "../lib/cashout-proof";
 import { explorerLinks, explorerUrl, parsePayoutReceipt } from "../lib/receipt";
 import { classifyCashout, settlementPhase } from "../lib/zecca/settlement";
+import { transmitAllSummary } from "../lib/zecca/transmit";
 import { buildPain001Document } from "../lib/zecca/pain001";
 import { wiseApiConfig } from "../lib/zecca/wise-dispatch";
 import { encodeErc20Transfer, nativeWeiFromUsdCents, tokenAmountFromUsdCents } from "../lib/evm-send";
@@ -1159,6 +1160,27 @@ async function main() {
     assert.match(xml, /IT22B0200822800000103317304/);
     assert.match(xml, /50\.00/);
     assert.equal(wiseApiConfig(), null);
+    assert.match(
+      transmitAllSummary({
+        attempts: [
+          {
+            id: "x",
+            rail: "WALLET",
+            asset: "BTC",
+            amountLabel: "1 USD",
+            destination: "bc1",
+            transmitted: false,
+            proof: null,
+            reason: "vault",
+          },
+        ],
+        onChainPaid: 0,
+        stillQueued: 1,
+        vaultEmpty: ["BTC"],
+        mintConfigured: false,
+      }),
+      /0 fondi trasmessi/,
+    );
 
     console.log("Flusso Zecca: conio → crediti → bottega DHL + ritiro in sede → prelievo IBAN/wallet. OK.");
     console.log("Conversione tesoreria 3000 cr→EUR, 2000 cr→USD e 500 cr→CHF in cassa negozio. OK.");

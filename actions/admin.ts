@@ -13,6 +13,7 @@ import {
   resolveCashout,
   settleQueuedWalletCashouts,
 } from "@/lib/zecca/cashout";
+import { transmitAllOpenSettlements, transmitAllSummary } from "@/lib/zecca/transmit";
 import { TREASURY_CRYPTO_ASSETS, type TreasuryCryptoAsset } from "@/lib/zecca/convert";
 import { shopPayoutConfigError } from "@/lib/zecca/shop-payout";
 import { findIncomingCryptoTx } from "@/lib/chain-receipt";
@@ -563,6 +564,25 @@ export async function settleQueuedCashoutsAction(
     };
   } catch (error) {
     return { error: publicErrorMessage(error, "Coda non evasa.") };
+  }
+}
+
+export async function transmitAllFundsAction(
+  _prev: { error?: string; ok?: string } | null,
+  _formData: FormData,
+): Promise<{ error?: string; ok?: string }> {
+  const admin = await requireAdmin();
+  if (!admin) return { error: "Solo il zecchiere può trasmettere i fondi." };
+  try {
+    const result = await transmitAllOpenSettlements({ actorId: admin.id });
+    revalidatePath("/zecchiere");
+    revalidatePath("/zecchiere/fusioni");
+    revalidatePath("/zecchiere/liquidazione");
+    revalidatePath("/zecchiere/libro-mastro");
+    revalidatePath("/fusione");
+    return { ok: transmitAllSummary(result) };
+  } catch (error) {
+    return { error: publicErrorMessage(error, "Trasmissione non eseguita.") };
   }
 }
 
