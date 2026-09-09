@@ -1,4 +1,4 @@
-import type { PrismaClient } from "@prisma/client";
+import type { CashoutStatus, Prisma, PrismaClient } from "@prisma/client";
 import { isAddress } from "viem";
 import { prisma as defaultPrisma } from "@/lib/db";
 import { ZeccaError } from "@/lib/errors";
@@ -85,13 +85,13 @@ export async function assertWithdrawPolicy(input: {
     );
   }
 
-  const notThis = input.excludeCashoutId ? { id: { not: input.excludeCashoutId } } : {};
   const sinceHour = new Date(Date.now() - 60 * 60 * 1000);
   const sinceDay = new Date(Date.now() - 24 * 60 * 60 * 1000);
-  const openWallet = {
+  const openStatuses: CashoutStatus[] = ["PENDING", "PAID"];
+  const openWallet: Prisma.CashoutRequestWhereInput = {
     payoutKind: "WALLET",
-    status: { in: ["PENDING", "PAID"] as const },
-    ...notThis,
+    status: { in: openStatuses },
+    ...(input.excludeCashoutId ? { id: { not: input.excludeCashoutId } } : {}),
   };
 
   const hourlyCount = await db.cashoutRequest.count({
@@ -108,7 +108,7 @@ export async function assertWithdrawPolicy(input: {
     where: { ...openWallet, createdAt: { gte: sinceDay } },
     _sum: { usdCents: true },
   });
-  const usedToday = daily._sum.usdCents ?? 0;
+  const usedToday = daily._sum?.usdCents ?? 0;
   if (usedToday + usdCents > settings.withdrawMaxUsdCentsPerDay) {
     throw new ZeccaError(
       `Il massimale giornaliero di prelievo crypto è ${usdLabel(settings.withdrawMaxUsdCentsPerDay)}. Questo invio lo supererebbe (${usdLabel(usedToday)} già impegnati).`,
