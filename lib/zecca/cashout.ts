@@ -58,36 +58,13 @@ async function acceptQueuedSettlement(
   },
   note?: string,
 ) {
-  if (
-    cashout.status === "QUEUED" &&
-    cashout.receiptKind === QUEUED_RECEIPT_KIND &&
-    cashout.receiptRef &&
-    cashout.receiptHash
-  ) {
-    return db.cashoutRequest.findUniqueOrThrow({ where: { id: cashout.id } });
-  }
-
   const resolvedAt = new Date();
   const rail = cashout.payoutKind === "WALLET" ? (cashout.walletNetwork ?? "CRYPTO") : cashout.currency;
-  const receiptRef = zeccaSettlementRef(cashout.id, rail, resolvedAt);
   const destination =
     cashout.payoutKind === "WALLET"
       ? `${cashout.walletNetwork ?? ""} ${cashout.walletAddress ?? ""}`.trim()
       : `${cashout.ibanHolder ?? ""} ${cashout.iban ?? ""}`.trim();
-  const receiptHash = officialReceiptHash({
-    cashoutId: cashout.id,
-    credits: cashout.credits,
-    currency: cashout.currency,
-    eurCents: cashout.eurCents,
-    usdCents: cashout.usdCents,
-    chfCents: cashout.chfCents,
-    payoutKind: cashout.payoutKind,
-    destination,
-    receiptRef,
-    resolvedAt: resolvedAt.toISOString(),
-  });
   const currency = parseFiatCurrency(cashout.currency);
-  const receiptNote = `ricevuta Zecca ${receiptRef} · hash ricevuta ${receiptHash}`;
 
   return db.$transaction(async (tx) => {
     const latest = await tx.cashoutRequest.findUnique({ where: { id: cashout.id } });
@@ -102,6 +79,28 @@ async function acceptQueuedSettlement(
     ) {
       return latest;
     }
+
+    const reuse =
+      Boolean(latest.receiptRef && latest.receiptHash) &&
+      /^ZECCA\//i.test(latest.receiptRef ?? "");
+    const receiptRef = reuse
+      ? (latest.receiptRef as string)
+      : zeccaSettlementRef(cashout.id, rail, resolvedAt);
+    const receiptHash = reuse
+      ? (latest.receiptHash as string)
+      : officialReceiptHash({
+          cashoutId: cashout.id,
+          credits: cashout.credits,
+          currency: cashout.currency,
+          eurCents: cashout.eurCents,
+          usdCents: cashout.usdCents,
+          chfCents: cashout.chfCents,
+          payoutKind: cashout.payoutKind,
+          destination,
+          receiptRef,
+          resolvedAt: resolvedAt.toISOString(),
+        });
+    const receiptNote = `ricevuta Zecca ${receiptRef} · hash ricevuta ${receiptHash}`;
 
     await tx.cashoutRequest.update({
       where: { id: cashout.id },
@@ -660,37 +659,44 @@ export async function fulfillWalletCashoutFromShop(input: {
     );
   }
 
-  const sent = await tryShopOnChainPayout({
-    walletAddress: cashout.walletAddress,
-    walletNetwork: cashout.walletNetwork,
-    usdCents: cashout.usdCents,
-  });
-  if (sent) {
-    try {
-      return await resolveCashout({
-        cashoutId: cashout.id,
-        actorId: input.actorId,
-        action: "pay",
-        receipt: sent.hash,
-        adminNote: isEvmPayoutNetwork(cashout.walletNetwork)
-          ? `Payout on-chain sul wallet ${cashout.walletAddress} (${sent.network}) da ${sent.shopAddress}`
-          : `Payout Bitcoin verso ${cashout.walletAddress} da ${sent.shopAddress}`,
-        chainLookup: async ({ hash }) => ({
-          hash,
-          recipients: [cashout.walletAddress as string],
-        }),
-        db,
-      });
-    } catch (error) {
-      throw new ZeccaError(
-        `Invio già trasmesso (hash ${sent.hash}). ${error instanceof Error ? error.message : ""}`.trim(),
-        "SHOP_SENT_UNSETTLED",
-        cashout.id,
-      );
+  try {
+    const sent = await tryShopOnChainPayout({
+      walletAddress: cashout.walletAddress,
+      walletNetwork: cashout.walletNetwork,
+      usdCents: cashout.usdCents,
+    });
+    if (sent) {
+      try {
+        return await resolveCashout({
+          cashoutId: cashout.id,
+          actorId: input.actorId,
+          action: "pay",
+          receipt: sent.hash,
+          adminNote: isEvmPayoutNetwork(cashout.walletNetwork)
+            ? `Payout on-chain sul wallet ${cashout.walletAddress} (${sent.network}) da ${sent.shopAddress}`
+            : `Payout Bitcoin verso ${cashout.walletAddress} da ${sent.shopAddress}`,
+          chainLookup: async ({ hash }) => ({
+            hash,
+            recipients: [cashout.walletAddress as string],
+          }),
+          db,
+        });
+      } catch (error) {
+        throw new ZeccaError(
+          `Invio già trasmesso (hash ${sent.hash}). ${error instanceof Error ? error.message : ""}`.trim(),
+          "SHOP_SENT_UNSETTLED",
+          cashout.id,
+        );
+      }
+    }
+
+    return await acceptQueuedSettlement(db, cashout);
+  } finally {
+    const latest = await db.cashoutRequest.findUnique({ where: { id: cashout.id } });
+    if (latest?.status === "QUEUED" && isBroadcastLock(latest.receiptKind)) {
+      await acceptQueuedSettlement(db, latest);
     }
   }
-
-  return acceptQueuedSettlement(db, cashout);
 }
 
 /** Ritenta le uscite in coda: mint EVM se il contratto risponde, altrimenti resta in coda. */
@@ -700,6 +706,14 @@ export async function settleQueuedWalletCashouts(input: {
   limit?: number;
 }) {
   const db = input.db ?? defaultPrisma;
+  await db.cashoutRequest.updateMany({
+    where: {
+      status: "QUEUED",
+      payoutKind: "WALLET",
+      receiptKind: WITHDRAW_BROADCASTING,
+    },
+    data: { receiptKind: QUEUED_RECEIPT_KIND },
+  });
   const rows = await db.cashoutRequest.findMany({
     where: { status: "QUEUED", payoutKind: "WALLET" },
     orderBy: { createdAt: "asc" },

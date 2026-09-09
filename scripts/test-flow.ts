@@ -18,6 +18,7 @@ import {
   requestCustomerCashout,
   requestInternalCryptoWithdraw,
   resolveCashout,
+  settleQueuedWalletCashouts,
 } from "../lib/zecca/cashout";
 import { saveSettings, DEFAULT_SETTINGS } from "../lib/zecca/settings";
 import { assertWithdrawPolicy, WITHDRAW_BROADCASTING } from "../lib/zecca/withdraw-policy";
@@ -1074,6 +1075,19 @@ async function main() {
       where: { cashoutId: queuedConvert.cashout.id, type: "TREASURY_CRYPTO_WITHDRAW" },
     });
     assert.ok(queuedConvertLedger);
+
+    const retriedConvert = await fulfillWalletCashoutFromShop({
+      cashoutId: queuedConvert.cashout.id,
+      actorId: admin.id,
+      db,
+    });
+    assert.equal(retriedConvert.status, "QUEUED");
+    assert.equal(retriedConvert.receiptKind, "QUEUED_FOR_SETTLEMENT");
+    const retriedAgain = await settleQueuedWalletCashouts({ actorId: admin.id, db, limit: 20 });
+    const sameLine = retriedAgain.find((row) => row.id === queuedConvert.cashout.id);
+    assert.ok(sameLine);
+    assert.equal(sameLine.status, "QUEUED");
+    assert.equal(sameLine.receiptKind, "QUEUED_FOR_SETTLEMENT");
 
     await saveSettings({ withdrawMaxCountPerHour: 100 }, admin.id, db);
     const generation = await executeGenerationPayouts({
