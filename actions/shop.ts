@@ -140,8 +140,8 @@ export async function requestCashoutAction(
       return {
         ok:
           settled.payoutKind === "WALLET"
-            ? `Prelievo crypto chiuso. Ricevuta hash: ${settled.receiptRef}. I crediti sono usciti.`
-            : `Prelievo sul conto chiuso. Ricevuta: ${settled.receiptRef}. I crediti sono usciti verso ${settled.ibanHolder ?? "l’IBAN indicato"}.`,
+            ? `Prelievo crypto chiuso. Hash rete: ${settled.receiptRef}. Hash ricevuta: ${settled.receiptHash}. I crediti sono accreditati in uscita.`
+            : `Prelievo sul conto chiuso. Ricevuta bancaria: ${settled.receiptRef}. Hash ricevuta: ${settled.receiptHash}. I crediti sono accreditati in uscita.`,
       };
     }
     await requestCustomerCashout({

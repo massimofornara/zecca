@@ -4,6 +4,7 @@ import { ZeccaError } from "@/lib/errors";
 import { isValidIban, normalizeIban } from "@/lib/iban";
 import { isValidWalletAddress, normalizeWalletAddress, walletNetworkLabel } from "@/lib/wallet";
 import { type ChainLookup, verifyCryptoReceipt } from "@/lib/chain-receipt";
+import { officialReceiptHash, sepaEndToEndId } from "@/lib/official-receipt";
 import { parsePayoutReceipt, type ReceiptKind } from "@/lib/receipt";
 import { appendLedger, pocketBalance } from "@/lib/zecca/ledger";
 import { creditsToEurCents, creditsToUsdCents, getSettings } from "@/lib/zecca/settings";
@@ -207,20 +208,37 @@ export async function resolveCashout(input: {
     }
 
     if (input.action === "pay") {
+      const resolvedAt = new Date();
+      const destination =
+        cashout.payoutKind === "WALLET"
+          ? `${cashout.walletNetwork ?? ""} ${cashout.walletAddress ?? ""}`.trim()
+          : `${cashout.ibanHolder ?? ""} ${cashout.iban ?? ""}`.trim();
+      const documentHash = officialReceiptHash({
+        cashoutId: cashout.id,
+        credits: cashout.credits,
+        currency,
+        eurCents: cashout.eurCents,
+        usdCents: cashout.usdCents,
+        payoutKind: cashout.payoutKind,
+        destination,
+        receiptRef: receiptRef ?? "",
+        resolvedAt: resolvedAt.toISOString(),
+      });
       const receiptNote =
         receiptKind === "TX_HASH"
-          ? `ricevuta hash ${receiptRef}`
-          : `ricevuta bonifico ${receiptRef}`;
+          ? `ricevuta hash rete ${receiptRef} · hash ricevuta ${documentHash}`
+          : `ricevuta bonifico ${receiptRef} · hash ricevuta ${documentHash}`;
 
       await tx.cashoutRequest.update({
         where: { id: cashout.id },
         data: {
           status: "PAID",
-          resolvedAt: new Date(),
+          resolvedAt,
           adminNote: input.adminNote?.trim() || (receiptKind === "TX_HASH" ? "Invio crypto eseguito" : "Bonifico eseguito"),
           receiptKind,
           receiptRef,
           receiptUrl,
+          receiptHash: documentHash,
         },
       });
       await appendLedger(
@@ -241,7 +259,7 @@ export async function resolveCashout(input: {
               ? `${(cashout.usdCents / 100).toFixed(2)} USD`
               : `${(cashout.eurCents / 100).toFixed(2)} EUR`
           } · ${receiptNote}`,
-          metadata: { receiptKind, receiptRef, receiptUrl },
+          metadata: { receiptKind, receiptRef, receiptUrl, receiptHash: documentHash },
         },
         tx,
       );
@@ -275,8 +293,7 @@ export async function resolveCashout(input: {
 }
 
 export function houseBankReceiptRef(cashoutId: string, currency: string) {
-  const day = new Date().toISOString().slice(0, 10).replaceAll("-", "");
-  return `ZECCA ${currency} ${day} ${cashoutId.slice(0, 8).toUpperCase()}`;
+  return sepaEndToEndId(cashoutId, currency);
 }
 
 /** Massimo/Maxi: la richiesta si chiude subito con ricevuta (CRO o hash). */

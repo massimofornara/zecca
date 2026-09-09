@@ -475,7 +475,8 @@ async function main() {
     });
     assert.equal(instantBank.status, "PAID");
     assert.equal(instantBank.receiptKind, "BANK_REF");
-    assert.ok(instantBank.receiptRef?.startsWith("ZECCA "));
+    assert.ok(instantBank.receiptRef?.startsWith("ZECCA/"));
+    assert.equal(instantBank.receiptHash?.length, 64);
     assert.equal(await pocketBalance("USER", houseB.id, db), 0);
 
     const aliasUser = await db.user.create({
@@ -523,6 +524,7 @@ async function main() {
     assert.equal(instantCrypto.status, "PAID");
     assert.equal(instantCrypto.receiptKind, "TX_HASH");
     assert.equal(instantCrypto.receiptRef, `0x${"cd".repeat(32)}`);
+    assert.equal(instantCrypto.receiptHash?.length, 64);
     assert.equal(await pocketBalance("USER", aliasUser.id, db), 0);
 
     console.log("Flusso Zecca: conio → crediti → bottega DHL + ritiro in sede → prelievo IBAN/wallet. OK.");

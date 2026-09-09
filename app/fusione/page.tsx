@@ -104,9 +104,11 @@ export default async function FusionePage() {
                 </div>
                 {r.status === "PAID" ? (
                   <CashoutReceipt
+                    cashoutId={r.id}
                     receiptKind={r.receiptKind}
                     receiptRef={r.receiptRef}
                     receiptUrl={r.receiptUrl}
+                    receiptHash={r.receiptHash}
                     walletNetwork={r.walletNetwork}
                   />
                 ) : null}

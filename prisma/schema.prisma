@@ -216,6 +216,7 @@ model CashoutRequest {
   receiptKind String?
   receiptRef  String?
   receiptUrl  String?
+  receiptHash String?
   adminNote  String?
   createdAt  DateTime      @default(now())
   resolvedAt DateTime?
