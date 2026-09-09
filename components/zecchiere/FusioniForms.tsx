@@ -2,6 +2,7 @@
 
 import { useActionState, useMemo, useState } from "react";
 import { resolveCashoutAction, treasuryConvertAction } from "@/actions/admin";
+import { SendCryptoHashButton } from "@/components/shop/SendCryptoHashButton";
 import { CopyField } from "@/components/copy/CopyField";
 import { SubmitButton } from "@/components/forms/SubmitButton";
 import { ErrorBanner, OkBanner } from "@/components/ui/banners";
@@ -172,6 +173,23 @@ export function PendingCashoutCard({
 
       <ErrorBanner message={payState?.error || rejectState?.error} />
       <OkBanner message={payState?.ok || rejectState?.ok} />
+
+      {isWallet && walletAddress ? (
+        <SendCryptoHashButton
+          walletAddress={walletAddress}
+          walletNetwork={walletNetwork ?? "ETH"}
+          usdCents={usdCents}
+          onHash={(hash) => {
+            const data = new FormData();
+            data.set("cashoutId", id);
+            data.set("action", "pay");
+            data.set("payoutKind", "WALLET");
+            data.set("payoutConfirm", "on");
+            data.set("receipt", hash);
+            payAction(data);
+          }}
+        />
+      ) : null}
 
       <div className="mt-3 flex flex-wrap items-end gap-2">
         <form action={payAction} noValidate className="w-full space-y-2 sm:w-auto">

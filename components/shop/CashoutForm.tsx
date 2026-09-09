@@ -93,7 +93,7 @@ export function CashoutForm({
         <p className="text-sm text-muted-foreground">
           {pending
             ? payoutKind === "WALLET"
-              ? "La richiesta è attiva. Invia dal wallet l’importo in crypto, poi cerca l’hash su Etherscan, BscScan o Blockscout."
+              ? "La richiesta è aperta. Esegui l’invio dal wallet: la rete crea l’hash su Etherscan, BscScan o Blockscout."
               : "La richiesta è attiva. Copia i dati, invia da banca o wallet, poi incolla CRO o hash qui sotto per chiuderla."
             : "CRO o hash sotto chiudono il prelievo nel libro. Non sono un accredito creato dal sito."}
         </p>
@@ -115,6 +115,9 @@ export function CashoutForm({
                 cashoutId={state.receiptId}
                 payoutKind={state.payoutKind ?? payoutKind}
                 proofToken={state.proofToken}
+                walletAddress={walletAddress}
+                walletNetwork={cryptoId}
+                usdCents={amount * usdCentsPerCredit}
               />
             ) : (
               <p className="text-sm text-muted-foreground">

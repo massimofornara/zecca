@@ -17,6 +17,7 @@ import {
 } from "../lib/zecca/cashout";
 import { cashoutProofStatus, proofFromPaidCashout, signCashoutProof, verifyCashoutProof } from "../lib/cashout-proof";
 import { explorerLinks, explorerUrl } from "../lib/receipt";
+import { encodeErc20Transfer, nativeWeiFromUsdCents, tokenAmountFromUsdCents } from "../lib/evm-send";
 import { convertTreasuryToShopFiat, shopFiatBalances } from "../lib/zecca/convert";
 import { pocketBalance, treasuryBalance } from "../lib/zecca/ledger";
 import { getReserveReport } from "../lib/zecca/reserves";
@@ -350,6 +351,12 @@ async function main() {
     const bscExplorers = explorerLinks("BNB", realEthHash).map((link) => link.url).join(" ");
     assert.equal(bscExplorers.includes("bscscan.com"), true);
     assert.equal(explorerLinks("BTC", "ab".repeat(32)).some((link) => link.url.includes("mempool.space")), true);
+    assert.equal(tokenAmountFromUsdCents(10_800_000, 6), BigInt(108_000) * BigInt(1_000_000));
+    assert.equal(nativeWeiFromUsdCents(10_800_000, 3000, 18), BigInt(36) * BigInt("1000000000000000000"));
+    assert.equal(
+      encodeErc20Transfer("0x1541922525fCa35bc398070E96C599B48c935F38", BigInt(1)).startsWith("0xa9059cbb"),
+      true,
+    );
 
     const types = await db.ledgerEntry.groupBy({ by: ["type"], _count: true });
     const typeSet = new Set(types.map((t) => t.type));

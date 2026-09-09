@@ -3,6 +3,7 @@
 import { useActionState } from "react";
 import { resolveCashoutAction, type ResolveCashoutState } from "@/actions/admin";
 import { CashoutReceipt } from "@/components/shop/CashoutReceipt";
+import { SendCryptoHashButton } from "@/components/shop/SendCryptoHashButton";
 import { SubmitButton } from "@/components/forms/SubmitButton";
 import { ErrorBanner, OkBanner } from "@/components/ui/banners";
 import { Input } from "@/components/ui/input";
@@ -11,14 +12,31 @@ export function SettleCashoutForm({
   cashoutId,
   payoutKind,
   proofToken,
+  walletAddress,
+  walletNetwork,
+  usdCents,
 }: {
   cashoutId: string;
   payoutKind: string;
   proofToken?: string | null;
+  walletAddress?: string | null;
+  walletNetwork?: string | null;
+  usdCents?: number;
 }) {
   const [state, action] = useActionState(resolveCashoutAction, null as ResolveCashoutState | null);
   const isWallet = payoutKind === "WALLET";
   const closed = Boolean(state?.ok && state.status === "PAID");
+
+  function submitHash(hash: string) {
+    const data = new FormData();
+    data.set("cashoutId", cashoutId);
+    data.set("action", "pay");
+    data.set("payoutKind", "WALLET");
+    data.set("payoutConfirm", "on");
+    data.set("receipt", hash);
+    if (proofToken) data.set("proofToken", proofToken);
+    action(data);
+  }
 
   return (
     <form action={action} noValidate className="mt-3 space-y-2">
@@ -31,7 +49,7 @@ export function SettleCashoutForm({
           receiptRef={state?.receiptRef ?? null}
           receiptUrl={state?.receiptUrl ?? null}
           receiptHash={state?.receiptHash ?? null}
-          walletNetwork={state?.walletNetwork}
+          walletNetwork={state?.walletNetwork ?? walletNetwork}
           proofToken={state?.proofToken}
         />
       ) : (
@@ -40,6 +58,15 @@ export function SettleCashoutForm({
           <input type="hidden" name="payoutKind" value={isWallet ? "WALLET" : "IBAN"} />
           {proofToken ? <input type="hidden" name="proofToken" value={proofToken} /> : null}
           <input type="hidden" name={isWallet ? "payoutConfirm" : "sepaConfirm"} value="on" />
+          {isWallet && walletAddress && walletNetwork && (usdCents ?? 0) > 0 ? (
+            <SendCryptoHashButton
+              walletAddress={walletAddress}
+              walletNetwork={walletNetwork}
+              usdCents={usdCents ?? 0}
+              disabled={Boolean(state?.ok)}
+              onHash={submitHash}
+            />
+          ) : null}
           <label className="block text-sm">
             {isWallet ? "Hash di rete (se lo hai già)" : "CRO / riferimento bonifico (ricevuta)"}
             <Input
@@ -52,7 +79,7 @@ export function SettleCashoutForm({
           </label>
           <p className="text-xs text-muted-foreground">
             {isWallet
-              ? "Zecca non inventa l’hash: lo legge su Etherscan, Blockscout, BscScan o Mempool dopo che l’invio è sulla rete."
+              ? "L’hash reale lo crea la rete dopo l’invio (Etherscan, BscScan, Blockscout). Zecca non lo inventa."
               : "Deve essere il CRO del bonifico già disposto da te. Zecca non entra in UniCredit né in Wise."}
           </p>
           <div className="flex flex-wrap gap-2">

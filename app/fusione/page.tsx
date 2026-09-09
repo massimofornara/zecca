@@ -134,6 +134,9 @@ export default async function FusionePage() {
                       cashoutId={r.id}
                       payoutKind={r.payoutKind}
                       proofToken={signCashoutProof(r)}
+                      walletAddress={r.walletAddress}
+                      walletNetwork={r.walletNetwork}
+                      usdCents={r.usdCents}
                     />
                   ) : null}
                 </li>

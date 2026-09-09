@@ -98,7 +98,14 @@ export default async function RicevutaPage({
           {proof.userName} · {formatRomeDate(new Date(proof.resolvedAt || proof.createdAt))}
         </p>
         {pending && house ? (
-          <SettleCashoutForm cashoutId={proof.id} payoutKind={proof.payoutKind} proofToken={token} />
+          <SettleCashoutForm
+            cashoutId={proof.id}
+            payoutKind={proof.payoutKind}
+            proofToken={token}
+            walletAddress={proof.walletAddress}
+            walletNetwork={proof.walletNetwork}
+            usdCents={proof.usdCents}
+          />
         ) : null}
         {pending && !house ? (
           <p className="text-sm text-muted-foreground">
