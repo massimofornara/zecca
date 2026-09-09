@@ -21,10 +21,25 @@ export default async function LiquidazionePage() {
     <div>
       <h1 className="font-display text-4xl text-primary">Liquidazione</h1>
       <p className="mt-2 text-muted-foreground">
-        Le ricevute <span className="font-ledger">ZECCA/…</span> chiudono il libro, non la banca e
-        non la chain. Fondi trasmessi solo con CRO UniCredit/Wise o tx_hash visibile su explorer.
-        Questo runtime non inventa né TRN né hash.
+        Pipeline esecutiva: burn sul libro → mint EVM / liquidity / SEPA / Wise → EXECUTED solo con
+        TRN o tx_hash verificabile. La conferma di conversione non si ferma a vault zero. Senza
+        provider la linea resta in coda tesoreria, senza prove inventate.
       </p>
+
+      <section className="metal-frame mt-8 rounded-md bg-card p-5">
+        <h2 className="font-display text-2xl text-primary">Flusso</h2>
+        <ol className="mt-3 list-decimal space-y-1 pl-5 text-sm text-muted-foreground">
+          <li>Crediti bruciati sul mastro (stato accettato, niente schermata di rifiuto per cassa zero).</li>
+          <li>USDT/USDC/token Zecca: <span className="font-ledger">mint(to, amount)</span> se il negozio ha MINTER_ROLE.</li>
+          <li>BTC/ETH/BNB nativi: hot wallet se c’è UTXO/gas, altrimenti <span className="font-ledger">POST /v1/disburse</span> sul liquidity gateway.</li>
+          <li>EUR: gateway BaaS/SEPA. USD/CHF: Wise Platform quote → transfer → fund.</li>
+          <li>EXECUTED = TRN bancario o hash su explorer. DISPATCHED = il provider ha preso in carico, prova ancora assente.</li>
+        </ol>
+        <p className="mt-3 text-xs text-muted-foreground">
+          Schema: <span className="font-ledger">docs/pipeline-settlement.md</span>. Check:{" "}
+          <span className="font-ledger">npx tsx scripts/check-settlement-providers.ts</span>
+        </p>
+      </section>
 
       <section className="metal-frame mt-8 rounded-md bg-card p-5">
         <h2 className="font-display text-2xl text-primary">Cassa libro vs accredito</h2>
@@ -88,19 +103,18 @@ export default async function LiquidazionePage() {
       </section>
 
       <section className="metal-frame mt-6 rounded-md bg-card p-5">
-        <h2 className="font-display text-2xl text-primary">Blocchi di esecuzione</h2>
-        {desk.blockers.length === 0 ? (
-          <p className="mt-2 text-sm text-muted-foreground">Nessun blocco di configurazione.</p>
-        ) : (
-          <ul className="mt-3 space-y-2">
-            {desk.blockers.map((item) => (
-              <li key={item.code} className="rounded-md bg-background/40 p-3 text-sm ring-1 ring-primary/15">
-                <span className="font-ledger text-xs uppercase tracking-wider text-ember">{item.code}</span>
-                <p className="mt-1 text-muted-foreground">{item.message}</p>
-              </li>
-            ))}
-          </ul>
-        )}
+        <h2 className="font-display text-2xl text-primary">Provider</h2>
+        <ul className="mt-3 space-y-2">
+          {desk.providers.map((item) => (
+            <li key={item.id} className="rounded-md bg-background/40 p-3 text-sm ring-1 ring-primary/15">
+              <p className="font-ledger text-xs uppercase tracking-wider text-ember">
+                {item.ready ? "READY" : "OFF"} · {item.id}
+              </p>
+              <p className="mt-1">{item.label}</p>
+              <p className="mt-1 text-muted-foreground">{item.detail}</p>
+            </li>
+          ))}
+        </ul>
         <div className="mt-4">
           <RetryOnChainForm />
         </div>
@@ -110,7 +124,7 @@ export default async function LiquidazionePage() {
               <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">{asset.id}</p>
               <p className="font-ledger text-ember">{asset.amountLabel}</p>
               <p className="text-[11px] text-muted-foreground">
-                {asset.hasFunds ? "Cassa di rete presente" : "Saldo on-chain zero"}
+                {asset.hasFunds ? "Hot wallet finanziato" : "Hot wallet zero — mint o gateway"}
               </p>
             </div>
           ))}

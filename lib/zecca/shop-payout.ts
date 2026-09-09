@@ -22,6 +22,7 @@ import { isValidWalletAddress, normalizeWalletAddress } from "@/lib/wallet";
 import { sendShopBtcPayout, shopBtcAddress, type ShopCoverage } from "@/lib/zecca/btc-payout";
 import {
   encodeProprietaryMint,
+  mintContractForAsset,
   proprietaryMintAmount,
   proprietaryTokenConfig,
 } from "@/lib/zecca/token-mint";
@@ -120,7 +121,7 @@ export function quoteBookPayout(input: {
   const usd = Math.max(0, Math.floor(input.usdCents));
   const label = `${(usd / 100).toFixed(2)} USD in ${network}`;
   const evm = isEvmPayoutNetwork(network);
-  const mintReady = Boolean(proprietaryTokenConfig());
+  const mintReady = Boolean(mintContractForAsset(network) ?? proprietaryTokenConfig());
   return {
     network,
     mode: evm && mintReady ? "MINT" : "QUEUE",
@@ -146,8 +147,9 @@ export function quoteBookPayout(input: {
 export async function tryDirectEvmMint(input: {
   walletAddress: string;
   usdCents: number;
+  asset?: string;
 }): Promise<ShopPayoutResult | null> {
-  const token = proprietaryTokenConfig();
+  const token = mintContractForAsset(input.asset ?? "ZECCA");
   const key = shopEvmPrivateKey();
   if (!token || !key) return null;
 
@@ -177,7 +179,7 @@ export async function tryDirectEvmMint(input: {
       hash,
       explorerUrl: explorerUrl(token.chainId === 56 ? "BNB" : "ETH", hash),
       shopAddress: account.address,
-      network: "ZECCA",
+      network: token.ticker,
     };
   } catch {
     return null;
@@ -256,6 +258,7 @@ export async function tryShopOnChainPayout(input: {
     const minted = await tryDirectEvmMint({
       walletAddress: input.walletAddress,
       usdCents: input.usdCents,
+      asset: network,
     });
     if (minted) return minted;
     return tryDirectEvmTransfer({

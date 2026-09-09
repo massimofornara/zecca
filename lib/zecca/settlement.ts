@@ -6,15 +6,17 @@ import { formatIbanDisplay } from "@/lib/iban";
 import { walletNetworkLabel } from "@/lib/wallet";
 import { parseFiatCurrency } from "@/lib/zecca/fiat";
 import { housePayoutByIban, HOUSE_PAYOUT_ACCOUNTS } from "@/lib/zecca/house-accounts";
-import { proprietaryTokenConfig } from "@/lib/zecca/token-mint";
+import { mintContractForAsset } from "@/lib/zecca/token-mint";
 import { shopFiatBalances } from "@/lib/zecca/convert";
 import { getShopNetworkVault } from "@/lib/zecca/shop-vault";
 import { buildPain001Document, buildPaymentCsv, sepaDebtorBlocker, sepaDebtorConfig } from "@/lib/zecca/pain001";
 import { wiseDispatchBlocker, wiseApiConfig } from "@/lib/zecca/wise-dispatch";
+import { settlementProviderHealth } from "@/lib/settlement/pipeline";
+import { sepaGatewayConfig } from "@/lib/settlement/gateways";
 
 const QUEUED_RECEIPT_KIND = "QUEUED_FOR_SETTLEMENT";
 
-export type SettlementPhase = "RICEVUTA_TESORERIA" | "FONDI_TRASMESSI";
+export type SettlementPhase = "RICEVUTA_TESORERIA" | "INVIATO_AL_PROVIDER" | "FONDI_TRASMESSI";
 
 export type SettlementLine = {
   id: string;
@@ -52,23 +54,28 @@ export function settlementPhase(row: {
   receiptRef: string | null;
   payoutKind: string;
 }): SettlementPhase {
-  if (row.status !== "PAID") return "RICEVUTA_TESORERIA";
-  if (row.payoutKind === "WALLET" && row.receiptKind === "TX_HASH" && row.receiptRef) {
-    return "FONDI_TRASMESSI";
+  if (row.status === "PAID") {
+    if (row.payoutKind === "WALLET" && row.receiptKind === "TX_HASH" && row.receiptRef) {
+      return "FONDI_TRASMESSI";
+    }
+    if (
+      row.payoutKind === "IBAN" &&
+      row.receiptKind === "BANK_REF" &&
+      row.receiptRef &&
+      !isZeccaLedgerBankRef(row.receiptRef)
+    ) {
+      return "FONDI_TRASMESSI";
+    }
+    return "RICEVUTA_TESORERIA";
   }
-  if (
-    row.payoutKind === "IBAN" &&
-    row.receiptKind === "BANK_REF" &&
-    row.receiptRef &&
-    !isZeccaLedgerBankRef(row.receiptRef)
-  ) {
-    return "FONDI_TRASMESSI";
-  }
+  if (row.receiptKind === "PROVIDER_REF" && row.receiptRef) return "INVIATO_AL_PROVIDER";
   return "RICEVUTA_TESORERIA";
 }
 
 export function phaseLabel(phase: SettlementPhase) {
-  return phase === "FONDI_TRASMESSI" ? "Fondi trasmessi / ricevuti" : "Ricevuta tesoreria (libro)";
+  if (phase === "FONDI_TRASMESSI") return "EXECUTED · fondi trasmessi";
+  if (phase === "INVIATO_AL_PROVIDER") return "Inviato al provider (in attesa di hash/TRN)";
+  return "Ricevuta tesoreria (libro)";
 }
 
 function lineBlocker(row: {
@@ -80,20 +87,27 @@ function lineBlocker(row: {
   receiptRef: string | null;
 }): string | null {
   if (row.status === "PAID" && settlementPhase(row) === "FONDI_TRASMESSI") return null;
+  if (row.receiptKind === "PROVIDER_REF") {
+    return "Preso in carico dal provider. EXECUTED solo quando arriva tx_hash o TRN verificabile.";
+  }
   if (row.payoutKind === "IBAN") {
     const currency = parseFiatCurrency(row.currency);
-    if (currency === "EUR") return sepaDebtorBlocker();
+    if (currency === "EUR") {
+      return sepaGatewayConfig()
+        ? "Gateway SEPA collegato ma senza TRN su questa linea."
+        : sepaDebtorBlocker();
+    }
     return wiseDispatchBlocker();
   }
   const net = (row.walletNetwork ?? "").toUpperCase();
   if (net === "BTC") {
-    return "Nessun tx_hash Mempool. Bitcoin non si conia: serve UTXO sul wallet operativo o un gateway di liquidità. Ritenta l’uscita on-chain dopo il finanziamento.";
+    return "Pipeline: mint non applicabile. Hot wallet o ZECCA_LIQUIDITY_URL. Senza UTXO/gateway niente hash Mempool.";
   }
   if (net === "ETH" || net === "BNB") {
-    return `Nessun tx_hash su ${net === "BNB" ? "BscScan" : "Etherscan"}. ${net} nativo non si conia da un libro crediti. Serve saldo e gas sul wallet negozio, oppure ZECCA_TOKEN_ADDRESS (token Zecca, non ether/BNB).`;
+    return `Pipeline: ${net} nativo via hot wallet o liquidity gateway, non via mint.`;
   }
   if (net === "USDT" || net === "USDC") {
-    return `Nessun tx_hash ${net}. Tether e Circle non rispondono a questo libro. Serve saldo ERC-20 sul wallet negozio; un mint on-demand emetterebbe solo il token proprietario Zecca.`;
+    return `Pipeline: mint sul contratto Zecca (MINTER_ROLE), non su Tether/Circle. Senza ZECCA_TOKEN_ADDRESS / ZECCA_MINT_${net}_ADDRESS niente hash.`;
   }
   return "Liquidazione on-chain non eseguita: manca cassa di rete o contratto di mint.";
 }
@@ -116,7 +130,9 @@ export function classifyCashout(row: {
   const rail = row.payoutKind === "WALLET" ? "WALLET" : "IBAN";
   const phase = settlementPhase(row);
   const zeccaRef =
-    row.receiptKind === QUEUED_RECEIPT_KIND || isZeccaLedgerBankRef(row.receiptRef ?? "")
+    row.receiptKind === QUEUED_RECEIPT_KIND ||
+    row.receiptKind === "PROVIDER_REF" ||
+    isZeccaLedgerBankRef(row.receiptRef ?? "")
       ? row.receiptRef
       : null;
   const realRef = phase === "FONDI_TRASMESSI" ? row.receiptRef : null;
@@ -187,24 +203,25 @@ export async function listSettlementLines(db: PrismaClient = defaultPrisma): Pro
 
 export async function settlementBlockers(): Promise<SettlementBlocker[]> {
   const vault = await getShopNetworkVault();
-  const mint = proprietaryTokenConfig();
+  const mint = mintContractForAsset("USDT") ?? mintContractForAsset("ZECCA");
   const items: SettlementBlocker[] = [];
-  const sepa = sepaDebtorBlocker();
-  if (sepa) items.push({ code: "SEPA_DEBTOR", message: sepa });
-  const wise = wiseDispatchBlocker();
-  if (wise) items.push({ code: "WISE_API", message: wise });
+  for (const provider of settlementProviderHealth()) {
+    if (!provider.ready && provider.id !== "hot-wallet") {
+      items.push({ code: provider.id.toUpperCase(), message: provider.detail });
+    }
+  }
   if (!mint) {
     items.push({
       code: "NO_MINT_CONTRACT",
       message:
-        "ZECCA_TOKEN_ADDRESS assente. USDT, USDC, ETH e BNB non si coniano da un libro crediti. Un mint on-demand emetterebbe solo un token proprietario Zecca, non Tether né ether.",
+        "Nessun contratto con MINTER_ROLE. Deploy di contracts/ZeccaMinter.sol e ZECCA_TOKEN_ADDRESS. Non è Tether né ether.",
     });
   }
   const empty = vault.assets.filter((asset) => !asset.hasFunds);
   if (empty.length) {
     items.push({
       code: "VAULT_EMPTY",
-      message: `Cassa di rete a zero su ${empty.map((a) => a.id).join(", ")}. Senza UTXO/gas/token sul wallet operativo non esiste tx_hash Etherscan, BscScan o Mempool.`,
+      message: `Hot wallet a zero su ${empty.map((a) => a.id).join(", ")}. I nativi passano al liquidity gateway se configurato; altrimenti restano in coda senza hash.`,
     });
   }
   return items;
@@ -217,7 +234,9 @@ export async function buildSettlementDesk(db: PrismaClient = defaultPrisma) {
     getShopNetworkVault(),
     settlementBlockers(),
   ]);
-  const open = lines.filter((line) => line.phase === "RICEVUTA_TESORERIA" && line.status !== "PENDING");
+  const open = lines.filter(
+    (line) => line.phase !== "FONDI_TRASMESSI" && line.status !== "PENDING",
+  );
   const transmitted = lines.filter((line) => line.phase === "FONDI_TRASMESSI");
   const fiatQueued = open.filter((line) => line.rail === "IBAN");
   const cryptoQueued = open.filter((line) => line.rail === "WALLET");
@@ -230,12 +249,13 @@ export async function buildSettlementDesk(db: PrismaClient = defaultPrisma) {
     shop,
     vault,
     blockers,
+    providers: settlementProviderHealth(),
     rails: {
       unicredit: HOUSE_PAYOUT_ACCOUNTS.find((a) => a.id === "unicredit") ?? null,
       wise: HOUSE_PAYOUT_ACCOUNTS.find((a) => a.id === "wise") ?? null,
       sepaDebtor: sepaDebtorConfig(),
       wiseApi: Boolean(wiseApiConfig()),
-      mint: proprietaryTokenConfig(),
+      mint: mintContractForAsset("USDT") ?? mintContractForAsset("ZECCA"),
     },
   };
 }

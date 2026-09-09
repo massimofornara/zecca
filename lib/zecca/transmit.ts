@@ -1,12 +1,9 @@
 import type { PrismaClient } from "@prisma/client";
 import { prisma as defaultPrisma } from "@/lib/db";
-import { parseFiatCurrency } from "@/lib/zecca/fiat";
-import { settleQueuedWalletCashouts } from "@/lib/zecca/cashout";
-import { sepaDebtorBlocker } from "@/lib/zecca/pain001";
+import { settleQueuedWalletCashouts, fulfillIbanFromRails } from "@/lib/zecca/cashout";
 import { classifyCashout, type SettlementLine } from "@/lib/zecca/settlement";
-import { tryWisePayout, wiseDispatchBlocker } from "@/lib/zecca/wise-dispatch";
 import { getShopNetworkVault } from "@/lib/zecca/shop-vault";
-import { proprietaryTokenConfig } from "@/lib/zecca/token-mint";
+import { mintContractForAsset } from "@/lib/zecca/token-mint";
 
 export type TransmitAttempt = {
   id: string;
@@ -67,50 +64,24 @@ export async function transmitAllOpenSettlements(input: {
   }
 
   for (const row of ibanRows) {
-    const line = lineFromCashout(row);
-    const currency = parseFiatCurrency(row.currency);
-    if (currency === "EUR") {
-      attempts.push({
-        id: row.id,
-        rail: "IBAN",
-        asset: "EUR",
-        amountLabel: line.amountLabel,
-        destination: line.destination,
-        transmitted: false,
-        proof: null,
-        reason: sepaDebtorBlocker() ?? "SEPA non disposto: manca il conto ordinante.",
-      });
-      continue;
-    }
-    const wise = await tryWisePayout({
-      currency,
-      amountCents: currency === "USD" ? row.usdCents : row.chfCents,
-      iban: row.iban ?? "",
-      holder: row.ibanHolder ?? "",
-      reference: row.receiptRef ?? row.id,
+    const settled = await fulfillIbanFromRails({
+      cashoutId: row.id,
+      actorId: input.actorId,
+      db,
     });
-    if (wise?.ok) {
-      attempts.push({
-        id: row.id,
-        rail: "IBAN",
-        asset: currency,
-        amountLabel: line.amountLabel,
-        destination: line.destination,
-        transmitted: true,
-        proof: wise.transferId,
-        reason: `Wise transfer ${wise.transferId}`,
-      });
-      continue;
-    }
+    const line = lineFromCashout(settled);
     attempts.push({
-      id: row.id,
+      id: settled.id,
       rail: "IBAN",
-      asset: currency,
+      asset: line.asset,
       amountLabel: line.amountLabel,
       destination: line.destination,
-      transmitted: false,
-      proof: null,
-      reason: wise?.message ?? wiseDispatchBlocker() ?? "Wise non ha preso in carico il pagamento.",
+      transmitted: line.phase === "FONDI_TRASMESSI",
+      proof: line.bankOrChainRef,
+      reason:
+        line.phase === "FONDI_TRASMESSI"
+          ? `TRN ${line.bankOrChainRef}`
+          : line.blocker ?? "Binario fiat non collegato. Nessun CRO inventato.",
     });
   }
 
@@ -119,7 +90,7 @@ export async function transmitAllOpenSettlements(input: {
     onChainPaid: attempts.filter((item) => item.rail === "WALLET" && item.transmitted).length,
     stillQueued: attempts.filter((item) => !item.transmitted).length,
     vaultEmpty: vault.assets.filter((asset) => !asset.hasFunds).map((asset) => asset.id),
-    mintConfigured: Boolean(proprietaryTokenConfig()),
+    mintConfigured: Boolean(mintContractForAsset("USDT") ?? mintContractForAsset("ZECCA")),
   };
 }
 

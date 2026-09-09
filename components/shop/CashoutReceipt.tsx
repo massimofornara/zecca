@@ -28,6 +28,11 @@ export function CashoutReceipt({
         <p className="text-xs text-ember">
           Hash di rete verificato. Aprilo sugli explorer: è visibile solo se la transazione è già confermata.
         </p>
+      ) : receiptKind === "PROVIDER_REF" ? (
+        <p className="text-xs text-muted-foreground">
+          Inviato al provider di liquidazione. Non è ancora un tx_hash di explorer né un CRO
+          bancario. EXECUTED solo quando il provider restituisce la prova verificabile.
+        </p>
       ) : receiptKind === "QUEUED_FOR_SETTLEMENT" ? (
         <p className="text-xs text-muted-foreground">
           Ricevuta tesoreria. I crediti sono bruciati sul libro. Non è un CRO UniCredit, non è un ID

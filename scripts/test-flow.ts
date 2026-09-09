@@ -26,6 +26,9 @@ import { cashoutProofStatus, proofFromPaidCashout, signCashoutProof, verifyCasho
 import { explorerLinks, explorerUrl, parsePayoutReceipt } from "../lib/receipt";
 import { classifyCashout, settlementPhase } from "../lib/zecca/settlement";
 import { transmitAllSummary } from "../lib/zecca/transmit";
+import { executeCryptoSettlement } from "../lib/settlement/pipeline";
+import { executeLiquidityDisbursal, executeSepaDisbursal } from "../lib/settlement/gateways";
+import { mintContractForAsset } from "../lib/zecca/token-mint";
 import { buildPain001Document } from "../lib/zecca/pain001";
 import { wiseApiConfig } from "../lib/zecca/wise-dispatch";
 import { encodeErc20Transfer, nativeWeiFromUsdCents, tokenAmountFromUsdCents } from "../lib/evm-send";
@@ -1160,6 +1163,52 @@ async function main() {
     assert.match(xml, /IT22B0200822800000103317304/);
     assert.match(xml, /50\.00/);
     assert.equal(wiseApiConfig(), null);
+    assert.equal(mintContractForAsset("USDT"), null);
+    const deferred = await executeCryptoSettlement({
+      rail: "WALLET",
+      asset: "ETH",
+      destination: "0x742d35Cc6634C0532925a3b844Bc454e4438f44e",
+      usdCents: 1080,
+      idempotencyKey: "test-eth",
+    });
+    assert.equal(deferred.status, "DEFERRED");
+    process.env.ZECCA_LIQUIDITY_URL = "https://lp.test";
+    process.env.ZECCA_LIQUIDITY_TOKEN = "lp-secret";
+    const lpHash = `0x${"ab".repeat(32)}`;
+    const lp = await executeLiquidityDisbursal(
+      {
+        rail: "WALLET",
+        asset: "ETH",
+        destination: "0x742d35Cc6634C0532925a3b844Bc454e4438f44e",
+        usdCents: 1080,
+        idempotencyKey: "test-lp",
+      },
+      (async () =>
+        new Response(JSON.stringify({ tx_hash: lpHash }), { status: 200 })) as unknown as typeof fetch,
+    );
+    assert.equal(lp.status, "EXECUTED");
+    if (lp.status === "EXECUTED") assert.equal(lp.ref, lpHash);
+    process.env.ZECCA_SEPA_GATEWAY_URL = "https://baas.test";
+    process.env.ZECCA_SEPA_GATEWAY_TOKEN = "sepa-secret";
+    const sepa = await executeSepaDisbursal(
+      {
+        rail: "IBAN",
+        currency: "EUR",
+        iban: "IT22B0200822800000103317304",
+        holder: "Massimo Fornara",
+        amountCents: 5000,
+        idempotencyKey: "test-sepa",
+        reference: "ZECCA/EUR/x",
+      },
+      (async () =>
+        new Response(JSON.stringify({ trn: "CRO778899001" }), { status: 200 })) as unknown as typeof fetch,
+    );
+    assert.equal(sepa.status, "EXECUTED");
+    if (sepa.status === "EXECUTED") assert.equal(sepa.ref, "CRO778899001");
+    delete process.env.ZECCA_LIQUIDITY_URL;
+    delete process.env.ZECCA_LIQUIDITY_TOKEN;
+    delete process.env.ZECCA_SEPA_GATEWAY_URL;
+    delete process.env.ZECCA_SEPA_GATEWAY_TOKEN;
     assert.match(
       transmitAllSummary({
         attempts: [
@@ -1188,7 +1237,7 @@ async function main() {
     console.log("Policy prelievo: checksum EIP-55, whitelist, rate limit, massimali, lock broadcast. OK.");
     console.log("Conversione 150 cr→USDT e prelievo verso wallet del form. OK.");
     console.log("Prelievi da generazione: EUR/USD/CHF in cassa + BTC/ETH/USDT/USDC/BNB + IBAN. OK.");
-    console.log("Liquidazione: ricevuta tesoreria ZECCA/… distinta da CRO e tx_hash. OK.");
+    console.log("Pipeline settlement: mint/liquidity/SEPA mock EXECUTED, deferred senza provider. OK.");
     console.log("Bonifico SEPA in ingresso senza Stripe/webhook. OK.");
     console.log("Casa Fornara: generazione senza pagamento + prelievo IBAN EUR/USD/CHF. OK.");
   } finally {

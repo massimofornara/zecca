@@ -12,10 +12,10 @@ import { parseFiatCurrency, type FiatCurrency } from "@/lib/zecca/fiat";
 import { cashoutProofStatus, type CashoutProof } from "@/lib/cashout-proof";
 import { ensureHouseWalletCredits, isHouseEmail } from "@/lib/zecca/house";
 import {
-  tryShopOnChainPayout,
   isEvmPayoutNetwork,
   shopPayoutConfigError,
 } from "@/lib/zecca/shop-payout";
+import { executeCryptoSettlement, executeFiatSettlement } from "@/lib/settlement/pipeline";
 import {
   convertTreasuryToShopCash,
   parseTreasuryCryptoAsset,
@@ -30,6 +30,7 @@ import { assertWithdrawPolicy, isBroadcastLock, WITHDRAW_BROADCASTING } from "@/
 export type PayoutKind = "IBAN" | "WALLET";
 export type CashoutCurrency = FiatCurrency;
 export const QUEUED_RECEIPT_KIND = "QUEUED_FOR_SETTLEMENT";
+export const PROVIDER_RECEIPT_KIND = "PROVIDER_REF";
 
 export function isSettleableCashoutStatus(status: string | null | undefined) {
   return status === "PENDING" || status === "QUEUED";
@@ -176,6 +177,45 @@ async function acceptQueuedSettlement(
     }
 
     return tx.cashoutRequest.findUniqueOrThrow({ where: { id: cashout.id } });
+  });
+}
+
+async function markProviderDispatch(
+  db: PrismaClient,
+  cashout: {
+    id: string;
+    userId: string | null;
+    credits: number;
+    currency: string;
+    eurCents: number;
+    usdCents: number;
+    chfCents: number;
+    payoutKind: string;
+    iban: string | null;
+    ibanHolder: string | null;
+    walletAddress: string | null;
+    walletNetwork: string | null;
+    isTreasury: boolean;
+    status: string;
+    receiptKind: string | null;
+    receiptRef: string | null;
+    receiptHash: string | null;
+  },
+  dispatch: { provider: string; ref: string; url: string | null },
+) {
+  const queued = await acceptQueuedSettlement(
+    db,
+    cashout,
+    `Inviato al provider ${dispatch.provider}. In attesa di tx_hash o TRN. Rif. ${dispatch.ref}`,
+  );
+  return db.cashoutRequest.update({
+    where: { id: queued.id },
+    data: {
+      receiptKind: PROVIDER_RECEIPT_KIND,
+      receiptRef: dispatch.ref,
+      receiptUrl: dispatch.url,
+      adminNote: `Provider ${dispatch.provider} · ${dispatch.ref}`,
+    },
   });
 }
 
@@ -644,7 +684,11 @@ export async function fulfillWalletCashoutFromShop(input: {
     where: {
       id: cashout.id,
       status: { in: ["PENDING", "QUEUED"] },
-      OR: [{ receiptKind: null }, { receiptKind: QUEUED_RECEIPT_KIND }],
+      OR: [
+        { receiptKind: null },
+        { receiptKind: QUEUED_RECEIPT_KIND },
+        { receiptKind: PROVIDER_RECEIPT_KIND },
+      ],
     },
     data: { receiptKind: WITHDRAW_BROADCASTING },
   });
@@ -660,21 +704,23 @@ export async function fulfillWalletCashoutFromShop(input: {
   }
 
   try {
-    const sent = await tryShopOnChainPayout({
-      walletAddress: cashout.walletAddress,
-      walletNetwork: cashout.walletNetwork,
+    const result = await executeCryptoSettlement({
+      rail: "WALLET",
+      asset: cashout.walletNetwork,
+      destination: cashout.walletAddress,
       usdCents: cashout.usdCents,
+      idempotencyKey: cashout.id,
     });
-    if (sent) {
+    if (result.status === "EXECUTED") {
       try {
         return await resolveCashout({
           cashoutId: cashout.id,
           actorId: input.actorId,
           action: "pay",
-          receipt: sent.hash,
+          receipt: result.ref,
           adminNote: isEvmPayoutNetwork(cashout.walletNetwork)
-            ? `Payout on-chain sul wallet ${cashout.walletAddress} (${sent.network}) da ${sent.shopAddress}`
-            : `Payout Bitcoin verso ${cashout.walletAddress} da ${sent.shopAddress}`,
+            ? `EXECUTED via ${result.provider} sul wallet ${cashout.walletAddress}`
+            : `EXECUTED Bitcoin via ${result.provider} verso ${cashout.walletAddress}`,
           chainLookup: async ({ hash }) => ({
             hash,
             recipients: [cashout.walletAddress as string],
@@ -683,13 +729,19 @@ export async function fulfillWalletCashoutFromShop(input: {
         });
       } catch (error) {
         throw new ZeccaError(
-          `Invio già trasmesso (hash ${sent.hash}). ${error instanceof Error ? error.message : ""}`.trim(),
+          `Invio già trasmesso (hash ${result.ref}). ${error instanceof Error ? error.message : ""}`.trim(),
           "SHOP_SENT_UNSETTLED",
           cashout.id,
         );
       }
     }
-
+    if (result.status === "DISPATCHED") {
+      return markProviderDispatch(db, cashout, {
+        provider: result.provider,
+        ref: result.ref,
+        url: result.url,
+      });
+    }
     return await acceptQueuedSettlement(db, cashout);
   } finally {
     const latest = await db.cashoutRequest.findUnique({ where: { id: cashout.id } });
@@ -730,6 +782,54 @@ export async function settleQueuedWalletCashouts(input: {
     );
   }
   return settled;
+}
+
+export async function fulfillIbanFromRails(input: {
+  cashoutId: string;
+  actorId: string;
+  db?: PrismaClient;
+}) {
+  const db = input.db ?? defaultPrisma;
+  const cashout = await db.cashoutRequest.findUnique({ where: { id: input.cashoutId } });
+  if (!cashout) throw new ZeccaError("Richiesta di prelievo non trovata.", "NOT_FOUND");
+  if (cashout.status === "PAID") return cashout;
+  if (!isSettleableCashoutStatus(cashout.status)) {
+    throw new ZeccaError("Questa richiesta è già stata chiusa.", "ALREADY_RESOLVED");
+  }
+  if (cashout.payoutKind !== "IBAN" || !cashout.iban || !cashout.ibanHolder) {
+    throw new ZeccaError("Questo prelievo non è un bonifico IBAN.", "INVALID");
+  }
+  const currency = parseFiatCurrency(cashout.currency);
+  const amountCents =
+    currency === "USD" ? cashout.usdCents : currency === "CHF" ? cashout.chfCents : cashout.eurCents;
+  const result = await executeFiatSettlement({
+    rail: "IBAN",
+    currency,
+    iban: cashout.iban,
+    holder: cashout.ibanHolder,
+    amountCents,
+    idempotencyKey: cashout.id,
+    reference: cashout.receiptRef ?? cashout.id,
+  });
+  if (result.status === "EXECUTED") {
+    return resolveCashout({
+      cashoutId: cashout.id,
+      actorId: input.actorId,
+      action: "pay",
+      receipt: result.ref,
+      adminNote: `EXECUTED via ${result.provider}`,
+      db,
+    });
+  }
+  if (result.status === "DISPATCHED") {
+    return markProviderDispatch(db, cashout, {
+      provider: result.provider,
+      ref: result.ref,
+      url: result.url,
+    });
+  }
+  if (cashout.status === "QUEUED") return cashout;
+  return acceptQueuedSettlement(db, cashout);
 }
 
 /**
@@ -797,11 +897,16 @@ export async function requestAndFulfillCashout(input: {
     }
   }
   if (cashout.payoutKind === "IBAN" && input.bookSettle) {
-    return acceptQueuedSettlement(
+    const queued = await acceptQueuedSettlement(
       db,
       cashout,
       "Accettato sul libro verso l’IBAN indicato. Ricevuta Zecca emessa.",
     );
+    return fulfillIbanFromRails({
+      cashoutId: queued.id,
+      actorId: input.userId,
+      db,
+    });
   }
   return cashout;
 }

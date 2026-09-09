@@ -13,7 +13,9 @@ import { cn } from "@/lib/utils";
 import type { SettlementLine } from "@/lib/zecca/settlement";
 
 function phaseLabel(phase: SettlementLine["phase"]) {
-  return phase === "FONDI_TRASMESSI" ? "Fondi trasmessi / ricevuti" : "Ricevuta tesoreria (libro)";
+  if (phase === "FONDI_TRASMESSI") return "EXECUTED · fondi trasmessi";
+  if (phase === "INVIATO_AL_PROVIDER") return "Inviato al provider";
+  return "Ricevuta tesoreria (libro)";
 }
 
 export function RetryOnChainForm() {
@@ -106,7 +108,15 @@ export function SettlementLineCard({ line }: { line: SettlementLine }) {
         </div>
         <Badge variant={transmitted ? "default" : "outline"}>{phaseLabel(line.phase)}</Badge>
       </div>
-      {line.bookRef ? <div className="mt-3"><CopyField label="Ricevuta tesoreria" value={line.bookRef} mono /></div> : null}
+      {line.bookRef ? (
+        <div className="mt-3">
+          <CopyField
+            label={line.phase === "INVIATO_AL_PROVIDER" ? "Rif. provider" : "Ricevuta tesoreria"}
+            value={line.bookRef}
+            mono
+          />
+        </div>
+      ) : null}
       {line.bankOrChainRef ? (
         <div className="mt-2">
           <CopyField
