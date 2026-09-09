@@ -188,8 +188,6 @@ export function InternalCryptoWithdrawForm({
   if (pending && state?.receiptId) {
     return (
       <div className="mt-4 space-y-3">
-        <ErrorBanner message={state.error} />
-        <OkBanner message={state.ok} />
         <p className="text-sm text-muted-foreground">
           Destinazione <span className="font-ledger">{state.walletAddress}</span>. Il negozio
           invia dalla cassa di rete: MetaMask, Trust Wallet o l’exchange ricevono senza firmare.
