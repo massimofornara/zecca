@@ -45,6 +45,7 @@ export function CashoutForm({
   const [cryptoId, setCryptoId] = useState<(typeof CRYPTO_ASSETS)[number]["id"]>("USDT");
   const [walletAddress, setWalletAddress] = useState("");
   const [txHash, setTxHash] = useState("");
+  const [bankRef, setBankRef] = useState("");
   const [ibanHolder, setIbanHolder] = useState("");
   const [iban, setIban] = useState("");
   const amount = Number.isFinite(credits) && credits > 0 ? Math.floor(credits) : 0;
@@ -58,6 +59,7 @@ export function CashoutForm({
     return currency === "USD" ? usdLabel : eurLabel;
   }, [payoutKind, currency, eurLabel, usdLabel, crypto.ticker]);
   const done = Boolean(state?.receiptId && !state.error && state.receiptId !== dismissedId);
+  const pending = Boolean(done && (state?.pending || state?.status === "PENDING"));
 
   function pickCurrency(next: "EUR" | "USD") {
     setCurrency(next);
@@ -74,22 +76,38 @@ export function CashoutForm({
     return (
       <div className="metal-frame relative z-20 space-y-4 rounded-md bg-card p-5 md:p-7">
         <OkBanner message={state.ok} />
-        <h2 className="font-display text-2xl text-primary">Prelievo confermato</h2>
+        <h2 className="font-display text-2xl text-primary">
+          {pending ? "I soldi non sono partiti" : "Prova registrata"}
+        </h2>
         <p className="text-sm text-muted-foreground">
-          La schermata resta qui. Ricevuta e hash sono sotto: puoi copiarli o stamparli.
+          {pending
+            ? "I crediti sono in attesa. Euro, dollari e crypto arrivano sul conto o sul wallet solo se li invii tu da UniCredit, Wise o dal tuo wallet. Zecca non ha accesso a quei conti."
+            : "CRO o hash sotto sono la prova che hai già inviato tu, non un accredito creato dal sito."}
         </p>
         <p className="font-ledger text-xl text-ember">
           {formatCredits(amount)} → {preview}
         </p>
-        <CashoutReceipt
-          cashoutId={state.receiptId}
-          receiptKind={state.receiptKind ?? null}
-          receiptRef={state.receiptRef ?? null}
-          receiptUrl={state.receiptUrl ?? null}
-          receiptHash={state.receiptHash ?? null}
-          walletNetwork={state.walletNetwork}
-          proofToken={state.proofToken}
-        />
+        {pending && state.instruction ? (
+          <pre className="overflow-x-auto whitespace-pre-wrap rounded-md bg-background/50 p-3 font-ledger text-xs ring-1 ring-primary/20">
+            {state.instruction}
+          </pre>
+        ) : null}
+        {pending ? (
+          <p className="text-sm text-muted-foreground">
+            Dopo il bonifico vero, in «Le tue richieste» incolla il CRO UniCredit o l’ID Wise. Per la crypto,
+            l’hash deve essere della transazione che hai inviato tu.
+          </p>
+        ) : (
+          <CashoutReceipt
+            cashoutId={state.receiptId}
+            receiptKind={state.receiptKind ?? null}
+            receiptRef={state.receiptRef ?? null}
+            receiptUrl={state.receiptUrl ?? null}
+            receiptHash={state.receiptHash ?? null}
+            walletNetwork={state.walletNetwork}
+            proofToken={state.proofToken}
+          />
+        )}
         <button
           type="button"
           className="relative z-30 cursor-pointer text-sm text-ember underline-offset-2 hover:underline"
@@ -97,9 +115,10 @@ export function CashoutForm({
             setDismissedId(state.receiptId ?? null);
             setPhase("edit");
             setTxHash("");
+            setBankRef("");
           }}
         >
-          Preleva ancora
+          Altra richiesta
         </button>
       </div>
     );
@@ -109,9 +128,9 @@ export function CashoutForm({
     return (
       <form action={action} noValidate className="metal-frame relative z-20 space-y-4 rounded-md bg-card p-5 md:p-7">
         <ErrorBanner message={state?.error} />
-        <h2 className="font-display text-2xl text-primary">Conferma ricevuta e hash</h2>
+        <h2 className="font-display text-2xl text-primary">Conferma destinazione</h2>
         <p className="text-sm text-muted-foreground">
-          Controlla destinazione e prova. Il prelievo parte solo dopo questa conferma. Non si chiude la pagina.
+          Questa conferma non muove euro, dollari né crypto. Il sito non entra in UniCredit, Wise o nei wallet.
         </p>
         <section className="space-y-2 rounded-md bg-background/50 p-4 ring-1 ring-primary/20">
           <p className="font-ledger text-xl text-ember">
@@ -128,7 +147,8 @@ export function CashoutForm({
             <p className="break-all font-ledger text-sm text-ember">{txHash || "Manca l’hash di rete"}</p>
           ) : (
             <p className="text-sm text-muted-foreground">
-              Dopo la conferma ricevi il riferimento bancario ZECCA/… e l’hash SHA-256 della ricevuta.
+              Per far arrivare i soldi su questo IBAN devi disporre tu il bonifico da un conto con saldo
+              reale. Poi incolla il CRO della banca, non un codice ZECCA/…
             </p>
           )}
         </section>
@@ -140,19 +160,31 @@ export function CashoutForm({
         <input type="hidden" name="ibanHolder" value={house ? selected.holder : ibanHolder} />
         <input type="hidden" name="walletNetwork" value={cryptoId} />
         <input type="hidden" name="walletAddress" value={walletAddress} />
-        <input type="hidden" name="receipt" value={txHash} />
+        <input type="hidden" name="receipt" value={payoutKind === "WALLET" ? txHash : bankRef} />
+        {payoutKind === "IBAN" && house ? (
+          <label className="block text-sm">
+            CRO UniCredit o ID Wise del bonifico già disposto (facoltativo)
+            <Input
+              value={bankRef}
+              onChange={(e) => setBankRef(e.target.value)}
+              className="mt-1 max-w-xl font-ledger"
+              placeholder="CRO della banca, non ZECCA/…"
+              autoComplete="off"
+            />
+          </label>
+        ) : null}
         <label className="flex items-start gap-2 text-sm">
           <input type="hidden" name="confirmed" value="on" />
           <input type="checkbox" name="ack" value="on" required className="mt-1 size-4 accent-primary" />
-          Confermo destinazione, ricevuta e hash. Esegui il prelievo.
+          Ho capito: Zecca non accredita questi conti. Il bonifico o l’invio crypto lo faccio io.
         </label>
         <div className="flex flex-wrap gap-3">
           <SubmitButton formNoValidate className="relative z-30 cursor-pointer">
             {house
               ? needsGrant
-                ? "Confermo: genera e preleva"
-                : "Confermo e preleva"
-              : "Confermo la richiesta"}
+                ? "Apri la richiesta (genera crediti)"
+                : "Apri la richiesta"
+              : "Apri la richiesta"}
           </SubmitButton>
           <button
             type="button"
@@ -171,13 +203,13 @@ export function CashoutForm({
       <ErrorBanner message={state?.error} />
       <p className="text-sm text-muted-foreground">
         {house
-          ? `${houseName ?? "La casa"} prepara il prelievo. Alla conferma successiva escono i crediti, con ricevuta e hash.`
-          : "Scegli bonifico o crypto. Alla schermata dopo confermi, poi parte la richiesta."}
+          ? `${houseName ?? "La casa"} indica destinazione. I crediti escono dal portafoglio solo come richiesta: UniCredit, Wise e i wallet non vengono accreditati da questo sito.`
+          : "Scegli bonifico o crypto. Massimo invia dalla sua banca o dal suo wallet; Zecca non muove i soldi."}
       </p>
       {available <= 0 ? (
         <p className="text-sm text-ember">
           {house
-            ? "Portafoglio a zero: dopo la conferma i crediti vengono generati e prelevati."
+            ? "Portafoglio a zero: dopo la conferma i crediti vengono generati e la richiesta resta aperta. I soldi non partono."
             : `Non hai crediti da prelevare (disponibili: ${formatCredits(available)}).`}
         </p>
       ) : (
@@ -364,7 +396,7 @@ export function CashoutForm({
         onClick={openConfirm}
         className="relative z-30 inline-flex h-9 cursor-pointer items-center rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/80"
       >
-        {payoutKind === "WALLET" ? "Controlla hash e conferma" : "Controlla ricevuta e conferma"}
+        {payoutKind === "WALLET" ? "Controlla hash e destinazione" : "Controlla destinazione"}
       </button>
     </div>
   );

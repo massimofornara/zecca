@@ -28,7 +28,8 @@ export function CashoutReceipt({
         <p className="text-xs text-ember">Hash di rete verificato. È la prova dell’invio crypto.</p>
       ) : (
         <p className="text-xs text-muted-foreground">
-          Riferimento end-to-end Zecca: ricevuta bancaria del libro mastro, non un CRO inventato dalla banca.
+          Ricevuta del libro mastro. Non è un accredito UniCredit o Wise: gli euro arrivano solo se il bonifico è
+          partito da una banca vera.
         </p>
       )}
       <div className="flex flex-wrap gap-3">

@@ -31,14 +31,14 @@ export function SettleCashoutForm({
           required
           autoComplete="off"
           className="mt-1 font-ledger"
-          placeholder={isWallet ? "0x… hash già confermato sulla rete" : "CRO o end-to-end ID"}
+          placeholder={isWallet ? "0x… hash già confermato sulla rete" : "CRO UniCredit o ID Wise, non ZECCA/…"}
         />
       </label>
-      {isWallet ? (
-        <p className="text-xs text-muted-foreground">
-          Deve esistere sulla rete e andare al wallet di questo prelievo. Un hash inventato viene rifiutato.
-        </p>
-      ) : null}
+      <p className="text-xs text-muted-foreground">
+        {isWallet
+          ? "Deve esistere sulla rete e andare al wallet di questo prelievo. Zecca non spedisce crypto."
+          : "Deve essere il CRO del bonifico già disposto da te. Zecca non entra in UniCredit né in Wise."}
+      </p>
       <SubmitButton size="sm" formNoValidate>
         {isWallet ? "Registra hash e chiudi" : "Registra CRO e chiudi"}
       </SubmitButton>

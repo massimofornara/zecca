@@ -45,7 +45,7 @@ export default async function HomePage() {
       <section className="mt-6 grid gap-4 md:grid-cols-3">
         <Step n="01" title="Il conio" body="Solo il zecchiere può far nascere i crediti. Entrano in tesoreria, non in un portafoglio a caso." />
         <Step n="02" title="Il negozio" body="Decine di pezzi, corsie e fornitori diversi. Chi produce imballa; al pagamento Zecca prenota DHL Express 24h dalla sede di quell’azienda. Massimo non tocca i colli." />
-        <Step n="03" title="Il prelievo" body="Chiunque abbia crediti può chiedere euro verso IBAN o wallet. Massimo invia dalla sua banca o dal suo wallet." />
+        <Step n="03" title="Il prelievo" body="Chiunque abbia crediti può chiedere euro, dollari o crypto verso IBAN o wallet. Massimo invia dalla sua banca o dal suo wallet: il sito non accredita UniCredit, Wise né i wallet." />
       </section>
 
       {featured.length > 0 && (

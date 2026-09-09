@@ -3,19 +3,13 @@ import { CashoutReceipt } from "@/components/shop/CashoutReceipt";
 import { EmptyState } from "@/components/ui/banners";
 import { formatCredits, formatEurFromCents, formatFiatFromCents } from "@/lib/format";
 import { formatRomeDate } from "@/lib/rome-day";
-import { auth } from "@/auth";
 import { prisma } from "@/lib/db";
-import { fulfillPendingHouseBankCashouts } from "@/lib/zecca/cashout";
 import { treasuryBalance } from "@/lib/zecca/ledger";
 import { getSettings } from "@/lib/zecca/settings";
 
 export const metadata = { title: "Fusioni" };
 
 export default async function FusioniPage() {
-  const session = await auth();
-  if (session?.user?.id) {
-    await fulfillPendingHouseBankCashouts({ actorId: session.user.id });
-  }
   const [pending, closed, treasury, settings] = await Promise.all([
     prisma.cashoutRequest.findMany({
       where: { status: "PENDING" },

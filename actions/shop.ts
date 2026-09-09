@@ -9,6 +9,7 @@ import { purchaseCredits } from "@/lib/zecca/credits";
 import { placeOrder } from "@/lib/zecca/shop";
 import { parseShipping } from "@/lib/shipping";
 import { requestAndFulfillCashout, requestCustomerCashout } from "@/lib/zecca/cashout";
+import { destinationInstruction } from "@/lib/payout";
 import { proofFromPaidCashout } from "@/lib/cashout-proof";
 import { rememberCashoutProof } from "@/lib/cashout-proof-store";
 import { ensureHouseWalletCredits, isHouseEmail } from "@/lib/zecca/house";
@@ -112,6 +113,9 @@ export type CashoutActionState = {
   receiptKind?: string | null;
   walletNetwork?: string | null;
   proofToken?: string;
+  pending?: boolean;
+  instruction?: string;
+  status?: string;
 };
 
 export async function requestCashoutAction(
@@ -151,18 +155,41 @@ export async function requestCashoutAction(
         walletNetwork,
         receipt,
       });
+      revalidatePath("/portafoglio");
+      revalidatePath("/fusione");
+      revalidatePath(`/ricevuta/${settled.id}`);
+      revalidatePath("/zecchiere/fusioni");
+      if (settled.status !== "PAID") {
+        const guide = destinationInstruction({
+          payoutKind: settled.payoutKind,
+          holder: settled.ibanHolder,
+          iban: settled.iban,
+          walletAddress: settled.walletAddress,
+          walletNetwork: settled.walletNetwork,
+          currency: settled.currency,
+          eurCents: settled.eurCents,
+          usdCents: settled.usdCents,
+          cashoutId: settled.id,
+        });
+        return {
+          ok: "Richiesta aperta. Nessun euro, dollaro o crypto è partito: Zecca non ha i conti né i wallet. Disponi tu il bonifico da UniCredit o Wise, poi incolla il CRO vero in Le tue richieste.",
+          receiptId: settled.id,
+          pending: true,
+          status: settled.status,
+          instruction: guide?.text,
+        };
+      }
       const proofToken = await rememberCashoutProof(
         proofFromPaidCashout({
           ...settled,
           userName: user.name,
         }),
       );
-      revalidatePath("/portafoglio");
-      revalidatePath("/fusione");
-      revalidatePath(`/ricevuta/${settled.id}`);
-      revalidatePath("/zecchiere/fusioni");
       return {
-        ok: "Prelievo eseguito. Resta su questa pagina: qui sotto hai ricevuta e hash.",
+        ok:
+          settled.payoutKind === "WALLET"
+            ? "Hash di rete registrato. Zecca non ha inviato la crypto: l’hash è la prova di un invio già avvenuto sul wallet."
+            : "CRO bancario registrato. Zecca non ha disposto il bonifico: gli euro arrivano solo se li hai inviati tu dalla banca.",
         receiptId: settled.id,
         receiptRef: settled.receiptRef,
         receiptHash: settled.receiptHash,
@@ -170,6 +197,7 @@ export async function requestCashoutAction(
         receiptKind: settled.receiptKind,
         walletNetwork: settled.walletNetwork,
         proofToken,
+        status: settled.status,
       };
     }
     const asked = await requestCustomerCashout({
@@ -184,10 +212,13 @@ export async function requestCashoutAction(
       walletNetwork,
     });
     revalidatePath("/portafoglio");
+    revalidatePath("/fusione");
     revalidatePath("/zecchiere/fusioni");
     return {
-      ok: "Richiesta registrata. Resta su Prelievo: Massimo chiude con CRO o hash.",
+      ok: "Richiesta registrata. Massimo deve inviare dalla banca o dal wallet, poi chiude con CRO o hash. Zecca non muove i soldi.",
       receiptId: asked.id,
+      pending: true,
+      status: asked.status,
     };
   } catch (error) {
     if (!houseActor && isZeccaError(error) && error.code === "INSUFFICIENT_CREDITS") {

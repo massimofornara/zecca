@@ -35,6 +35,11 @@ export function isValidBankRef(raw: string): boolean {
   return /^[0-9A-Za-z./ -]{6,64}$/.test(ref);
 }
 
+/** Ricevuta interna Zecca: non è un movimento UniCredit/Wise. */
+export function isZeccaLedgerBankRef(raw: string): boolean {
+  return /^ZECCA\//i.test(raw.trim());
+}
+
 export function parsePayoutReceipt(input: {
   payoutKind: string;
   walletNetwork?: string | null;
@@ -55,6 +60,12 @@ export function parsePayoutReceipt(input: {
     };
   }
   const ref = input.receipt.trim();
+  if (isZeccaLedgerBankRef(ref)) {
+    return {
+      error:
+        "ZECCA/… è il numero del libro mastro, non un CRO UniCredit o Wise. Incolla il riferimento del bonifico già disposto dalla banca.",
+    };
+  }
   if (!isValidBankRef(ref)) {
     return {
       error:

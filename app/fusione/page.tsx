@@ -13,7 +13,6 @@ import { userWallet } from "@/lib/zecca/ledger";
 import { getSettings } from "@/lib/zecca/settings";
 import { walletNetworkLabel } from "@/lib/wallet";
 import { houseDisplayName, housePayoutLabel } from "@/lib/zecca/house-accounts";
-import { fulfillPendingHouseBankCashouts } from "@/lib/zecca/cashout";
 import { proofFromPaidCashout, signCashoutProof } from "@/lib/cashout-proof";
 import { loadRememberedProofs } from "@/lib/cashout-proof-store";
 import { ensureHouseAdmin, isHouseEmail } from "@/lib/zecca/house";
@@ -39,9 +38,6 @@ export default async function FusionePage() {
     dbUser?.role === "ADMIN" ||
     session.user.role === "ADMIN";
   const who = houseDisplayName(email) ?? houseDisplayName(session.user.email) ?? dbUser?.name ?? session.user.name;
-  if (house) {
-    await fulfillPendingHouseBankCashouts({ userId: session.user.id, actorId: session.user.id });
-  }
   const [wallet, settings, requests, remembered] = await Promise.all([
     userWallet(session.user.id),
     getSettings(),
@@ -68,8 +64,8 @@ export default async function FusionePage() {
       <h1 className="mt-1 font-display text-4xl text-primary">Preleva i crediti</h1>
       <p className="mt-3 max-w-2xl text-muted-foreground">
         {house
-          ? `${who}, prima controlli ricevuta e hash, poi confermi. La pagina resta aperta con la prova del prelievo.`
-          : "Chiedi euro, dollari o crypto. Confermi destinazione e prova, la pagina non si chiude."}
+          ? `${who}, Zecca non invia euro, dollari né crypto. Il bonifico lo disponi tu da UniCredit o Wise; la crypto dal tuo wallet. Poi incolli CRO o hash.`
+          : "Chiedi euro, dollari o crypto. Confermi la destinazione: i soldi partono solo da banca o wallet tuoi."}
       </p>
       {house ? (
         <div className="mt-8">

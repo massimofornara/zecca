@@ -8,7 +8,6 @@ import { officialReceiptHash, sepaEndToEndId } from "@/lib/official-receipt";
 import { parsePayoutReceipt, type ReceiptKind } from "@/lib/receipt";
 import { appendLedger, pocketBalance } from "@/lib/zecca/ledger";
 import { creditsToEurCents, creditsToUsdCents, getSettings } from "@/lib/zecca/settings";
-import { isHouseEmail } from "@/lib/zecca/house-accounts";
 
 export type PayoutKind = "IBAN" | "WALLET";
 export type CashoutCurrency = "EUR" | "USD";
@@ -234,7 +233,11 @@ export async function resolveCashout(input: {
         data: {
           status: "PAID",
           resolvedAt,
-          adminNote: input.adminNote?.trim() || (receiptKind === "TX_HASH" ? "Invio crypto eseguito" : "Bonifico eseguito"),
+          adminNote:
+            input.adminNote?.trim() ||
+            (receiptKind === "TX_HASH"
+              ? "Hash di rete registrato: Zecca non ha inviato la crypto"
+              : "CRO bancario registrato: Zecca non ha disposto il bonifico"),
           receiptKind,
           receiptRef,
           receiptUrl,
@@ -296,7 +299,10 @@ export function houseBankReceiptRef(cashoutId: string, currency: string) {
   return sepaEndToEndId(cashoutId, currency);
 }
 
-/** Massimo/Maxi: la richiesta si chiude subito con ricevuta (CRO o hash). */
+/**
+ * Casa: crypto si chiude solo con hash di rete già confermato.
+ * IBAN resta aperto finché non c’è un CRO bancario vero: Zecca non dispone bonifici.
+ */
 export async function requestAndFulfillCashout(input: {
   userId: string;
   role: Role;
@@ -332,46 +338,15 @@ export async function requestAndFulfillCashout(input: {
       "INVALID_RECEIPT",
     );
   }
-  const receipt = typed || houseBankReceiptRef(cashout.id, cashout.currency);
-  const settled = await resolveCashout({
+  if (payoutKind === "IBAN" && !typed) {
+    return cashout;
+  }
+  return resolveCashout({
     cashoutId: cashout.id,
     actorId: input.userId,
     action: "pay",
-    receipt,
+    receipt: typed,
     chainLookup: input.chainLookup,
     db,
   });
-  return settled;
-}
-
-export async function fulfillPendingHouseBankCashouts(input: {
-  userId?: string;
-  actorId: string;
-  db?: PrismaClient;
-}) {
-  const db = input.db ?? defaultPrisma;
-  const houseUsers = await db.user.findMany({ select: { id: true, email: true } });
-  const houseIds = houseUsers
-    .filter((user) => isHouseEmail(user.email) || (input.userId ? user.id === input.userId : false))
-    .map((user) => user.id);
-  const pending = await db.cashoutRequest.findMany({
-    where: {
-      status: "PENDING",
-      payoutKind: "IBAN",
-      userId: input.userId ? input.userId : { in: houseIds },
-    },
-  });
-  const closed = [];
-  for (const row of pending) {
-    closed.push(
-      await resolveCashout({
-        cashoutId: row.id,
-        actorId: input.actorId,
-        action: "pay",
-        receipt: houseBankReceiptRef(row.id, row.currency),
-        db,
-      }),
-    );
-  }
-  return closed;
 }

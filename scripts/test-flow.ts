@@ -532,13 +532,37 @@ async function main() {
       ibanHolder: HOUSE_PAYOUT_ACCOUNTS[0].holder,
       db,
     });
-    assert.equal(instantBank.status, "PAID");
-    assert.equal(instantBank.receiptKind, "BANK_REF");
-    assert.ok(instantBank.receiptRef?.startsWith("ZECCA/"));
-    assert.equal(instantBank.receiptHash?.length, 64);
-    const bankProof = proofFromPaidCashout({ ...instantBank, userName: "Maxi" });
+    assert.equal(instantBank.status, "PENDING");
+    assert.equal(instantBank.receiptRef, null);
+    assert.equal(await pocketBalance("USER", houseB.id, db), 0);
+    let rejectedLedgerRef = false;
+    try {
+      await resolveCashout({
+        cashoutId: instantBank.id,
+        actorId: houseB.id,
+        action: "pay",
+        receipt: "ZECCA/EUR/20260909/FAKELEDG",
+        db,
+      });
+    } catch {
+      rejectedLedgerRef = true;
+    }
+    assert.equal(rejectedLedgerRef, true, "un codice ZECCA/ non chiude un bonifico");
+    await resolveCashout({
+      cashoutId: instantBank.id,
+      actorId: houseB.id,
+      action: "pay",
+      receipt: "UNICREDIT-CRO-TEST-2212",
+      db,
+    });
+    const paidBank = await db.cashoutRequest.findUniqueOrThrow({ where: { id: instantBank.id } });
+    assert.equal(paidBank.status, "PAID");
+    assert.equal(paidBank.receiptKind, "BANK_REF");
+    assert.equal(paidBank.receiptRef, "UNICREDIT-CRO-TEST-2212");
+    assert.equal(paidBank.receiptHash?.length, 64);
+    const bankProof = proofFromPaidCashout({ ...paidBank, userName: "Maxi" });
     const bankToken = signCashoutProof(bankProof);
-    assert.equal(verifyCashoutProof(bankToken)?.id, instantBank.id);
+    assert.equal(verifyCashoutProof(bankToken)?.id, paidBank.id);
     assert.equal(verifyCashoutProof(`${bankToken}x`), null);
     assert.equal(verifyCashoutProof("not-a-token"), null);
     assert.equal(await pocketBalance("USER", houseB.id, db), 0);
@@ -566,8 +590,17 @@ async function main() {
       db,
     });
     assert.equal(bigOut.credits, 10_000);
-    assert.equal(bigOut.status, "PAID");
+    assert.equal(bigOut.status, "PENDING");
     assert.equal(bigOut.eurCents, 1_000_000);
+    assert.equal(await pocketBalance("USER", aliasUser.id, db), 0);
+    await resolveCashout({
+      cashoutId: bigOut.id,
+      actorId: aliasUser.id,
+      action: "pay",
+      receipt: "UNICREDIT-CRO-10K-EUR",
+      db,
+    });
+    assert.equal((await db.cashoutRequest.findUniqueOrThrow({ where: { id: bigOut.id } })).status, "PAID");
     assert.equal(await pocketBalance("USER", aliasUser.id, db), 0);
 
     await ensureHouseWalletCredits({ userId: aliasUser.id, credits: 20, db });

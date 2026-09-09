@@ -110,11 +110,11 @@ Controlla lo stato: `npm run check:live`. In **Zecchiere → Tesoreria** vedi la
 3. Dispone il bonifico con la causale mostrata (importo esatto).
 4. Tu in **Versamenti** confronti causale e importo in banca, spunti la conferma, accrediti.
 
-**Euro o dollari in uscita (veri):** il cliente (o la casa) indica IBAN e valuta. In **Fusioni** compare un blocco da incollare in banca. Tu invii **dal proprio home banking**, poi confermi. L’app non ha accesso ai conti.
+**Euro o dollari in uscita (veri):** il cliente (o la casa) indica IBAN e valuta. In **Prelievo** o **Fusioni** la richiesta resta aperta. Tu invii **dal proprio home banking** (UniCredit per EUR, Wise per USD) o dal tuo wallet, poi incolli il CRO o l’hash di rete. L’app non ha accesso ai conti e non spedisce crypto. Un codice `ZECCA/…` non è un bonifico.
 
-Su Vercel il SQLite in `/tmp` è per istanza: senza `DATABASE_URL` Postgres i prelievi restano nel libro di quella lambda. La ricevuta ufficiale (`/ricevuta/…`) e «Le tue richieste» tengono anche una **prova firmata** (cookie + link `?p=`), così CRO e hash restano apribili dopo il prelievo. Non è un bonifico UniCredit e non è un invio Ethereum dalla casa: è il documento Zecca.
+Su Vercel il SQLite in `/tmp` è per istanza: senza `DATABASE_URL` Postgres i prelievi restano nel libro di quella lambda. La ricevuta ufficiale (`/ricevuta/…`) può tenere una prova firmata. Non è un accredito bancario.
 
-Non esiste un pulsante che “conia e manda” soldi a un IBAN da sola. Le due email della casa generano crediti nel libro e aprono la richiesta di bonifico: il giro di denaro resta in banca.
+Non esiste un pulsante che manda soldi a un IBAN o a un wallet da sola.
 
 ## Conio e conversione in cassa negozio
 
