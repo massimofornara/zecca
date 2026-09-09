@@ -94,7 +94,7 @@ export function CashoutForm({
   if (done && state?.receiptId) {
     return (
       <div className="metal-frame relative z-20 space-y-4 rounded-md bg-card p-5 md:p-7">
-        <ErrorBanner message={state.error} />
+        <ErrorBanner message={pending && house ? undefined : state.error} />
         <OkBanner message={state.ok} />
         <h2 className="font-display text-2xl text-primary">
           {pending ? "Prelievo aperto" : "Prelievo registrato"}
@@ -102,7 +102,7 @@ export function CashoutForm({
         <p className="text-sm text-muted-foreground">
           {pending
             ? payoutKind === "WALLET"
-              ? "I crediti sono convertiti. Il negozio sta per creare l’hash sulla rete: MetaMask, Trust Wallet o l’exchange ricevono senza firmare."
+              ? "I crediti sono convertiti nel libro. L’hash su Mempool o Etherscan nasce quando la cassa di rete ha già quelle monete e il negozio le invia: chi riceve non firma."
               : "La richiesta è attiva. Copia i dati, invia da banca, poi incolla il CRO qui sotto per chiuderla."
             : "CRO o hash sotto chiudono il prelievo nel libro. L’hash crypto lo crea la rete dopo l’invio del negozio."}
         </p>
@@ -128,6 +128,7 @@ export function CashoutForm({
                 walletNetwork={cryptoId}
                 usdCents={amount * usdCentsPerCredit}
                 shopAddress={cryptoId === "BTC" ? shopBtcAddress : shopAddress}
+                initialError={state.error}
               />
             ) : (
               <p className="text-sm text-muted-foreground">

@@ -11,6 +11,7 @@ import { destinationInstruction } from "@/lib/payout";
 import { walletNetworkLabel } from "@/lib/wallet";
 import { housePayoutByIban } from "@/lib/zecca/house-accounts";
 import { isShopSendableNetwork } from "@/lib/evm-send";
+import { explorerSearchLabel } from "@/lib/receipt";
 
 export function TreasuryConvertForm({
   treasury,
@@ -220,7 +221,7 @@ export function PendingCashoutCard({
           <div className="flex flex-wrap gap-2">
             {isWallet ? (
               <SubmitButton size="sm" variant="outline" formNoValidate name="action" value="search">
-                Cerca hash su Etherscan / BscScan / Blockscout
+                {explorerSearchLabel(walletNetwork)}
               </SubmitButton>
             ) : null}
             <SubmitButton size="sm" formNoValidate name="action" value="pay" variant={isWallet ? "outline" : "default"}>

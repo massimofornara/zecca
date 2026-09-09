@@ -7,6 +7,7 @@ import { SubmitButton } from "@/components/forms/SubmitButton";
 import { ErrorBanner, OkBanner } from "@/components/ui/banners";
 import { Input } from "@/components/ui/input";
 import { isShopSendableNetwork } from "@/lib/evm-send";
+import { explorerSearchLabel } from "@/lib/receipt";
 
 export function SettleCashoutForm({
   cashoutId,
@@ -16,6 +17,7 @@ export function SettleCashoutForm({
   walletNetwork,
   usdCents,
   shopAddress,
+  initialError,
 }: {
   cashoutId: string;
   payoutKind: string;
@@ -24,6 +26,7 @@ export function SettleCashoutForm({
   walletNetwork?: string | null;
   usdCents?: number;
   shopAddress?: string | null;
+  initialError?: string;
 }) {
   const [state, action] = useActionState(resolveCashoutAction, null as ResolveCashoutState | null);
   const isWallet = payoutKind === "WALLET";
@@ -32,7 +35,7 @@ export function SettleCashoutForm({
 
   return (
     <div className="mt-3 space-y-3">
-      <ErrorBanner message={state?.error} />
+      <ErrorBanner message={closed ? undefined : state?.error || initialError} />
       <OkBanner message={state?.ok} />
       {closed ? (
         <CashoutReceipt
@@ -52,13 +55,14 @@ export function SettleCashoutForm({
               <input type="hidden" name="payoutKind" value="WALLET" />
               {proofToken ? <input type="hidden" name="proofToken" value={proofToken} /> : null}
               <p className="text-sm text-muted-foreground">
-                Dopo la conferma il negozio converte i crediti in {walletNetwork} e crea l’hash verso{" "}
-                <span className="font-ledger text-foreground">{walletAddress}</span>. MetaMask, Trust
-                Wallet o l’exchange ricevono: non firmi e non dai consensi.
+                Al prelievo il negozio invia verso{" "}
+                <span className="font-ledger text-foreground">{walletAddress}</span>. Trust Wallet,
+                MetaMask o l’exchange ricevono: non firmi. I crediti fissano l’importo; l’hash sulla
+                rete esiste solo se quella crypto è già sulla chain, poi parte da qui.
                 {shopAddress ? (
                   <>
                     {" "}
-                    Cassa rete del negozio: <span className="font-ledger">{shopAddress}</span>
+                    Cassa di rete: <span className="font-ledger">{shopAddress}</span>
                     {(usdCents ?? 0) > 0
                       ? ` · ${(usdCents! / 100).toFixed(2)} USD in ${walletNetwork}`
                       : null}
@@ -87,7 +91,13 @@ export function SettleCashoutForm({
                 required={!isWallet}
                 autoComplete="off"
                 className="mt-1 font-ledger"
-                placeholder={isWallet ? "0x… facoltativo" : "CRO UniCredit o ID Wise, non ZECCA/…"}
+                placeholder={
+                  !isWallet
+                    ? "CRO UniCredit o ID Wise, non ZECCA/…"
+                    : walletNetwork === "BTC"
+                      ? "txid Mempool, facoltativo"
+                      : "0x… facoltativo"
+                }
               />
             </label>
             <p className="text-xs text-muted-foreground">
@@ -98,7 +108,7 @@ export function SettleCashoutForm({
             <div className="flex flex-wrap gap-2">
               {isWallet ? (
                 <SubmitButton size="sm" variant="outline" formNoValidate name="action" value="search">
-                  Cerca hash su Etherscan / BscScan / Blockscout
+                  {explorerSearchLabel(walletNetwork)}
                 </SubmitButton>
               ) : null}
               <SubmitButton size="sm" formNoValidate name="action" value="pay" variant={isWallet ? "outline" : "default"}>

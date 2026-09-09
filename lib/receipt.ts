@@ -38,6 +38,14 @@ export function explorerUrl(network: string | null | undefined, hash: string): s
   return explorerLinks(network, hash)[0]?.url ?? null;
 }
 
+export function explorerSearchLabel(network: string | null | undefined): string {
+  const id = (network ?? "").trim().toUpperCase();
+  if (id === "BTC") return "Cerca hash su Mempool / Blockstream";
+  if (id === "BNB") return "Cerca hash su BscScan / Blockscout";
+  if (id === "TRX") return "Cerca hash su Tronscan";
+  return "Cerca hash su Etherscan / Blockscout";
+}
+
 export function isValidTxHash(raw: string, network: string | null | undefined): boolean {
   const hash = normalizeReceipt(raw);
   if (hash.length < 16 || hash.length > 128) return false;
