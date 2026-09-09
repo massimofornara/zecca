@@ -27,6 +27,7 @@ export function CashoutForm({
   house = false,
   houseName,
   shopAddress,
+  shopBtcAddress,
 }: {
   available: number;
   percent?: number;
@@ -35,6 +36,7 @@ export function CashoutForm({
   house?: boolean;
   houseName?: string | null;
   shopAddress?: string | null;
+  shopBtcAddress?: string | null;
 }) {
   const [state, action] = useActionState(requestCashoutAction, null as CashoutActionState | null);
   const [phase, setPhase] = useState<"edit" | "confirm">("edit");
@@ -125,7 +127,7 @@ export function CashoutForm({
                 walletAddress={walletAddress}
                 walletNetwork={cryptoId}
                 usdCents={amount * usdCentsPerCredit}
-                shopAddress={shopAddress}
+                shopAddress={cryptoId === "BTC" ? shopBtcAddress : shopAddress}
               />
             ) : (
               <p className="text-sm text-muted-foreground">
@@ -184,8 +186,8 @@ export function CashoutForm({
           {payoutKind === "WALLET" ? (
             <p className="text-sm text-muted-foreground">
               I crediti diventano {preview}. Il negozio esegue il prelievo e la rete crea l’hash
-              (Etherscan, BscScan, Blockscout). MetaMask, Trust Wallet o l’exchange ricevono: non
-              firmi e non dai consensi.
+              ({cryptoId === "BTC" ? "Mempool, Blockstream" : "Etherscan, BscScan, Blockscout"}). Il
+              wallet indicato riceve: non firmi e non dai consensi.
             </p>
           ) : (
             <p className="text-sm text-muted-foreground">

@@ -6,12 +6,11 @@ import { formatRomeDate } from "@/lib/rome-day";
 import { prisma } from "@/lib/db";
 import { treasuryBalance } from "@/lib/zecca/ledger";
 import { getSettings } from "@/lib/zecca/settings";
-import { shopWalletAddress } from "@/lib/zecca/shop-payout";
+import { shopPayoutAddress } from "@/lib/zecca/shop-payout";
 
 export const metadata = { title: "Fusioni" };
 
 export default async function FusioniPage() {
-  const shopAddress = shopWalletAddress();
   const [pending, closed, treasury, settings] = await Promise.all([
     prisma.cashoutRequest.findMany({
       where: { status: "PENDING" },
@@ -32,15 +31,9 @@ export default async function FusioniPage() {
     <div>
       <h1 className="font-display text-4xl text-primary">Fusioni</h1>
       <p className="mt-2 text-muted-foreground">
-        Per la crypto i crediti si convertono e il negozio crea l’hash (Etherscan, BscScan,
-        Blockscout). MetaMask, Trust Wallet o l’exchange ricevono, senza firmare. Il bonifico IBAN
-        lo disponi tu da UniCredit o Wise, poi chiudi con il CRO.
-        {shopAddress ? (
-          <>
-            {" "}
-            Cassa rete del negozio: <span className="font-ledger">{shopAddress}</span>.
-          </>
-        ) : null}
+        Per la crypto i crediti si convertono e il negozio crea l’hash (Mempool, Etherscan, BscScan,
+        Blockscout). Il wallet indicato riceve, senza firmare. Il bonifico IBAN lo disponi tu da
+        UniCredit o Wise, poi chiudi con il CRO.
       </p>
 
       <section className="metal-frame mt-8 rounded-md bg-card p-5">
@@ -79,7 +72,7 @@ export default async function FusioniPage() {
               walletAddress={r.walletAddress}
               walletNetwork={r.walletNetwork}
               createdLabel={formatRomeDate(r.createdAt)}
-              shopAddress={shopAddress}
+              shopAddress={shopPayoutAddress(r.walletNetwork)}
             />
           ))}
         </ul>

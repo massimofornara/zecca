@@ -19,12 +19,15 @@ import {
   usdSpotPrice,
 } from "@/lib/evm-send";
 import { explorerUrl } from "@/lib/receipt";
-import { isValidWalletAddress, normalizeWalletAddress, walletNetworkLabel } from "@/lib/wallet";
+import { isValidWalletAddress, normalizeWalletAddress } from "@/lib/wallet";
+import { sendShopBtcPayout, shopBtcAddress } from "@/lib/zecca/btc-payout";
+
+export { shopBtcAddress };
 
 export type ShopPayoutResult = {
-  hash: `0x${string}`;
+  hash: string;
   explorerUrl: string | null;
-  shopAddress: Address;
+  shopAddress: string;
   network: string;
 };
 
@@ -56,13 +59,19 @@ export function shopWalletAddress(): Address | null {
   return privateKeyToAccount(key).address;
 }
 
+export function shopPayoutAddress(network: string | null | undefined): string | null {
+  const id = (network ?? "").trim().toUpperCase();
+  if (id === "BTC") return shopBtcAddress();
+  return shopWalletAddress();
+}
+
 export function shopPayoutConfigError(network: string | null | undefined): string | null {
   const id = (network ?? "").trim().toUpperCase();
-  if (id === "BTC" || id === "TRX") {
-    return `${walletNetworkLabel(id)} non parte dal wallet EVM del negozio. Scegli ETH, USDT, USDC o BNB: i crediti si convertono e partono da soli, chi riceve non firma.`;
+  if (id === "TRX") {
+    return "USDT su Tron non parte dalla cassa Bitcoin/EVM del negozio. Scegli BTC, ETH, USDT, USDC o BNB: i crediti si convertono e chi riceve non firma.";
   }
   if (!isShopSendableNetwork(id)) {
-    return "Il negozio converte i crediti in ETH, USDT, USDC (Ethereum) o BNB e crea l’hash sulla rete. Bitcoin e Tron non partono da qui.";
+    return "Il negozio converte i crediti in BTC, ETH, USDT, USDC o BNB e crea l’hash sulla rete. Chi riceve non firma.";
   }
   return null;
 }
@@ -95,6 +104,9 @@ export async function sendShopCryptoPayout(input: {
   const blocked = shopPayoutConfigError(network);
   if (blocked) {
     throw new ZeccaError(blocked, "UNSUPPORTED_ASSET");
+  }
+  if (network === "BTC") {
+    return sendShopBtcPayout({ walletAddress: input.walletAddress, usdCents: input.usdCents });
   }
 
   const asset = EVM_ASSETS[network];

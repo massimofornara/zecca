@@ -19,7 +19,7 @@ import {
   type CashoutProof,
 } from "@/lib/cashout-proof";
 import { findRememberedProof } from "@/lib/cashout-proof-store";
-import { shopWalletAddress } from "@/lib/zecca/shop-payout";
+import { shopPayoutAddress } from "@/lib/zecca/shop-payout";
 
 export const metadata = { title: "Ricevuta di prelievo" };
 export const dynamic = "force-dynamic";
@@ -71,7 +71,7 @@ export default async function RicevutaPage({
   const token = signCashoutProof(proof);
   const status = cashoutProofStatus(proof);
   const pending = status === "PENDING";
-  const shopAddress = shopWalletAddress();
+  const shopAddress = shopPayoutAddress(proof.walletNetwork);
 
   return (
     <PageShell>

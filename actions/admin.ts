@@ -190,7 +190,7 @@ export async function resolveCashoutAction(
         action === "pay"
           ? paidVia === "WALLET"
             ? shopPay
-              ? "Il negozio ha convertito i crediti e inviato. Hash reale su Etherscan, BscScan o Blockscout: chi riceve non firma."
+              ? "Il negozio ha convertito i crediti e inviato. Hash reale su Mempool, Etherscan, BscScan o Blockscout: chi riceve non firma."
               : searching
                 ? "Hash trovato sulla rete e registrato. Aprilo su Etherscan, BscScan o Blockscout."
                 : "Prelievo chiuso. L’hash è visibile sull’explorer della rete."

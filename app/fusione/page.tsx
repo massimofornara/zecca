@@ -16,7 +16,7 @@ import { houseDisplayName, housePayoutLabel } from "@/lib/zecca/house-accounts";
 import { cashoutProofStatus, proofFromPaidCashout, signCashoutProof } from "@/lib/cashout-proof";
 import { loadRememberedProofs } from "@/lib/cashout-proof-store";
 import { ensureHouseAdmin, isHouseEmail } from "@/lib/zecca/house";
-import { shopWalletAddress } from "@/lib/zecca/shop-payout";
+import { shopBtcAddress, shopPayoutAddress, shopWalletAddress } from "@/lib/zecca/shop-payout";
 
 export const metadata = { title: "Prelievo" };
 export const dynamic = "force-dynamic";
@@ -39,7 +39,8 @@ export default async function FusionePage() {
     dbUser?.role === "ADMIN" ||
     session.user.role === "ADMIN";
   const who = houseDisplayName(email) ?? houseDisplayName(session.user.email) ?? dbUser?.name ?? session.user.name;
-  const shopAddress = shopWalletAddress();
+  const shopEvmAddress = shopWalletAddress();
+  const shopBtcAddr = shopBtcAddress();
   const [wallet, settings, requests, remembered] = await Promise.all([
     userWallet(session.user.id),
     getSettings(),
@@ -87,7 +88,8 @@ export default async function FusionePage() {
           usdCentsPerCredit={settings.usdCentsPerCredit}
           house={house}
           houseName={who}
-          shopAddress={shopAddress}
+          shopAddress={shopEvmAddress}
+          shopBtcAddress={shopBtcAddr}
         />
       </div>
       <section className="mt-12">
@@ -140,7 +142,7 @@ export default async function FusionePage() {
                       walletAddress={r.walletAddress}
                       walletNetwork={r.walletNetwork}
                       usdCents={r.usdCents}
-                      shopAddress={shopAddress}
+                      shopAddress={shopPayoutAddress(r.walletNetwork)}
                     />
                   ) : null}
                 </li>

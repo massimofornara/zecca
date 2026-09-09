@@ -72,8 +72,7 @@ export function SettleCashoutForm({
             </form>
           ) : isWallet ? (
             <p className="text-sm text-muted-foreground">
-              Bitcoin e Tron non partono dal wallet EVM del negozio. Scegli ETH, USDT, USDC o BNB
-              perché chi riceve non debba fare nulla.
+              USDT su Tron non parte da questa cassa. Scegli BTC, ETH, USDT, USDC o BNB.
             </p>
           ) : null}
           <form action={action} noValidate className="space-y-2">

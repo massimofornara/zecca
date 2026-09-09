@@ -1,6 +1,6 @@
 export function isShopSendableNetwork(network: string | null | undefined): boolean {
   const id = (network ?? "").trim().toUpperCase();
-  return id === "ETH" || id === "USDT" || id === "USDC" || id === "BNB";
+  return id === "ETH" || id === "USDT" || id === "USDC" || id === "BNB" || id === "BTC";
 }
 
 export const EVM_ASSETS: Record<
@@ -45,11 +45,9 @@ export function chainIdHex(chainId: number): `0x${string}` {
   return `0x${chainId.toString(16)}`;
 }
 
-export async function usdSpotPrice(ticker: "ETH" | "BNB"): Promise<number> {
-  const url =
-    ticker === "BNB"
-      ? "https://api.coinbase.com/v2/prices/BNB-USD/spot"
-      : "https://api.coinbase.com/v2/prices/ETH-USD/spot";
+export async function usdSpotPrice(ticker: "ETH" | "BNB" | "BTC"): Promise<number> {
+  const pair = ticker === "BNB" ? "BNB-USD" : ticker === "BTC" ? "BTC-USD" : "ETH-USD";
+  const url = `https://api.coinbase.com/v2/prices/${pair}/spot`;
   const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
   if (!res.ok) throw new Error("Prezzo di rete non disponibile.");
   const json = (await res.json()) as { data?: { amount?: string } };

@@ -19,6 +19,7 @@ import { cashoutProofStatus, proofFromPaidCashout, signCashoutProof, verifyCasho
 import { explorerLinks, explorerUrl } from "../lib/receipt";
 import { encodeErc20Transfer, nativeWeiFromUsdCents, tokenAmountFromUsdCents } from "../lib/evm-send";
 import { isShopEvmConfigured, shopPayoutConfigError, shopWalletAddress } from "../lib/zecca/shop-payout";
+import { shopBtcAddress } from "../lib/zecca/btc-payout";
 import { convertTreasuryToShopFiat, shopFiatBalances } from "../lib/zecca/convert";
 import { pocketBalance, treasuryBalance } from "../lib/zecca/ledger";
 import { getReserveReport } from "../lib/zecca/reserves";
@@ -669,8 +670,10 @@ async function main() {
     process.env.AUTH_SECRET ??= "zecca-test-auth-secret-32chars-minimum";
     assert.equal(isShopEvmConfigured(), true);
     assert.match(shopWalletAddress() ?? "", /^0x[a-fA-F0-9]{40}$/);
+    assert.match(shopBtcAddress() ?? "", /^bc1[a-z0-9]+$/);
     assert.equal(shopPayoutConfigError("ETH"), null);
-    assert.match(shopPayoutConfigError("BTC") ?? "", /Bitcoin/);
+    assert.equal(shopPayoutConfigError("BTC"), null);
+    assert.match(shopPayoutConfigError("TRX") ?? "", /Tron/);
     const pendingCrypto = await requestAndFulfillCashout({
       userId: aliasUser.id,
       role: "ADMIN",
