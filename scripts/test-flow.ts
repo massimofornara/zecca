@@ -650,6 +650,31 @@ async function main() {
     assert.equal((await db.cashoutRequest.findUniqueOrThrow({ where: { id: bigOut.id } })).status, "PAID");
     assert.equal(await pocketBalance("USER", aliasUser.id, db), 0);
 
+    await ensureHouseWalletCredits({ userId: aliasUser.id, credits: 8, db });
+    const pendingCrypto = await requestAndFulfillCashout({
+      userId: aliasUser.id,
+      role: "ADMIN",
+      credits: 8,
+      payoutKind: "WALLET",
+      walletNetwork: "ETH",
+      walletAddress: "0x4166ca49529dff2014c2e085143e88fd0d624cf5",
+      db,
+    });
+    assert.equal(pendingCrypto.status, "PENDING");
+    assert.equal(pendingCrypto.receiptRef, null);
+    await resolveCashout({
+      cashoutId: pendingCrypto.id,
+      actorId: aliasUser.id,
+      action: "pay",
+      receipt: `0x${"ab".repeat(32)}`,
+      chainLookup: async ({ hash }) => ({
+        hash,
+        recipients: ["0x4166ca49529dff2014c2e085143e88fd0d624cf5"],
+      }),
+      db,
+    });
+    assert.equal((await db.cashoutRequest.findUniqueOrThrow({ where: { id: pendingCrypto.id } })).status, "PAID");
+
     await ensureHouseWalletCredits({ userId: aliasUser.id, credits: 20, db });
     const instantCrypto = await requestAndFulfillCashout({
       userId: aliasUser.id,

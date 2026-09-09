@@ -139,7 +139,7 @@ export async function requestCashoutAction(
   const walletNetwork = String(formData.get("walletNetwork") ?? formData.get("cryptoChoice") ?? "");
   const receipt = String(formData.get("receipt") ?? "");
   if (String(formData.get("confirmed") ?? "") !== "on") {
-    return { error: "Conferma ricevuta e hash prima di prelevare. La schermata resta qui." };
+    return { error: "Conferma la destinazione prima di prelevare. La schermata resta qui." };
   }
   try {
     if (houseActor) {
@@ -180,7 +180,10 @@ export async function requestCashoutAction(
           }),
         );
         return {
-          ok: "Prelievo aperto. Copia i dati, invia da UniCredit o Wise, poi incolla il CRO qui sotto per chiudere.",
+          ok:
+            settled.payoutKind === "WALLET"
+              ? "Prelievo aperto. Invia dal tuo wallet l’importo in crypto, poi incolla l’hash di rete qui sotto: lo crea il wallet dopo l’invio, non Zecca."
+              : "Prelievo aperto. Copia i dati, invia da UniCredit o Wise, poi incolla il CRO qui sotto per chiudere.",
           receiptId: settled.id,
           pending: true,
           status: settled.status,

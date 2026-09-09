@@ -353,8 +353,8 @@ export function houseBankReceiptRef(cashoutId: string, currency: string) {
 }
 
 /**
- * Casa: crypto si chiude solo con hash di rete già confermato.
- * IBAN resta aperto finché non c’è un CRO bancario vero: Zecca non dispone bonifici.
+ * Casa: senza CRO o hash la richiesta resta aperta.
+ * L’hash di rete e il CRO si registrano dopo l’invio, non li inventa Zecca.
  */
 export async function requestAndFulfillCashout(input: {
   userId: string;
@@ -383,15 +383,8 @@ export async function requestAndFulfillCashout(input: {
     walletNetwork: input.walletNetwork,
     db,
   });
-  const payoutKind = cashout.payoutKind === "WALLET" ? "WALLET" : "IBAN";
   const typed = (input.receipt ?? "").trim();
-  if (payoutKind === "WALLET" && !typed) {
-    throw new ZeccaError(
-      "Incolla l’hash reale della transazione già inviata al wallet. Senza hash il prelievo crypto non parte.",
-      "INVALID_RECEIPT",
-    );
-  }
-  if (payoutKind === "IBAN" && !typed) {
+  if (!typed) {
     return cashout;
   }
   return resolveCashout({

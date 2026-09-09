@@ -9,7 +9,7 @@ import { ErrorBanner, OkBanner } from "@/components/ui/banners";
 import { Input } from "@/components/ui/input";
 import { formatCredits, formatEurFromCents, formatUsdFromCents } from "@/lib/format";
 import { formatIbanDisplay } from "@/lib/iban";
-import { CRYPTO_ASSETS, cryptoAsset } from "@/lib/wallet";
+import { CRYPTO_ASSETS, cryptoAsset, isValidWalletAddress } from "@/lib/wallet";
 import { LEDGER_INT_MAX } from "@/lib/zecca/amount";
 import {
   HOUSE_PAYOUT_ACCOUNTS,
@@ -49,6 +49,7 @@ export function CashoutForm({
   const [bankRef, setBankRef] = useState("");
   const [ibanHolder, setIbanHolder] = useState("");
   const [iban, setIban] = useState("");
+  const [formError, setFormError] = useState<string | null>(null);
   const amount = Number.isFinite(credits) && credits > 0 ? Math.floor(credits) : 0;
   const needsGrant = house && (available <= 0 || amount > available);
   const selected = HOUSE_PAYOUT_ACCOUNTS.find((account) => account.id === accountId) ?? HOUSE_PAYOUT_ACCOUNTS[0];
@@ -68,8 +69,17 @@ export function CashoutForm({
   }
 
   function openConfirm() {
-    if (amount <= 0) return;
-    if (payoutKind === "WALLET" && house && txHash.trim().length < 16) return;
+    if (amount <= 0) {
+      setFormError("Indica i crediti da prelevare.");
+      return;
+    }
+    if (payoutKind === "WALLET") {
+      if (!isValidWalletAddress(walletAddress, cryptoId)) {
+        setFormError(`Indirizzo non valido per ${crypto.label}. Controlla rete e wallet.`);
+        return;
+      }
+    }
+    setFormError(null);
     setPhase("confirm");
   }
 
@@ -82,7 +92,9 @@ export function CashoutForm({
         </h2>
         <p className="text-sm text-muted-foreground">
           {pending
-            ? "La richiesta è attiva. Copia i dati, invia da banca o wallet, poi incolla CRO o hash qui sotto per chiuderla."
+            ? payoutKind === "WALLET"
+              ? "La richiesta è attiva. Invia dal wallet l’importo in crypto, poi incolla qui l’hash che la rete crea dopo l’invio."
+              : "La richiesta è attiva. Copia i dati, invia da banca o wallet, poi incolla CRO o hash qui sotto per chiuderla."
             : "CRO o hash sotto chiudono il prelievo nel libro. Non sono un accredito creato dal sito."}
         </p>
         <p className="font-ledger text-xl text-ember">
@@ -157,7 +169,10 @@ export function CashoutForm({
                 : `${ibanHolder || "intestatario"} · ${iban || "IBAN"}`}
           </p>
           {payoutKind === "WALLET" ? (
-            <p className="break-all font-ledger text-sm text-ember">{txHash || "Manca l’hash di rete"}</p>
+            <p className="text-sm text-muted-foreground">
+              Invia {preview} a questo wallet. L’hash di rete lo crea il wallet dopo l’invio: lo registri al
+              passo successivo, non ora.
+            </p>
           ) : (
             <p className="text-sm text-muted-foreground">
               Per far arrivare i soldi su questo IBAN devi disporre tu il bonifico da un conto con saldo
@@ -213,7 +228,7 @@ export function CashoutForm({
 
   return (
     <div className="metal-frame relative z-20 space-y-4 rounded-md bg-card p-5 md:p-7">
-      <ErrorBanner message={state?.error} />
+      <ErrorBanner message={state?.error || formError} />
       <p className="text-sm text-muted-foreground">
         {house
           ? `${houseName ?? "La casa"} indica destinazione. I crediti escono dal portafoglio solo come richiesta: UniCredit, Wise e i wallet non vengono accreditati da questo sito.`
@@ -374,15 +389,15 @@ export function CashoutForm({
                   className="mt-1 size-4 shrink-0 accent-primary"
                 />
                 <span>
-                  <span className="block font-display text-base">{asset.ticker}</span>
-                  <span className="mt-1 block text-xs text-muted-foreground">{asset.label}</span>
+                  <span className="block font-display text-base">{asset.label}</span>
+                  <span className="mt-1 block text-xs text-muted-foreground">{asset.ticker}</span>
                   <span className="mt-1 block font-ledger text-xs text-ember">{usdLabel}</span>
                 </span>
               </label>
             ))}
           </div>
           <label className="block text-sm">
-            Wallet che riceve {crypto.ticker}
+            Wallet che riceve {crypto.label}
             <Input
               value={walletAddress}
               onChange={(e) => setWalletAddress(e.target.value)}
@@ -391,16 +406,9 @@ export function CashoutForm({
               autoComplete="off"
             />
           </label>
-          <label className="block text-sm">
-            Hash reale della transazione (ricevuta)
-            <Input
-              value={txHash}
-              onChange={(e) => setTxHash(e.target.value)}
-              className="mt-1 max-w-xl font-ledger"
-              placeholder="0x… hash già confermato sulla rete"
-              autoComplete="off"
-            />
-          </label>
+          <p className="text-sm text-muted-foreground">
+            Da inviare: {preview}. L’hash di rete si registra dopo l’invio, sul prelievo aperto.
+          </p>
         </fieldset>
       )}
 
@@ -409,7 +417,7 @@ export function CashoutForm({
         onClick={openConfirm}
         className="relative z-30 inline-flex h-9 cursor-pointer items-center rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/80"
       >
-        {payoutKind === "WALLET" ? "Controlla hash e destinazione" : "Controlla destinazione"}
+        Controlla destinazione
       </button>
     </div>
   );
