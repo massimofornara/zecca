@@ -249,3 +249,13 @@ model Setting {
   key   String @id
   value String
 }
+
+/** Raw signed txs della catena 22120. Replay su ogni cold start (Vercel serverless). */
+model GaslessRawTx {
+  id          Int      @id @default(autoincrement())
+  hash        String   @unique
+  raw         String
+  txJson      String?
+  receiptJson String?
+  createdAt   DateTime @default(now())
+}

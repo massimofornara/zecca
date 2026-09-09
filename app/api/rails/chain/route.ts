@@ -8,7 +8,7 @@ export async function GET() {
   return Response.json({
     binary: "zecca-gasless",
     inventsHash: false,
-    etherscan: false,
+    etherscanIo: false,
     ...status,
   });
 }

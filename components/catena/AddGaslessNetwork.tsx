@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 
 type MetamaskParams = {
@@ -11,26 +11,75 @@ type MetamaskParams = {
   blockExplorerUrls: string[];
 };
 
-export function AddGaslessNetwork({ params }: { params: MetamaskParams }) {
+type EthereumProvider = {
+  request: (args: { method: string; params?: unknown }) => Promise<unknown>;
+};
+
+function browserRpc() {
+  if (typeof window === "undefined") return "";
+  return `${window.location.origin}/api/rails/chain/rpc`;
+}
+
+function browserExplorer() {
+  if (typeof window === "undefined") return "";
+  return `${window.location.origin}/catena`;
+}
+
+export function AddGaslessNetwork({
+  params,
+  token,
+}: {
+  params: MetamaskParams;
+  token?: string | null;
+}) {
   const [message, setMessage] = useState<string | null>(null);
 
   async function add() {
-    const ethereum = (window as unknown as { ethereum?: { request: (args: { method: string; params: unknown[] }) => Promise<unknown> } })
-      .ethereum;
+    const ethereum = (window as unknown as { ethereum?: EthereumProvider }).ethereum;
+    const rpc = browserRpc();
+    const explorer = browserExplorer();
+    const chainParams = {
+      ...params,
+      rpcUrls: [rpc],
+      blockExplorerUrls: [explorer],
+    };
     if (!ethereum) {
-      setMessage("MetaMask non è in questa finestra. Aggiungi la rete a mano con chainId 22120.");
+      setMessage(
+        `MetaMask non è in questa finestra. Aggiungi a mano: chainId 22120, RPC ${rpc || "/api/rails/chain/rpc"}.`,
+      );
       return;
     }
     try {
       await ethereum.request({
         method: "wallet_addEthereumChain",
-        params: [params],
+        params: [chainParams],
       });
-      setMessage("Rete Zecca Gasless proposta a MetaMask. Non è Ethereum.");
+      if (token) {
+        try {
+          await ethereum.request({
+            method: "wallet_watchAsset",
+            params: {
+              type: "ERC20",
+              options: { address: token, symbol: "zUSD", decimals: 6 },
+            },
+          });
+        } catch {
+          /* l’utente può rifiutare il token */
+        }
+      }
+      setMessage(`Rete proposta a MetaMask con RPC ${rpc}. Chain 22120, non Ethereum mainnet.`);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "MetaMask ha rifiutato la rete.");
     }
   }
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (sessionStorage.getItem("zecca-mm-offered") === "1") return;
+    sessionStorage.setItem("zecca-mm-offered", "1");
+    void add();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return (
     <div className="space-y-2">

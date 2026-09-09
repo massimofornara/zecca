@@ -130,7 +130,7 @@ Su Vercel il SQLite in `/tmp` è per istanza. Senza `DATABASE_URL` Postgres il l
 
 Analisi della monetizzazione interna, on/off-ramp e rischi di conio scoperto: [`docs/architettura-monetizzazione.md`](docs/architettura-monetizzazione.md). Pipeline esecutiva mint / liquidity / Wise / SEPA: [`docs/pipeline-settlement.md`](docs/pipeline-settlement.md). Check provider: `npm run check:settlement`.
 
-In produzione: KMS secp256k1 con `MINTER_ROLE` in `GET /api/rails/kms`; catena gasless in `GET /api/rails/chain` e RPC `POST /api/rails/chain/rpc`; binario SEPA autenticato in `GET /api/rails/sepa`. Vercel serverless **non** ospita Ganache: gli hash a gas zero restano sul processo Node di questa macchina. Senza BaaS upstream non nascono CRO UniCredit.
+In produzione: KMS secp256k1 con `MINTER_ROLE` in `GET /api/rails/kms`; catena gasless in-process in `GET /api/rails/chain` e `POST /api/rails/chain/rpc` (anche su Vercel serverless: niente porta TCP, replay delle raw tx dal libro). API stile Etherscan sulla stessa origine: `GET /api/rails/chain/v2/api?module=proxy&action=eth_getTransactionReceipt&txhash=`. Ethereum mainnet e etherscan.io non includono questi hash. Senza BaaS upstream non nascono CRO UniCredit.
 
 Mint a gas zero (esegue e stampa un tx_hash reale sulla catena 22120): `npm run token:gasless`. Explorer: [http://127.0.0.1:4731/catena](http://127.0.0.1:4731/catena). Per spegnere la catena nei test: `ZECCA_GASLESS=0`.
 
