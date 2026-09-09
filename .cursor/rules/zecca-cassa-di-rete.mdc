@@ -1,0 +1,26 @@
+---
+description: Cassa di rete is on-chain (Mempool, Etherscan, BscScan); converted credits are book units, not those coins.
+alwaysApply: true
+---
+
+# Cassa di rete vs crediti convertiti
+
+La cassa di rete è il saldo **on-chain** dei wallet del negozio. I crediti generati e convertiti in tesoreria sono **libro**: stessa denominazione, non le monete sulla chain.
+
+| Asset | Cassa di rete (vero) | Crediti convertiti (libro) |
+| --- | --- | --- |
+| BTC | Mempool / Blockstream | satoshi / BTC di registro, non UTXO |
+| ETH | Etherscan | ether di registro, non ETH on-chain |
+| USDT / USDC | Etherscan (ERC-20) | token di registro, non balanceOf |
+| BNB | BscScan / BNB Smart Chain | BNB di registro, non saldo BSC |
+
+```ts
+// ❌ BAD — dopo TREASURY_CONVERT_TO_CRYPTO
+vault.btcLabel = formatBookCryptoAmount("BTC", usdCents); // sembra Mempool, è il libro
+
+// ✅ GOOD
+// cassa di rete: getShopNetworkVault() da mempool.space / RPC
+// libro: shopCryptoBalances() da TREASURY_CONVERT_TO_CRYPTO
+```
+
+Prelievo verso MetaMask, Trust Wallet o exchange: il negozio trasmette **dalla cassa di rete**. Niente hash inventato, niente schede riempite con i crediti. Senza saldo on-chain (e gas per USDT/USDC) il prelievo resta `PENDING`.
