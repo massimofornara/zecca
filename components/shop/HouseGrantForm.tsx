@@ -45,7 +45,7 @@ export function HouseGrantForm({
             key={n}
             type="button"
             onClick={() => setCredits(n)}
-            className={`rounded-md px-3 py-1.5 text-sm ring-1 ring-primary/25 ${
+            className={`relative z-20 cursor-pointer rounded-md px-3 py-1.5 text-sm ring-1 ring-primary/25 ${
               credits === n ? "bg-primary/20 text-primary" : "bg-background/40"
             }`}
           >

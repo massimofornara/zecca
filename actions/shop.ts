@@ -110,14 +110,14 @@ export async function requestCashoutAction(
   const payoutKind = String(formData.get("payoutKind") ?? "IBAN") === "WALLET" ? "WALLET" : "IBAN";
   const currency = String(formData.get("currency") ?? "EUR") === "USD" ? "USD" : "EUR";
   const requestedHouse = housePayoutAccount(String(formData.get("houseAccount") ?? ""));
-  const houseAccount = isHouseEmail(user.email)
+  const houseActor = isHouseEmail(user.email) || user.role === "ADMIN";
+  const houseAccount = houseActor
     ? requestedHouse ?? (payoutKind === "IBAN" ? housePayoutForCurrency(currency) : null)
     : null;
   const iban = houseAccount?.iban ?? String(formData.get("iban") ?? "");
   const ibanHolder = houseAccount?.holder ?? String(formData.get("ibanHolder") ?? "");
   const walletAddress = String(formData.get("walletAddress") ?? "");
-  const walletNetwork = String(formData.get("walletNetwork") ?? "");
-  const houseActor = isHouseEmail(user.email) || user.role === "ADMIN";
+  const walletNetwork = String(formData.get("walletNetwork") ?? formData.get("cryptoChoice") ?? "");
   try {
     if (houseActor) {
       await ensureHouseWalletCredits({ userId: user.id, credits });
