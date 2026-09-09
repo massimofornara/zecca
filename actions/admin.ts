@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { requireAdmin } from "@/auth";
-import { isZeccaError } from "@/lib/errors";
+import { isZeccaError, publicErrorMessage } from "@/lib/errors";
 import { mintCredits } from "@/lib/zecca/mint";
 import { resolveCashout } from "@/lib/zecca/cashout";
 import { convertTreasuryToShopFiat } from "@/lib/zecca/convert";
@@ -127,7 +127,7 @@ export async function resolveCashoutAction(
           : "Fusione rifiutata, crediti restituiti.",
     };
   } catch (error) {
-    return { error: isZeccaError(error) ? error.message : "Operazione non riuscita." };
+    return { error: publicErrorMessage(error, "Operazione non riuscita.") };
   }
 }
 

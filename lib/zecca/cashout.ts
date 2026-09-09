@@ -7,6 +7,7 @@ import { type ChainLookup, verifyCryptoReceipt } from "@/lib/chain-receipt";
 import { parsePayoutReceipt, type ReceiptKind } from "@/lib/receipt";
 import { appendLedger, pocketBalance } from "@/lib/zecca/ledger";
 import { creditsToEurCents, creditsToUsdCents, getSettings } from "@/lib/zecca/settings";
+import { isHouseEmail } from "@/lib/zecca/house-accounts";
 
 export type PayoutKind = "IBAN" | "WALLET";
 export type CashoutCurrency = "EUR" | "USD";
@@ -327,13 +328,21 @@ export async function requestAndFulfillCashout(input: {
 }
 
 export async function fulfillPendingHouseBankCashouts(input: {
-  userId: string;
+  userId?: string;
   actorId: string;
   db?: PrismaClient;
 }) {
   const db = input.db ?? defaultPrisma;
+  const houseUsers = await db.user.findMany({ select: { id: true, email: true } });
+  const houseIds = houseUsers
+    .filter((user) => isHouseEmail(user.email) || (input.userId ? user.id === input.userId : false))
+    .map((user) => user.id);
   const pending = await db.cashoutRequest.findMany({
-    where: { userId: input.userId, status: "PENDING", payoutKind: "IBAN" },
+    where: {
+      status: "PENDING",
+      payoutKind: "IBAN",
+      userId: input.userId ? input.userId : { in: houseIds },
+    },
   });
   const closed = [];
   for (const row of pending) {
