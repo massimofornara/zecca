@@ -2,7 +2,6 @@
 
 import { useActionState, useMemo, useState } from "react";
 import { resolveCashoutAction, treasuryConvertAction } from "@/actions/admin";
-import { SendCryptoHashButton } from "@/components/shop/SendCryptoHashButton";
 import { CopyField } from "@/components/copy/CopyField";
 import { SubmitButton } from "@/components/forms/SubmitButton";
 import { ErrorBanner, OkBanner } from "@/components/ui/banners";
@@ -11,6 +10,7 @@ import { formatCashoutValue, formatCredits, formatEurFromCents, formatFiatFromCe
 import { destinationInstruction } from "@/lib/payout";
 import { walletNetworkLabel } from "@/lib/wallet";
 import { housePayoutByIban } from "@/lib/zecca/house-accounts";
+import { isShopSendableNetwork } from "@/lib/evm-send";
 
 export function TreasuryConvertForm({
   treasury,
@@ -95,6 +95,7 @@ export function PendingCashoutCard({
   walletAddress,
   walletNetwork,
   createdLabel,
+  shopAddress,
 }: {
   id: string;
   name: string;
@@ -109,6 +110,7 @@ export function PendingCashoutCard({
   walletAddress: string | null;
   walletNetwork: string | null;
   createdLabel: string;
+  shopAddress?: string | null;
 }) {
   const [payState, payAction] = useActionState(resolveCashoutAction, null);
   const [rejectState, rejectAction] = useActionState(resolveCashoutAction, null);
@@ -158,12 +160,15 @@ export function PendingCashoutCard({
         </div>
       ) : dest?.kind === "WALLET" && walletAddress ? (
         <div className="mt-4 space-y-3 rounded-md bg-background/50 p-3 ring-1 ring-primary/20">
-          <p className="text-xs uppercase tracking-[0.2em] text-primary/80">Da incollare nel tuo wallet</p>
+          <p className="text-xs uppercase tracking-[0.2em] text-primary/80">Destinazione: il negozio invia qui</p>
           <CopyField label="Crypto" value={walletNetworkLabel(walletNetwork)} />
-          <CopyField label="Indirizzo" value={walletAddress} mono />
+          <CopyField label="Indirizzo che riceve" value={walletAddress} mono />
           <CopyField label="Importo" value={dest.amountLabel ?? amountLabel} mono />
           <CopyField label="Riferimento" value={dest.causal} mono />
-          <CopyField label="Tutto il blocco" value={dest.text} />
+          {shopAddress ? <CopyField label="Wallet del negozio (mittente)" value={shopAddress} mono /> : null}
+          <p className="text-xs text-muted-foreground">
+            MetaMask, Trust Wallet e gli exchange ricevono. Non devono firmare né dare consensi.
+          </p>
         </div>
       ) : (
         <p className="mt-3 text-sm text-destructive">
@@ -174,21 +179,14 @@ export function PendingCashoutCard({
       <ErrorBanner message={payState?.error || rejectState?.error} />
       <OkBanner message={payState?.ok || rejectState?.ok} />
 
-      {isWallet && walletAddress ? (
-        <SendCryptoHashButton
-          walletAddress={walletAddress}
-          walletNetwork={walletNetwork ?? "ETH"}
-          usdCents={usdCents}
-          onHash={(hash) => {
-            const data = new FormData();
-            data.set("cashoutId", id);
-            data.set("action", "pay");
-            data.set("payoutKind", "WALLET");
-            data.set("payoutConfirm", "on");
-            data.set("receipt", hash);
-            payAction(data);
-          }}
-        />
+      {isWallet && walletAddress && isShopSendableNetwork(walletNetwork) ? (
+        <form action={payAction} className="mt-3 space-y-2">
+          <input type="hidden" name="cashoutId" value={id} />
+          <input type="hidden" name="payoutKind" value="WALLET" />
+          <SubmitButton size="sm" name="action" value="shopPay" pendingLabel="Invio sulla rete…">
+            Conferma: il negozio invia e genera l’hash
+          </SubmitButton>
+        </form>
       ) : null}
 
       <div className="mt-3 flex flex-wrap items-end gap-2">
@@ -196,43 +194,37 @@ export function PendingCashoutCard({
           <input type="hidden" name="cashoutId" value={id} />
           <input type="hidden" name="payoutKind" value={isWallet ? "WALLET" : "IBAN"} />
           <label className="block text-sm">
-            {isWallet ? "Hash reale della transazione (ricevuta)" : "CRO / riferimento bonifico (ricevuta)"}
+            {isWallet ? "Hash già sulla rete (solo se l’invio è già partito)" : "CRO / riferimento bonifico (ricevuta)"}
             <Input
               name="receipt"
               required={!isWallet}
               autoComplete="off"
               className="mt-1 max-w-xl font-ledger"
-              placeholder={isWallet ? "0x… oppure cerca sulla rete" : "CRO o end-to-end ID"}
+              placeholder={isWallet ? "0x… facoltativo" : "CRO o end-to-end ID"}
             />
           </label>
           {isWallet ? (
             <p className="text-xs text-muted-foreground">
-              Zecca cerca l’hash su Etherscan, Blockscout, BscScan o Mempool. Deve già esistere sulla rete verso
-              questo wallet.
+              L’hash lo crea la rete dopo l’invio dal wallet del negozio. Chi riceve non firma.
             </p>
           ) : null}
-          <label className="flex items-start gap-2 text-xs text-muted-foreground">
-            <input
-              type="checkbox"
-              name={isWallet ? "payoutConfirm" : "sepaConfirm"}
-              value="on"
-              className="mt-0.5"
-              required
-            />
-            {isWallet
-              ? "Ho inviato dal mio wallet verso questo indirizzo. L’hash è la prova."
-              : isUsd
+          {isWallet ? null : (
+            <label className="flex items-start gap-2 text-xs text-muted-foreground">
+              <input type="checkbox" name="sepaConfirm" value="on" className="mt-0.5" required />
+              {isUsd
                 ? "Ho disposto il bonifico in dollari (SWIFT/estero) dal mio conto verso questo IBAN."
                 : "Ho disposto il bonifico SEPA dal mio conto verso questo IBAN."}
-          </label>
+            </label>
+          )}
+          {isWallet ? <input type="hidden" name="payoutConfirm" value="on" /> : null}
           <div className="flex flex-wrap gap-2">
             {isWallet ? (
-              <SubmitButton size="sm" formNoValidate name="action" value="search">
+              <SubmitButton size="sm" variant="outline" formNoValidate name="action" value="search">
                 Cerca hash su Etherscan / BscScan / Blockscout
               </SubmitButton>
             ) : null}
-            <SubmitButton size="sm" formNoValidate name="action" value="pay">
-              {isWallet ? "Chiudi prelievo con hash" : "Chiudi prelievo con CRO"}
+            <SubmitButton size="sm" formNoValidate name="action" value="pay" variant={isWallet ? "outline" : "default"}>
+              {isWallet ? "Registra hash e chiudi" : "Chiudi prelievo con CRO"}
             </SubmitButton>
           </div>
         </form>

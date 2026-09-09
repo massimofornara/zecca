@@ -9,6 +9,7 @@ import { purchaseCredits } from "@/lib/zecca/credits";
 import { placeOrder } from "@/lib/zecca/shop";
 import { parseShipping } from "@/lib/shipping";
 import { requestAndFulfillCashout, requestCustomerCashout } from "@/lib/zecca/cashout";
+import { shopPayoutConfigError } from "@/lib/zecca/shop-payout";
 import { destinationInstruction } from "@/lib/payout";
 import { proofFromPaidCashout } from "@/lib/cashout-proof";
 import { rememberCashoutProof } from "@/lib/cashout-proof-store";
@@ -16,6 +17,7 @@ import { ensureHouseWalletCredits, isHouseEmail } from "@/lib/zecca/house";
 import { housePayoutAccount, housePayoutForCurrency } from "@/lib/zecca/house-accounts";
 import { isDemoPayEnabled } from "@/lib/stripe";
 import { requestBonificoPurchase } from "@/lib/zecca/bank";
+import { prisma } from "@/lib/db";
 
 export async function addToCartAction(formData: FormData) {
   const productId = String(formData.get("productId") ?? "");
@@ -141,6 +143,10 @@ export async function requestCashoutAction(
   if (String(formData.get("confirmed") ?? "") !== "on") {
     return { error: "Conferma la destinazione prima di prelevare. La schermata resta qui." };
   }
+  if (houseActor && payoutKind === "WALLET") {
+    const blocked = shopPayoutConfigError(walletNetwork);
+    if (blocked) return { error: blocked };
+  }
   try {
     if (houseActor) {
       await ensureHouseWalletCredits({ userId: user.id, credits });
@@ -182,7 +188,7 @@ export async function requestCashoutAction(
         return {
           ok:
             settled.payoutKind === "WALLET"
-              ? "Prelievo aperto. Invia dal tuo wallet l’importo in crypto, poi incolla l’hash di rete qui sotto: lo crea il wallet dopo l’invio, non Zecca."
+              ? "Prelievo aperto. Conferma: il negozio invia dal proprio wallet e genera l’hash. MetaMask, Trust Wallet o l’exchange ricevono, senza firmare."
               : "Prelievo aperto. Copia i dati, invia da UniCredit o Wise, poi incolla il CRO qui sotto per chiudere.",
           receiptId: settled.id,
           pending: true,
@@ -201,7 +207,7 @@ export async function requestCashoutAction(
       return {
         ok:
           settled.payoutKind === "WALLET"
-            ? "Hash di rete registrato. Zecca non ha inviato la crypto: l’hash è la prova di un invio già avvenuto sul wallet."
+            ? "Il negozio ha inviato. Hash reale sulla rete: il wallet indicato riceve, senza firmare né dare consensi."
             : "CRO bancario registrato. Zecca non ha disposto il bonifico: gli euro arrivano solo se li hai inviati tu dalla banca.",
         receiptId: settled.id,
         receiptRef: settled.receiptRef,
@@ -236,7 +242,10 @@ export async function requestCashoutAction(
     revalidatePath("/fusione");
     revalidatePath("/zecchiere/fusioni");
     return {
-      ok: "Richiesta registrata. Resta visibile in Prelievo. Massimo la chiude dopo il bonifico o l’invio crypto.",
+      ok:
+        asked.payoutKind === "WALLET"
+          ? "Richiesta registrata. Dopo la conferma il negozio invia alla destinazione: tu ricevi, senza firmare."
+          : "Richiesta registrata. Resta visibile in Prelievo. Massimo la chiude dopo il bonifico.",
       receiptId: asked.id,
       pending: true,
       status: asked.status,
@@ -247,6 +256,28 @@ export async function requestCashoutAction(
     if (!houseActor && isZeccaError(error) && error.code === "INSUFFICIENT_CREDITS") {
       redirect("/crediti");
     }
-    return { error: publicErrorMessage(error, "Richiesta non riuscita.") };
+    const message = publicErrorMessage(error, "Richiesta non riuscita.");
+    const openId = isZeccaError(error) ? error.cashoutId : undefined;
+    if (houseActor && payoutKind === "WALLET" && openId) {
+      const open = await prisma.cashoutRequest.findUnique({ where: { id: openId } });
+      if (open) {
+        const proofToken = await rememberCashoutProof(
+          proofFromPaidCashout({
+            ...open,
+            userName: user.name ?? "Casa",
+            status: "PENDING",
+          }),
+        );
+        return {
+          error: message,
+          receiptId: open.id,
+          pending: true,
+          status: "PENDING",
+          payoutKind: "WALLET",
+          proofToken,
+        };
+      }
+    }
+    return { error: message };
   }
 }

@@ -4,7 +4,12 @@ import { revalidatePath } from "next/cache";
 import { requireAdmin } from "@/auth";
 import { isZeccaError, publicErrorMessage } from "@/lib/errors";
 import { mintCredits } from "@/lib/zecca/mint";
-import { materializeCashoutFromProof, resolveCashout } from "@/lib/zecca/cashout";
+import {
+  fulfillWalletCashoutFromShop,
+  materializeCashoutFromProof,
+  resolveCashout,
+} from "@/lib/zecca/cashout";
+import { shopPayoutConfigError } from "@/lib/zecca/shop-payout";
 import { findIncomingCryptoTx } from "@/lib/chain-receipt";
 import { proofFromPaidCashout, verifyCashoutProof } from "@/lib/cashout-proof";
 import { findRememberedProof, rememberCashoutProof } from "@/lib/cashout-proof-store";
@@ -92,20 +97,24 @@ export async function resolveCashoutAction(
   if (!admin) return { error: "Solo il zecchiere può chiudere una fusione." };
   const cashoutId = String(formData.get("cashoutId") ?? "");
   const rawAction = String(formData.get("action") ?? "");
+  const shopPay = rawAction === "shopPay";
   const searching = rawAction === "search";
-  const action = (searching ? "pay" : rawAction) as "pay" | "reject";
+  const action = (shopPay || searching ? "pay" : rawAction) as "pay" | "reject";
   const adminNote = String(formData.get("adminNote") ?? "");
   let receipt = String(formData.get("receipt") ?? "");
   if (action !== "pay" && action !== "reject") return { error: "Azione non valida." };
   const paidVia = String(formData.get("payoutKind") ?? "IBAN");
-  if (action === "pay") {
+  if (shopPay && paidVia !== "WALLET") {
+    return { error: "L’invio dal negozio vale solo per i prelievi crypto." };
+  }
+  if (action === "pay" && !shopPay) {
     const confirmed =
       formData.get("sepaConfirm") === "on" || formData.get("payoutConfirm") === "on";
     if (!confirmed) {
       return {
         error:
           paidVia === "WALLET"
-            ? "Conferma di aver inviato dal tuo wallet verso questo indirizzo. Zecca non spedisce crypto."
+            ? "Conferma l’hash già visibile sulla rete, oppure usa il pulsante del negozio: chi riceve non firma."
             : "Conferma di aver disposto il bonifico dal tuo conto. Zecca non invia i soldi.",
       };
     }
@@ -113,7 +122,7 @@ export async function resolveCashoutAction(
       return {
         error:
           paidVia === "WALLET"
-            ? "Incolla l’hash reale oppure cerca su Etherscan / BscScan / Blockscout."
+            ? "Conferma: il negozio invia e genera l’hash. In alternativa incolla un hash già sulla rete."
             : "Incolla il CRO o il riferimento del bonifico: è la ricevuta del prelievo.",
       };
     }
@@ -138,24 +147,32 @@ export async function resolveCashoutAction(
       if (!found) {
         return {
           error:
-            "Nessun hash su Etherscan, Blockscout, BscScan o Mempool verso questo wallet. Invia sulla rete scelta, poi cerca di nuovo.",
+            "Nessun hash verso questo wallet. Conferma l’invio dal negozio, oppure aspetta qualche secondo e cerca di nuovo.",
         };
       }
       receipt = found.hash;
     }
-    const settled = await resolveCashout({
-      cashoutId,
-      actorId: admin.id,
-      action,
-      receipt,
-      adminNote:
-        adminNote ||
-        (action === "pay"
-          ? paidVia === "WALLET"
-            ? "Invio da wallet del zecchiere"
-            : "Bonifico disposto dal zecchiere"
-          : undefined),
-    });
+    let settled;
+    if (shopPay) {
+      const row = await prisma.cashoutRequest.findUnique({ where: { id: cashoutId } });
+      const configError = shopPayoutConfigError(row?.walletNetwork);
+      if (configError) return { error: configError };
+      settled = await fulfillWalletCashoutFromShop({ cashoutId, actorId: admin.id });
+    } else {
+      settled = await resolveCashout({
+        cashoutId,
+        actorId: admin.id,
+        action,
+        receipt,
+        adminNote:
+          adminNote ||
+          (action === "pay"
+            ? paidVia === "WALLET"
+              ? "Hash di rete registrato"
+              : "Bonifico disposto dal zecchiere"
+            : undefined),
+      });
+    }
     const signed = await rememberCashoutProof(
       proofFromPaidCashout({
         ...settled,
@@ -172,9 +189,11 @@ export async function resolveCashoutAction(
       ok:
         action === "pay"
           ? paidVia === "WALLET"
-            ? searching
-              ? "Hash trovato sulla rete e registrato. Aprilo su Etherscan, BscScan o Blockscout."
-              : "Prelievo chiuso. L’hash è visibile sull’explorer della rete."
+            ? shopPay
+              ? "Il negozio ha inviato. Hash reale sulla rete: MetaMask, Trust Wallet o l’exchange ricevono, senza firmare."
+              : searching
+                ? "Hash trovato sulla rete e registrato. Aprilo su Etherscan, BscScan o Blockscout."
+                : "Prelievo chiuso. L’hash è visibile sull’explorer della rete."
             : "Prelievo chiuso. Il riferimento del bonifico è la ricevuta."
           : "Fusione rifiutata, crediti restituiti.",
       receiptId: settled.id,

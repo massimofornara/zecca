@@ -19,6 +19,7 @@ import {
   type CashoutProof,
 } from "@/lib/cashout-proof";
 import { findRememberedProof } from "@/lib/cashout-proof-store";
+import { shopWalletAddress } from "@/lib/zecca/shop-payout";
 
 export const metadata = { title: "Ricevuta di prelievo" };
 export const dynamic = "force-dynamic";
@@ -70,6 +71,7 @@ export default async function RicevutaPage({
   const token = signCashoutProof(proof);
   const status = cashoutProofStatus(proof);
   const pending = status === "PENDING";
+  const shopAddress = shopWalletAddress();
 
   return (
     <PageShell>
@@ -84,8 +86,10 @@ export default async function RicevutaPage({
       </div>
       <p className="mt-3 max-w-2xl text-muted-foreground">
         {pending
-          ? "I crediti sono in deposito. Incolla qui il CRO UniCredit/Wise o l’hash di rete dopo l’invio: così il prelievo si chiude anche se questa pagina gira su un’altra istanza."
-          : "I crediti sono usciti dal portafoglio. Questa ricevuta è il documento del libro mastro. L’hash sotto è SHA-256 del documento. Un hash Ethereum o Bitcoin lo produce solo il wallet quando l’invio è già confermato sulla rete: Zecca non lo inventa."}
+          ? proof.payoutKind === "WALLET"
+            ? "I crediti sono in deposito. Conferma: il negozio invia e genera l’hash. Chi riceve non firma."
+            : "I crediti sono in deposito. Incolla qui il CRO UniCredit/Wise dopo il bonifico."
+          : "I crediti sono usciti dal portafoglio. Questa ricevuta è il documento del libro mastro. L’hash Ethereum lo produce la rete dopo l’invio dal wallet del negozio: Zecca non lo inventa."}
       </p>
 
       <section className="metal-frame mt-8 space-y-4 rounded-md bg-card p-5 md:p-7">
@@ -105,11 +109,12 @@ export default async function RicevutaPage({
             walletAddress={proof.walletAddress}
             walletNetwork={proof.walletNetwork}
             usdCents={proof.usdCents}
+            shopAddress={shopAddress}
           />
         ) : null}
         {pending && !house ? (
           <p className="text-sm text-muted-foreground">
-            Massimo chiude la richiesta dopo il bonifico o l’invio crypto.
+            Massimo conferma: il negozio invia al wallet indicato. Tu ricevi, senza firmare.
           </p>
         ) : null}
         {!pending && proof.receiptHash ? (

@@ -6,10 +6,12 @@ import { formatRomeDate } from "@/lib/rome-day";
 import { prisma } from "@/lib/db";
 import { treasuryBalance } from "@/lib/zecca/ledger";
 import { getSettings } from "@/lib/zecca/settings";
+import { shopWalletAddress } from "@/lib/zecca/shop-payout";
 
 export const metadata = { title: "Fusioni" };
 
 export default async function FusioniPage() {
+  const shopAddress = shopWalletAddress();
   const [pending, closed, treasury, settings] = await Promise.all([
     prisma.cashoutRequest.findMany({
       where: { status: "PENDING" },
@@ -30,8 +32,17 @@ export default async function FusioniPage() {
     <div>
       <h1 className="font-display text-4xl text-primary">Fusioni</h1>
       <p className="mt-2 text-muted-foreground">
-        Copia i dati, invia <strong>dalla tua banca o dal tuo wallet</strong>, poi chiudi qui con
-        l’hash della transazione o il CRO del bonifico. Quella è la ricevuta. Zecca non spedisce da sola.
+        Per la crypto premi <strong>Conferma: il negozio invia e genera l’hash</strong>. Parte dal
+        wallet della zecca; MetaMask, Trust Wallet o l’exchange ricevono, senza firmare. Il bonifico
+        IBAN lo disponi tu da UniCredit o Wise, poi chiudi con il CRO.
+        {shopAddress ? (
+          <>
+            {" "}
+            Wallet del negozio: <span className="font-ledger">{shopAddress}</span>.
+          </>
+        ) : (
+          <> Manca ZECCA_EVM_PRIVATE_KEY: senza quella chiave l’invio crypto non parte.</>
+        )}
       </p>
 
       <section className="metal-frame mt-8 rounded-md bg-card p-5">
@@ -70,6 +81,7 @@ export default async function FusioniPage() {
               walletAddress={r.walletAddress}
               walletNetwork={r.walletNetwork}
               createdLabel={formatRomeDate(r.createdAt)}
+              shopAddress={shopAddress}
             />
           ))}
         </ul>

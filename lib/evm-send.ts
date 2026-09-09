@@ -1,3 +1,8 @@
+export function isShopSendableNetwork(network: string | null | undefined): boolean {
+  const id = (network ?? "").trim().toUpperCase();
+  return id === "ETH" || id === "USDT" || id === "USDC" || id === "BNB";
+}
+
 export const EVM_ASSETS: Record<
   string,
   { chainId: number; decimals: number; native?: boolean; token?: `0x${string}`; chainName: string }

@@ -26,6 +26,7 @@ export function CashoutForm({
   usdCentsPerCredit,
   house = false,
   houseName,
+  shopAddress,
 }: {
   available: number;
   percent?: number;
@@ -33,6 +34,7 @@ export function CashoutForm({
   usdCentsPerCredit: number;
   house?: boolean;
   houseName?: string | null;
+  shopAddress?: string | null;
 }) {
   const [state, action] = useActionState(requestCashoutAction, null as CashoutActionState | null);
   const [phase, setPhase] = useState<"edit" | "confirm">("edit");
@@ -60,7 +62,11 @@ export function CashoutForm({
     if (payoutKind === "WALLET") return `${usdLabel} in ${crypto.ticker}`;
     return currency === "USD" ? usdLabel : eurLabel;
   }, [payoutKind, currency, eurLabel, usdLabel, crypto.ticker]);
-  const done = Boolean(state?.receiptId && !state.error && state.receiptId !== dismissedId);
+  const done = Boolean(
+    state?.receiptId &&
+      state.receiptId !== dismissedId &&
+      (!state.error || state.pending),
+  );
   const pending = Boolean(done && (state?.pending || state?.status === "PENDING"));
 
   function pickCurrency(next: "EUR" | "USD") {
@@ -86,6 +92,7 @@ export function CashoutForm({
   if (done && state?.receiptId) {
     return (
       <div className="metal-frame relative z-20 space-y-4 rounded-md bg-card p-5 md:p-7">
+        <ErrorBanner message={state.error} />
         <OkBanner message={state.ok} />
         <h2 className="font-display text-2xl text-primary">
           {pending ? "Prelievo aperto" : "Prelievo registrato"}
@@ -93,9 +100,9 @@ export function CashoutForm({
         <p className="text-sm text-muted-foreground">
           {pending
             ? payoutKind === "WALLET"
-              ? "La richiesta è aperta. Esegui l’invio dal wallet: la rete crea l’hash su Etherscan, BscScan o Blockscout."
-              : "La richiesta è attiva. Copia i dati, invia da banca o wallet, poi incolla CRO o hash qui sotto per chiuderla."
-            : "CRO o hash sotto chiudono il prelievo nel libro. Non sono un accredito creato dal sito."}
+              ? "La richiesta è aperta. Conferma: il negozio invia e genera l’hash. MetaMask, Trust Wallet o l’exchange ricevono senza firmare."
+              : "La richiesta è attiva. Copia i dati, invia da banca, poi incolla il CRO qui sotto per chiuderla."
+            : "CRO o hash sotto chiudono il prelievo nel libro. L’hash crypto lo crea la rete dopo l’invio del negozio."}
         </p>
         <p className="font-ledger text-xl text-ember">
           {formatCredits(amount)} → {preview}
@@ -118,10 +125,11 @@ export function CashoutForm({
                 walletAddress={walletAddress}
                 walletNetwork={cryptoId}
                 usdCents={amount * usdCentsPerCredit}
+                shopAddress={shopAddress}
               />
             ) : (
               <p className="text-sm text-muted-foreground">
-                Massimo chiude la richiesta dopo il bonifico o l’invio crypto.
+                Massimo conferma: il negozio invia al wallet che hai indicato. Tu ricevi, senza firmare.
               </p>
             )}
           </>
@@ -158,7 +166,7 @@ export function CashoutForm({
         <ErrorBanner message={state?.error} />
         <h2 className="font-display text-2xl text-primary">Conferma destinazione</h2>
         <p className="text-sm text-muted-foreground">
-          Questa conferma non muove euro, dollari né crypto. Il sito non entra in UniCredit, Wise o nei wallet.
+          Questa conferma apre il prelievo. Per la crypto il negozio trasmette dal proprio wallet: chi riceve non firma. Il bonifico IBAN resta da UniCredit o Wise.
         </p>
         <section className="space-y-2 rounded-md bg-background/50 p-4 ring-1 ring-primary/20">
           <p className="font-ledger text-xl text-ember">
@@ -173,8 +181,8 @@ export function CashoutForm({
           </p>
           {payoutKind === "WALLET" ? (
             <p className="text-sm text-muted-foreground">
-              Invia {preview} a questo wallet. L’hash di rete lo crea il wallet dopo l’invio: lo registri al
-              passo successivo, non ora.
+              Dopo questa conferma il negozio invia {preview} a questo wallet e la rete crea l’hash.
+              MetaMask, Trust Wallet o l’exchange ricevono: non firmi e non dai consensi.
             </p>
           ) : (
             <p className="text-sm text-muted-foreground">
@@ -207,14 +215,24 @@ export function CashoutForm({
         <label className="flex items-start gap-2 text-sm">
           <input type="hidden" name="confirmed" value="on" />
           <input type="checkbox" name="ack" value="on" required className="mt-1 size-4 accent-primary" />
-          Ho capito: Zecca non accredita questi conti. Il bonifico o l’invio crypto lo faccio io.
+          {house
+            ? payoutKind === "WALLET"
+              ? "Ho capito: ricevo sul wallet indicato. Il negozio invia e genera l’hash; io non firmo."
+              : "Ho capito: Zecca non accredita questi conti. Il bonifico lo faccio io da UniCredit o Wise."
+            : payoutKind === "WALLET"
+              ? "Ho capito: indico solo il wallet che riceve. Non firmo transazioni e non do consensi."
+              : "Ho capito: Zecca non accredita questi conti. Il bonifico lo dispone Massimo dalla banca."}
         </label>
         <div className="flex flex-wrap gap-3">
           <SubmitButton formNoValidate className="relative z-30 cursor-pointer">
             {house
               ? needsGrant
-                ? "Apri la richiesta (genera crediti)"
-                : "Apri la richiesta"
+                ? payoutKind === "WALLET"
+                  ? "Conferma: il negozio invia e genera l’hash"
+                  : "Apri la richiesta (genera crediti)"
+                : payoutKind === "WALLET"
+                  ? "Conferma: il negozio invia e genera l’hash"
+                  : "Apri la richiesta"
               : "Apri la richiesta"}
           </SubmitButton>
           <button
@@ -234,8 +252,12 @@ export function CashoutForm({
       <ErrorBanner message={state?.error || formError} />
       <p className="text-sm text-muted-foreground">
         {house
-          ? `${houseName ?? "La casa"} indica destinazione. I crediti escono dal portafoglio solo come richiesta: UniCredit, Wise e i wallet non vengono accreditati da questo sito.`
-          : "Scegli bonifico o crypto. Massimo invia dalla sua banca o dal suo wallet; Zecca non muove i soldi."}
+          ? payoutKind === "WALLET"
+            ? `${houseName ?? "La casa"} indica il wallet che riceve. Dopo la conferma il negozio invia: MetaMask, Trust Wallet o l’exchange non firmano.`
+            : `${houseName ?? "La casa"} indica destinazione. I crediti escono dal portafoglio solo come richiesta: UniCredit e Wise non vengono accreditati da questo sito.`
+          : payoutKind === "WALLET"
+            ? "Indica il wallet che riceve. Dopo la conferma il negozio invia: tu non firmi nulla."
+            : "Scegli bonifico o crypto. Il bonifico lo dispone Massimo dalla banca; la crypto parte dal wallet del negozio."}
       </p>
       {available <= 0 ? (
         <p className="text-sm text-ember">
@@ -297,7 +319,7 @@ export function CashoutForm({
         </p>
         <p className="mt-1 text-sm text-muted-foreground">
           {payoutKind === "WALLET"
-            ? `${eurLabel} oppure ${usdLabel} da inviare in ${crypto.label} al wallet indicato.`
+            ? `${eurLabel} oppure ${usdLabel} che il negozio invia in ${crypto.label} al wallet indicato.`
             : `Bonifico ${currency === "USD" ? "in dollari" : "in euro"}${
                 house ? ` su ${selected.bank}` : ""
               }. Tasso: 1 cr = ${formatEurFromCents(eurCentsPerCredit)} · 1 cr = ${formatUsdFromCents(usdCentsPerCredit)}.`}
@@ -400,7 +422,7 @@ export function CashoutForm({
             ))}
           </div>
           <label className="block text-sm">
-            Wallet che riceve {crypto.label}
+            Wallet che riceve {crypto.label} (non deve firmare)
             <Input
               value={walletAddress}
               onChange={(e) => setWalletAddress(e.target.value)}
@@ -410,7 +432,7 @@ export function CashoutForm({
             />
           </label>
           <p className="text-sm text-muted-foreground">
-            Da inviare: {preview}. L’hash di rete si registra dopo l’invio, sul prelievo aperto.
+            Destinazione: {preview}. Dopo la conferma il negozio invia e genera l’hash. Chi riceve non fa nulla.
           </p>
         </fieldset>
       )}

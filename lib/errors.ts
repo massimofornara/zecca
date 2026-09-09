@@ -1,10 +1,12 @@
 export class ZeccaError extends Error {
   readonly code: string;
+  readonly cashoutId?: string;
 
-  constructor(message: string, code = "ZECCA") {
+  constructor(message: string, code = "ZECCA", cashoutId?: string) {
     super(message);
     this.name = "ZeccaError";
     this.code = code;
+    this.cashoutId = cashoutId;
   }
 }
 

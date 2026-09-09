@@ -16,6 +16,7 @@ import { houseDisplayName, housePayoutLabel } from "@/lib/zecca/house-accounts";
 import { cashoutProofStatus, proofFromPaidCashout, signCashoutProof } from "@/lib/cashout-proof";
 import { loadRememberedProofs } from "@/lib/cashout-proof-store";
 import { ensureHouseAdmin, isHouseEmail } from "@/lib/zecca/house";
+import { shopWalletAddress } from "@/lib/zecca/shop-payout";
 
 export const metadata = { title: "Prelievo" };
 export const dynamic = "force-dynamic";
@@ -38,6 +39,7 @@ export default async function FusionePage() {
     dbUser?.role === "ADMIN" ||
     session.user.role === "ADMIN";
   const who = houseDisplayName(email) ?? houseDisplayName(session.user.email) ?? dbUser?.name ?? session.user.name;
+  const shopAddress = shopWalletAddress();
   const [wallet, settings, requests, remembered] = await Promise.all([
     userWallet(session.user.id),
     getSettings(),
@@ -67,8 +69,8 @@ export default async function FusionePage() {
       <h1 className="mt-1 font-display text-4xl text-primary">Preleva i crediti</h1>
       <p className="mt-3 max-w-2xl text-muted-foreground">
         {house
-          ? `${who}, Zecca non invia euro, dollari né crypto. Il bonifico lo disponi tu da UniCredit o Wise; la crypto dal tuo wallet. Poi incolli CRO o hash.`
-          : "Chiedi euro, dollari o crypto. Confermi la destinazione: i soldi partono solo da banca o wallet tuoi."}
+          ? `${who}, per la crypto conferma il prelievo: il negozio invia e genera l’hash. MetaMask, Trust Wallet o l’exchange ricevono senza firmare. Il bonifico IBAN resta da UniCredit o Wise.`
+          : "Chiedi euro, dollari o crypto. Per la crypto indichi solo il wallet che riceve: dopo la conferma del negozio i fondi arrivano, senza firme né consensi."}
       </p>
       {house ? (
         <div className="mt-8">
@@ -85,6 +87,7 @@ export default async function FusionePage() {
           usdCentsPerCredit={settings.usdCentsPerCredit}
           house={house}
           houseName={who}
+          shopAddress={shopAddress}
         />
       </div>
       <section className="mt-12">
@@ -137,6 +140,7 @@ export default async function FusionePage() {
                       walletAddress={r.walletAddress}
                       walletNetwork={r.walletNetwork}
                       usdCents={r.usdCents}
+                      shopAddress={shopAddress}
                     />
                   ) : null}
                 </li>

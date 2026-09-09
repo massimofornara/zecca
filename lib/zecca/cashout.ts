@@ -10,6 +10,7 @@ import { appendLedger, pocketBalance } from "@/lib/zecca/ledger";
 import { creditsToEurCents, creditsToUsdCents, getSettings } from "@/lib/zecca/settings";
 import { cashoutProofStatus, type CashoutProof } from "@/lib/cashout-proof";
 import { ensureHouseWalletCredits, isHouseEmail } from "@/lib/zecca/house";
+import { isShopEvmConfigured, sendShopCryptoPayout } from "@/lib/zecca/shop-payout";
 
 export type PayoutKind = "IBAN" | "WALLET";
 export type CashoutCurrency = "EUR" | "USD";
@@ -61,7 +62,7 @@ export async function requestCustomerCashout(input: {
     const address = normalizeWalletAddress(input.walletAddress ?? "");
     if (!isValidWalletAddress(address, network)) {
       throw new ZeccaError(
-        "Indirizzo wallet non valido per la rete scelta. Controlla rete e indirizzo: Massimo invierà da un wallet suo, l’app non spedisce da sola.",
+        "Indirizzo wallet non valido per la rete scelta. Controlla rete e indirizzo: il negozio invia, il destinatario riceve senza firmare.",
         "INVALID_WALLET",
       );
     }
@@ -289,7 +290,7 @@ export async function resolveCashout(input: {
           adminNote:
             input.adminNote?.trim() ||
             (receiptKind === "TX_HASH"
-              ? "Hash di rete registrato: Zecca non ha inviato la crypto"
+              ? "Hash di rete registrato dopo l’invio dal wallet del negozio"
               : "CRO bancario registrato: Zecca non ha disposto il bonifico"),
           receiptKind,
           receiptRef,
@@ -353,8 +354,61 @@ export function houseBankReceiptRef(cashoutId: string, currency: string) {
 }
 
 /**
- * Casa: senza CRO o hash la richiesta resta aperta.
- * L’hash di rete e il CRO si registrano dopo l’invio, non li inventa Zecca.
+ * Il negozio trasmette sulla rete dal proprio wallet e chiude il prelievo
+ * con l’hash reale. Chi riceve (MetaMask, Trust Wallet, exchange) non firma.
+ */
+export async function fulfillWalletCashoutFromShop(input: {
+  cashoutId: string;
+  actorId: string;
+  db?: PrismaClient;
+}) {
+  const db = input.db ?? defaultPrisma;
+  const cashout = await db.cashoutRequest.findUnique({ where: { id: input.cashoutId } });
+  if (!cashout) {
+    throw new ZeccaError("Richiesta di prelievo non trovata.", "NOT_FOUND");
+  }
+  if (cashout.status === "PAID") return cashout;
+  if (cashout.status !== "PENDING") {
+    throw new ZeccaError("Questa richiesta è già stata chiusa.", "ALREADY_RESOLVED");
+  }
+  if (cashout.payoutKind !== "WALLET" || !cashout.walletAddress || !cashout.walletNetwork) {
+    throw new ZeccaError("Questo prelievo non è un invio crypto dal negozio.", "INVALID");
+  }
+
+  const sent = await sendShopCryptoPayout({
+    walletAddress: cashout.walletAddress,
+    walletNetwork: cashout.walletNetwork,
+    usdCents: cashout.usdCents,
+  });
+
+  try {
+    return await resolveCashout({
+      cashoutId: cashout.id,
+      actorId: input.actorId,
+      action: "pay",
+      receipt: sent.hash,
+      adminNote: `Invio dal wallet del negozio ${sent.shopAddress}`,
+      chainLookup: async ({ hash }) => ({
+        hash,
+        recipients: [cashout.walletAddress as string],
+      }),
+      db,
+    });
+  } catch (error) {
+    throw new ZeccaError(
+      `Il negozio ha già trasmesso (hash ${sent.hash}). Incolla questo hash per chiudere il libro. ${
+        error instanceof Error ? error.message : ""
+      }`.trim(),
+      "SHOP_SENT_UNSETTLED",
+      cashout.id,
+    );
+  }
+}
+
+/**
+ * Casa: senza CRO la richiesta IBAN resta aperta.
+ * Crypto: se c’è la chiave del negozio, il negozio invia e chiude con l’hash reale.
+ * Senza chiave (test / server non configurato) la crypto resta PENDING.
  */
 export async function requestAndFulfillCashout(input: {
   userId: string;
@@ -384,15 +438,33 @@ export async function requestAndFulfillCashout(input: {
     db,
   });
   const typed = (input.receipt ?? "").trim();
-  if (!typed) {
-    return cashout;
+  if (typed) {
+    return resolveCashout({
+      cashoutId: cashout.id,
+      actorId: input.userId,
+      action: "pay",
+      receipt: typed,
+      chainLookup: input.chainLookup,
+      db,
+    });
   }
-  return resolveCashout({
-    cashoutId: cashout.id,
-    actorId: input.userId,
-    action: "pay",
-    receipt: typed,
-    chainLookup: input.chainLookup,
-    db,
-  });
+  if (cashout.payoutKind === "WALLET" && isShopEvmConfigured()) {
+    try {
+      return await fulfillWalletCashoutFromShop({
+        cashoutId: cashout.id,
+        actorId: input.userId,
+        db,
+      });
+    } catch (error) {
+      if (error instanceof ZeccaError) {
+        throw new ZeccaError(error.message, error.code, cashout.id);
+      }
+      throw new ZeccaError(
+        error instanceof Error ? error.message : "Invio dal negozio non riuscito.",
+        "SHOP_SEND_FAILED",
+        cashout.id,
+      );
+    }
+  }
+  return cashout;
 }

@@ -14,9 +14,10 @@ export default function AvvertenzePage() {
           euro, banconote o depositi bancari.
         </p>
         <p>
-          Gli euro veri, se arrivano, passano da Stripe (ingressi con carta) e dal conto o dal wallet
-          del zecchiere (uscite). Questo sito non è una banca, non è la Banca d’Italia, non dispone
-          bonifici e non invia crypto da sola.
+          Gli euro veri, se arrivano, passano da Stripe (ingressi con carta) e dal conto della casa
+          (uscite IBAN). La crypto in uscita parte dal wallet del negozio se è configurato
+          ZECCA_EVM_PRIVATE_KEY e c’è saldo: MetaMask, Trust Wallet o l’exchange ricevono, senza
+          firmare. Questo sito non è una banca e non è la Banca d’Italia.
         </p>
         <p>
           In modalità dimostrativa nessun pagamento si muove. Per i fondi veri servono le chiavi
@@ -24,9 +25,10 @@ export default function AvvertenzePage() {
         </p>
         <p>
           Coniare crediti non crea una riserva. Il rapporto di copertura (euro Stripe sul circolante)
-          sta in Tesoreria. Puoi chiedere un prelievo verso IBAN o wallet: Massimo lo esegue a mano.
-          Un off-ramp automatico (hot wallet, exchange, token ERC-20 rimborsabile) è un prodotto
-          regolamentato (AML, eventuale IMEL, MiCA): non è incluso in questo sito.
+          sta in Tesoreria. Puoi chiedere un prelievo verso IBAN o wallet: il bonifico lo esegue
+          Massimo a mano; la crypto, se il wallet del negozio è caricato, parte da Zecca e genera un
+          hash reale sulla rete. Un off-ramp verso il pubblico resta un prodotto regolamentato
+          (AML, eventuale IMEL, MiCA).
         </p>
       </div>
     </PageShell>

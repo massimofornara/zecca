@@ -18,6 +18,7 @@ import {
 import { cashoutProofStatus, proofFromPaidCashout, signCashoutProof, verifyCashoutProof } from "../lib/cashout-proof";
 import { explorerLinks, explorerUrl } from "../lib/receipt";
 import { encodeErc20Transfer, nativeWeiFromUsdCents, tokenAmountFromUsdCents } from "../lib/evm-send";
+import { isShopEvmConfigured, sendShopCryptoPayout, shopPayoutConfigError } from "../lib/zecca/shop-payout";
 import { convertTreasuryToShopFiat, shopFiatBalances } from "../lib/zecca/convert";
 import { pocketBalance, treasuryBalance } from "../lib/zecca/ledger";
 import { getReserveReport } from "../lib/zecca/reserves";
@@ -31,6 +32,7 @@ const dbPath = path.join(process.cwd(), "prisma", "test.db");
 const dbUrl = "file:./test.db";
 
 async function main() {
+  delete process.env.ZECCA_EVM_PRIVATE_KEY;
   if (existsSync(dbPath)) unlinkSync(dbPath);
   execSync("npx prisma db push --skip-generate --accept-data-loss", {
     stdio: "inherit",
@@ -664,6 +666,19 @@ async function main() {
     assert.equal(await pocketBalance("USER", aliasUser.id, db), 0);
 
     await ensureHouseWalletCredits({ userId: aliasUser.id, credits: 8, db });
+    assert.equal(isShopEvmConfigured(), false);
+    assert.match(shopPayoutConfigError("ETH") ?? "", /ZECCA_EVM_PRIVATE_KEY/);
+    assert.match(shopPayoutConfigError("BTC") ?? "", /Bitcoin/);
+    try {
+      await sendShopCryptoPayout({
+        walletAddress: "0x4166ca49529dff2014c2e085143e88fd0d624cf5",
+        walletNetwork: "ETH",
+        usdCents: 108,
+      });
+      assert.fail("senza chiave il negozio non deve trasmettere");
+    } catch (error) {
+      assert.match(String(error), /ZECCA_EVM_PRIVATE_KEY|chiave/i);
+    }
     const pendingCrypto = await requestAndFulfillCashout({
       userId: aliasUser.id,
       role: "ADMIN",

@@ -10,7 +10,7 @@ Non è un e-commerce a punti. I crediti vivono in un **libro mastro** immutabile
 2. **Acquisto crediti** — Il cliente versa euro (demo o Stripe) e riceve crediti dalla tesoreria.
 3. **Negozio** — E-commerce della bottega: **decine di pezzi** (dispensa, cantina, tavola, bottega, tessuti, corpo), ciascuno legato al fornitore che lo produce. Paghi in crediti. Al checkout Zecca apre da sola un collo DHL Express 24h **dalla sede di ogni azienda** (18 cr a casa del cliente, 0 cr se la destinazione è casa di Massimo). Massimo non imballa. Ricevuta, tracking pubblico. Con `DHL_API_KEY` + account si prenota il ritiro vero; senza, la lettera resta locale. Aggiorna il catalogo con `npm run db:catalog`.
 4. **Forgia del Giorno** — Il calore di oggi dipende da quanto hai comprato *nella giornata*. A mezzanotte romana si azzera. Non blocca più il prelievo.
-5. **Prelievo** — Chiunque abbia crediti può chiedere **euro o dollari** verso **IBAN** o un wallet. Crypto: apri la richiesta, poi **Esegui invio e genera hash (MetaMask)** per la quantità in crediti sulla rete scelta. L’hash lo crea la rete (Etherscan, BscScan, Blockscout). Bitcoin/Tron: invio dal wallet nativo e ricerca hash. L’app non ha un hot wallet proprio.
+5. **Prelievo** — Chiunque abbia crediti può chiedere **euro o dollari** verso **IBAN** o un wallet. Crypto (ETH, USDT, USDC, BNB): dopo la conferma **il negozio** trasmette dal proprio wallet (`ZECCA_EVM_PRIVATE_KEY`) e la rete crea l’hash (Etherscan, BscScan, Blockscout). MetaMask, Trust Wallet o un exchange **ricevono**: non firmano e non danno consensi. Senza chiave o senza saldo il prelievo resta aperto. Bitcoin/Tron non partono dal wallet EVM del negozio. Il bonifico IBAN resta da UniCredit/Wise.
 6. **Casa Fornara** — Le email `massimo.fornara.2212@gmail.com` e `mfornara93@gmail.com`, una volta iscritte, diventano zecchiere: generano crediti **senza pagare** (quantità scelta) e li prelevano in EUR su UniCredit o in USD su Wise. Non sono conti pre-creati: iscriviti con quella email e la password che scegli tu.
 7. **Conversione tesoreria** — Massimo converte crediti ancora in casa in **euro e/o dollari della cassa negozio**. È un movimento contabile: non è un prelievo personale e non accredita un conto bancario.
 
@@ -69,7 +69,7 @@ Le due Gmail della casa **non** sono nei conti dimostrativi. Iscriviti da **Iscr
 | Massimo | `massimo.fornara.2212@gmail.com` |
 | Maxi | `mfornara93@gmail.com` |
 
-In Portafoglio compare **Genera crediti senza pagare**. In Prelievo Massimo e Maxi possono scrivere **qualsiasi quantità** (anche a portafoglio vuoto): il pulsante **Genera e preleva** crea i crediti mancanti e apre la richiesta. Poi bonifico (UniCredit/Wise) oppure crypto (BTC, ETH, USDT, USDC) verso il wallet: la finestra mostra il valore da inviare. Gmail riconosce anche la stessa casella senza punti o con un +alias.
+In Portafoglio compare **Genera crediti senza pagare**. In Prelievo Massimo e Maxi possono scrivere **qualunque quantità** (anche a portafoglio vuoto): dopo la conferma, per ETH/USDT/USDC/BNB il negozio invia e genera l’hash; chi riceve non firma. Il bonifico (UniCredit/Wise) resta un passo a parte. Gmail riconosce anche la stessa casella senza punti o con un +alias.
 
 Conti bancari della casa:
 
@@ -97,7 +97,7 @@ Cosa serve, e chi lo può fare:
 | IBAN della zecca in **Zecchiere → Versamenti** | Tu |
 | Bonifico del cliente con causale `ZECCA-XXXXXX` | Il cliente, dalla sua banca |
 | Conferma incasso in **Versamenti** | Tu, dopo aver visto l’accredito |
-| Bonifici ai clienti (fusioni) | Tu, dal home banking |
+| Conferma invio crypto (fusioni) | Il negozio, con `ZECCA_EVM_PRIVATE_KEY` e saldo |
 | Sito in HTTPS + `AUTH_SECRET` | Tu (hosting / Vercel) |
 | Partita IVA / inquadramento se vendi in Italia | Tu (commercialista) |
 
@@ -110,11 +110,11 @@ Controlla lo stato: `npm run check:live`. In **Zecchiere → Tesoreria** vedi la
 3. Dispone il bonifico con la causale mostrata (importo esatto).
 4. Tu in **Versamenti** confronti causale e importo in banca, spunti la conferma, accrediti.
 
-**Euro o dollari in uscita (veri):** il cliente (o la casa) indica IBAN e valuta. In **Prelievo** la richiesta resta aperta **sulla stessa schermata**. Tu invii **dal proprio home banking** (UniCredit per EUR, Wise per USD) o dal tuo wallet, poi incolli il CRO o l’hash di rete lì sotto. Anche se Vercel apre un’altra istanza, il cookie firmato ricostruisce la richiesta e la chiude. L’app non ha accesso ai conti e non spedisce crypto. Un codice `ZECCA/…` non è un bonifico.
+**Euro o dollari in uscita (veri):** il cliente (o la casa) indica IBAN e valuta. Il bonifico lo disponi tu da UniCredit (EUR) o Wise (USD), poi incolli il CRO. Un codice `ZECCA/…` non è un bonifico.
 
-Su Vercel il SQLite in `/tmp` è per istanza. Senza `DATABASE_URL` Postgres il libro non è condiviso: la prova firmata nel cookie è quella che fa funzionare chiusura e ricevuta. Non è un accredito bancario.
+**Crypto in uscita (vera):** dopo **Conferma: il negozio invia e genera l’hash** Zecca trasmette da `ZECCA_EVM_PRIVATE_KEY` verso il wallet indicato. L’hash è quello della rete, visibile su Etherscan / BscScan / Blockscout. MetaMask, Trust Wallet e gli exchange ricevono: non devono firmare. I fondi arrivano in pochi secondi **solo se** il wallet del negozio ha abbastanza token e gas. Non generare una chiave nuova a ogni avvio: su Vercel ogni lambda è un processo diverso, la chiave sta nelle env. Bitcoin e Tron non partono da questa chiave EVM.
 
-Non esiste un pulsante che manda soldi a un IBAN o a un wallet da sola.
+Su Vercel il SQLite in `/tmp` è per istanza. Senza `DATABASE_URL` Postgres il libro non è condiviso: la prova firmata nel cookie è quella che fa funzionare chiusura e ricevuta.
 
 ## Conio e conversione in cassa negozio
 
@@ -122,7 +122,7 @@ Non esiste un pulsante che manda soldi a un IBAN o a un wallet da sola.
 2. **Zecchiere → Forgia**: 1 cr = X EUR e 1 cr = Y USD (predefiniti 1,00 e 1,08).
 3. **Zecchiere → Tesoreria** (o Fusioni): indica quanti crediti diventare euro e quanti dollari. Esempio: 10.000 cr coniato, 3.000 → EUR e 2.000 → USD: tesoreria crediti 5.000; cassa negozio +EUR e +USD; 5.000 cr restano crediti.
 4. Il libro registra `TREASURY_CONVERT_TO_EUR` e `TREASURY_CONVERT_TO_USD`. I pentolini fiat si calcolano da quelle righe.
-5. I clienti (e la casa) prelevano in **EUR o USD** verso IBAN. Bonifici e invii wallet restano un passo a parte.
+5. I clienti (e la casa) prelevano in **EUR o USD** verso IBAN (bonifico a mano) oppure in crypto dal wallet del negozio.
 
 `npm run test:flow` include mint → conversione 3.000 cr in EUR e 2.000 cr in USD e controlla saldi e libro.
 

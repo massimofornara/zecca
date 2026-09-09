@@ -29,8 +29,8 @@ export default async function HomePage() {
           Massimo Fornara conia i crediti (non euro di banca). Tu li compri — in demo o, se Stripe è
           acceso, in euro veri — li spendi in bottega su decine di pezzi di massima fattura, te li
           fai spedire a casa — il produttore imballa, DHL parte da solo, non Massimo — e puoi
-          prelevare i crediti verso un conto o un wallet. Zecca non dispone i pagamenti: lo fa il
-          zecchiere.
+          prelevare i crediti verso un conto o un wallet. Per la crypto il negozio invia dal proprio
+          wallet: MetaMask, Trust Wallet o l’exchange ricevono, senza firmare.
         </p>
         <div className="mt-8 flex flex-wrap gap-3">
           <Link href="/vetrina" className={cn(buttonVariants({ size: "lg" }), "px-5")}>
@@ -45,7 +45,7 @@ export default async function HomePage() {
       <section className="mt-6 grid gap-4 md:grid-cols-3">
         <Step n="01" title="Il conio" body="Solo il zecchiere può far nascere i crediti. Entrano in tesoreria, non in un portafoglio a caso." />
         <Step n="02" title="Il negozio" body="Decine di pezzi, corsie e fornitori diversi. Chi produce imballa; al pagamento Zecca prenota DHL Express 24h dalla sede di quell’azienda. Massimo non tocca i colli." />
-        <Step n="03" title="Il prelievo" body="Chiunque abbia crediti può chiedere euro, dollari o crypto verso IBAN o wallet. Massimo invia dalla sua banca o dal suo wallet: il sito non accredita UniCredit, Wise né i wallet." />
+        <Step n="03" title="Il prelievo" body="Chiunque abbia crediti può chiedere euro, dollari o crypto verso IBAN o wallet. La crypto parte dal wallet del negozio: chi riceve non firma. Il bonifico IBAN lo dispone Massimo dalla banca." />
       </section>
 
       {featured.length > 0 && (

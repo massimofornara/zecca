@@ -14,7 +14,7 @@ Le quattro direttrici (emissione interna, crediti d’acquisto, convertibilità,
 | Token on-chain con riserva mista / paniere | Sì, con autorizzazione | MiCA: *asset-referenced token* (ART). Riserva segregata, white paper, fondi propri. |
 | **Conio illimitato + prelievo EUR o crypto** | No | Iperemissione: passività > cassa. Insolvenza e, in UE, attività riservata senza copertura. |
 
-Zecca in questo repository è un **libro mastro chiuso** (pockets `VOID → TREASURY → USER → ESCROW → BURN`). Non è una blockchain, non è una banca, non dispone SEPA né transazioni on-chain.
+Zecca in questo repository è un **libro mastro chiuso** (pockets `VOID → TREASURY → USER → ESCROW → BURN`). Non è una blockchain e non è una banca. Il bonifico SEPA resta manuale. L’invio crypto EVM, se `ZECCA_EVM_PRIVATE_KEY` è impostata e il wallet è finanziato, parte dal negozio: chi riceve non firma.
 
 ## Tre oggetti diversi (non mescolarli)
 
@@ -160,13 +160,13 @@ Un sito che dice “non siamo una banca” **non** esclude la qualificazione se 
 
 ## Cosa questo repo implementa — e cosa no
 
-Implementato: libro mastro, conio, acquisto (demo/Stripe), bottega, forgia, prelievo clienti verso **IBAN o wallet** (coda manuale), **indicatore di copertura** in Tesoreria, questa nota.
+Implementato: libro mastro, conio, acquisto (demo/Stripe), bottega, forgia, prelievo clienti verso **IBAN o wallet**, invio EVM dal wallet del negozio se configurato, **indicatore di copertura** in Tesoreria, questa nota.
 
 Non verrà implementato qui:
 
 - smart contract ERC-20 con mint libero;
-- invio automatico verso wallet crypto esterni (hot wallet, exchange, viem);
-- trasformazione del conio scoperto in un prelievo automatico fiat/crypto.
+- bonifico SEPA automatico da UniCredit/Wise;
+- trasformazione del conio scoperto in un prelievo automatico fiat.
 
 Quella strada è un prodotto regolamentato, con capitale, riserve e autorizzazione — non un’estensione di `ensureTreasury`.
 
