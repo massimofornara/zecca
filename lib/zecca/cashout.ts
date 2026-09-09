@@ -440,6 +440,7 @@ export async function resolveCashout(input: {
   action: "pay" | "reject";
   adminNote?: string;
   receipt?: string;
+  receiptUrl?: string | null;
   chainLookup?: ChainLookup;
   db?: PrismaClient;
 }) {
@@ -477,7 +478,7 @@ export async function resolveCashout(input: {
     }
     receiptKind = parsed.kind;
     receiptRef = parsed.ref;
-    receiptUrl = parsed.url;
+    receiptUrl = input.receiptUrl ?? parsed.url;
     if (receiptKind === "TX_HASH") {
       try {
         await verifyCryptoReceipt({
@@ -736,6 +737,7 @@ export async function fulfillWalletCashoutFromShop(input: {
           actorId: input.actorId,
           action: "pay",
           receipt: result.ref,
+          receiptUrl: result.url,
           adminNote: isEvmPayoutNetwork(cashout.walletNetwork)
             ? `EXECUTED via ${result.provider} sul wallet ${cashout.walletAddress}`
             : `EXECUTED Bitcoin via ${result.provider} verso ${cashout.walletAddress}`,

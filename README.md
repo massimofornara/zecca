@@ -2,7 +2,7 @@
 
 Zecca è una **zecca + bottega**. Massimo Fornara, lo zecchiere, è l’unico che può **coniare** crediti. I clienti comprano quei crediti in euro, li spendono in vetrina su oggetti della casa, e possono **prelevarli** verso un conto bancario o un wallet.
 
-Non è un e-commerce a punti. I crediti vivono in un **libro mastro** immutabile. Non c’è una blockchain.
+Non è un e-commerce a punti. I crediti vivono in un **libro mastro** immutabile. Non sono satoshi né ether. Per i payout EVM il negozio avvia **Zecca Gasless** (chain ID 22120, gasPrice 0) e conia zUSD: hash veri su `/catena/tx`, non su Ethereum né su Etherscan.
 
 ## Idea
 
@@ -10,9 +10,9 @@ Non è un e-commerce a punti. I crediti vivono in un **libro mastro** immutabile
 2. **Acquisto crediti** — Il cliente versa euro (demo o Stripe) e riceve crediti dalla tesoreria.
 3. **Negozio** — E-commerce della bottega: **decine di pezzi** (dispensa, cantina, tavola, bottega, tessuti, corpo), ciascuno legato al fornitore che lo produce. Paghi in crediti. Al checkout Zecca apre da sola un collo DHL Express 24h **dalla sede di ogni azienda** (18 cr a casa del cliente, 0 cr se la destinazione è casa di Massimo). Massimo non imballa. Ricevuta, tracking pubblico. Con `DHL_API_KEY` + account si prenota il ritiro vero; senza, la lettera resta locale. Aggiorna il catalogo con `npm run db:catalog`.
 4. **Forgia del Giorno** — Il calore di oggi dipende da quanto hai comprato *nella giornata*. A mezzanotte romana si azzera. Non blocca più il prelievo.
-5. **Prelievo** — Chiunque abbia crediti può chiedere **euro, dollari o franchi** verso **IBAN** o un wallet. Crypto (BTC, ETH, USDT, USDC, BNB): alla conferma i crediti si **bruciano nel libro** e la pipeline tenta l’invio in pochi secondi (mint EVM, vault, liquidity). Senza binario acceso **i fondi non arrivano**: resta una ricevuta interna `ZECCA/…`, che **non** è un CRO UniCredit né un tx_hash Mempool. L’accredito bancario (SEPA Instant / Wise) e gli hash di rete si chiudono in **Zecchiere → Liquidazione**. USDT su Tron non parte da questa cassa. In Forgia: rate limit, whitelist e massimali sul gateway di uscita.
+5. **Prelievo** — Chiunque abbia crediti può chiedere **euro, dollari o franchi** verso **IBAN** o un wallet. Crypto (BTC, ETH, USDT, USDC, BNB): alla conferma i crediti si **bruciano nel libro** e la pipeline tenta l’invio in pochi secondi. ETH/USDT/USDC/BNB senza vault su mainnet vengono **coniati a gas zero** su Zecca Gasless (zUSD, chain 22120). Bitcoin resta UTXO/liquidity. Senza binario acceso per SEPA/Wise **i bonifici non arrivano**: resta una ricevuta interna `ZECCA/…`, che **non** è un CRO UniCredit. L’accredito bancario e gli hash di rete si chiudono in **Zecchiere → Liquidazione**. USDT su Tron non parte da questa cassa.
 6. **Casa Fornara** — Le email `massimo.fornara.2212@gmail.com` e `mfornara93@gmail.com`, una volta iscritte, diventano zecchiere: generano crediti **senza pagare** (quantità scelta) e li prelevano in EUR su UniCredit o in USD su Wise. Non sono conti pre-creati: iscriviti con quella email e la password che scegli tu.
-7. **Conversione tesoreria** — Massimo converte crediti ancora in casa in **euro, dollari, franchi o crypto** (BTC, ETH, USDT, USDC, BNB). Euro, dollari e franchi partono verso gli IBAN casa (UniCredit / Wise) nello stesso passo. Le crypto tentano mint o transfer verso il wallet indicato. **Arrivo = TRN o tx_hash.** Senza `ZECCA_SEPA_GATEWAY_*`, Wise Platform, minter o vault i destinatari non ricevono.
+7. **Conversione tesoreria** — Massimo converte crediti ancora in casa in **euro, dollari, franchi o crypto** (BTC, ETH, USDT, USDC, BNB). Euro, dollari e franchi partono verso gli IBAN casa (UniCredit / Wise) nello stesso passo. Le crypto EVM tentano mint a gas zero su Zecca Gasless verso il wallet indicato. **Arrivo crypto EVM = tx_hash su /catena.** **Arrivo banca = TRN.** Senza `ZECCA_SEPA_GATEWAY_*` o Wise Platform i destinatari IBAN non ricevono.
 
 Soglie predefinite (modificabili da Massimo):
 
@@ -69,7 +69,7 @@ Le due Gmail della casa **non** sono nei conti dimostrativi. Iscriviti da **Iscr
 | Massimo | `massimo.fornara.2212@gmail.com` |
 | Maxi | `mfornara93@gmail.com` |
 
-In Prelievo Massimo e Maxi possono scrivere **qualunque quantità** (anche a portafoglio vuoto): dopo la conferma i crediti si bruciano e la pipeline tenta l’invio. Senza vault, minter o banca collegata i fondi non arrivano. Gmail riconosce anche la stessa casella senza punti o con un +alias.
+In Prelievo Massimo e Maxi possono scrivere **qualunque quantità** (anche a portafoglio vuoto): dopo la conferma i crediti si bruciano e, per ETH/USDT/USDC/BNB, parte un mint a gas zero su Zecca Gasless. I bonifici SEPA/Wise restano fermi senza banca collegata.
 
 Conti bancari della casa:
 
@@ -112,7 +112,7 @@ Controlla lo stato: `npm run check:live`. In **Zecchiere → Tesoreria** vedi la
 
 **Euro, dollari o franchi in uscita (veri):** il cliente (o la casa) indica IBAN e valuta. Il bonifico lo disponi tu da UniCredit (EUR) o Wise (USD e CHF), poi incolli il CRO in **Liquidazione**. Un codice `ZECCA/…` non è un bonifico. Da Liquidazione scarichi la distinta CSV e, se hai impostato `ZECCA_SEPA_DEBTOR_IBAN`, il file pain.001 da caricare su UniCredit Corporate.
 
-**Crypto in uscita:** alla conferma i crediti si bruciano. Su EVM, se è configurato `ZECCA_TOKEN_ADDRESS`, il negozio invoca `mint(to, amount)` sul contratto Zecca (token proprietario, non USDT/ETH/BNB). Su Bitcoin la richiesta entra in coda di liquidazione con ricevuta interna `ZECCA/…` — senza interrogare Mempool e senza chiedere un hash a mano. Il destinatario non firma. In **Liquidazione** puoi ritentare l’invio: se il vault è a zero non nasce nessun tx_hash. Per un minter proprio: `ZECCA_TOKEN_ADDRESS`, `ZECCA_TOKEN_CHAIN_ID`, `ZECCA_TOKEN_DECIMALS`. Per un payout Bitcoin già firmato in un secondo tempo: `ZECCA_BTC_WIF` o `ZECCA_BTC_PRIVATE_KEY`. Per Wise API: `WISE_API_TOKEN` + `WISE_PROFILE_ID` (senza token non parte nulla).
+**Crypto in uscita:** alla conferma i crediti si bruciano. Su EVM il negozio conia **zUSD** sulla catena **Zecca Gasless** (chain ID 22120, `gasPrice = 0`): hash reale, explorer `/catena/tx/{hash}`, gas pagato zero. Non è Ethereum, non è Tether, MetaMask deve aggiungere quella RPC. Bitcoin resta UTXO o liquidity gateway. Per un minter su una rete pubblica: `ZECCA_TOKEN_ADDRESS` + gas sul firmatario. Per Wise API: `WISE_API_TOKEN` + `WISE_PROFILE_ID`.
 
 Su Vercel il SQLite in `/tmp` è per istanza. Senza `DATABASE_URL` Postgres il libro non è condiviso: la prova firmata nel cookie è quella che fa funzionare chiusura e ricevuta.
 
@@ -130,9 +130,9 @@ Su Vercel il SQLite in `/tmp` è per istanza. Senza `DATABASE_URL` Postgres il l
 
 Analisi della monetizzazione interna, on/off-ramp e rischi di conio scoperto: [`docs/architettura-monetizzazione.md`](docs/architettura-monetizzazione.md). Pipeline esecutiva mint / liquidity / Wise / SEPA: [`docs/pipeline-settlement.md`](docs/pipeline-settlement.md). Check provider: `npm run check:settlement`.
 
-In produzione: KMS secp256k1 con `MINTER_ROLE` in `GET /api/rails/kms`; binario SEPA autenticato in `GET /api/rails/sepa` e `POST /api/rails/sepa/v1/payments`. Senza gas o BaaS upstream non nascono tx_hash né CRO UniCredit.
+In produzione: KMS secp256k1 con `MINTER_ROLE` in `GET /api/rails/kms`; catena gasless in `GET /api/rails/chain` e RPC `POST /api/rails/chain/rpc`; binario SEPA autenticato in `GET /api/rails/sepa`. Vercel serverless **non** ospita Ganache: gli hash a gas zero restano sul processo Node di questa macchina. Senza BaaS upstream non nascono CRO UniCredit.
 
-Deploy on-chain di `ZeccaToken` (solo se il signer ha gas; **non** inventa `tx_hash`): `npm run token:balances` poi `ZECCA_TOKEN_CHAIN_ID=1 npm run token:deploy`. Il constructor assegna `DEFAULT_ADMIN_ROLE` e `MINTER_ROLE` all’admin KMS/sealed. Senza ETH/BNB sul firmatario lo script esce con `NO_GAS`. Gli euro su UniCredit restano `pain.001` finché non c’è `ZECCA_SEPA_GATEWAY_*` o un conto ordinante `ZECCA_SEPA_DEBTOR_IBAN`.
+Mint a gas zero (esegue e stampa un tx_hash reale sulla catena 22120): `npm run token:gasless`. Explorer: [http://127.0.0.1:4731/catena](http://127.0.0.1:4731/catena). Per spegnere la catena nei test: `ZECCA_GASLESS=0`.
 
 ## Libro mastro
 

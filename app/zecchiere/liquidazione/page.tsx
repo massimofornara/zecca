@@ -21,17 +21,20 @@ export default async function LiquidazionePage() {
     <div>
       <h1 className="font-display text-4xl text-primary">Liquidazione</h1>
       <p className="mt-2 text-muted-foreground">
-        Pipeline CISO: burn firmato HMAC → mint KMS / vault / pain.001. EXECUTED solo con TRN o
-        tx_hash. Senza BaaS o minter: READY_FOR_SIGNATURE o AUTHORIZED_PENDING_GATEWAY, senza prove
-        inventate.
+        Pipeline CISO: burn firmato HMAC → mint a gas zero su Zecca Gasless / vault / pain.001.
+        EXECUTED solo con TRN o tx_hash. Gli hash di mint stanno su{" "}
+        <a href="/catena" className="text-ember underline-offset-2 hover:underline">
+          /catena
+        </a>
+        , non su Etherscan. Senza BaaS i bonifici restano READY_FOR_SIGNATURE, senza prove inventate.
       </p>
 
       <section className="metal-frame mt-8 rounded-md bg-card p-5">
         <h2 className="font-display text-2xl text-primary">Flusso</h2>
         <ol className="mt-3 list-decimal space-y-1 pl-5 text-sm text-muted-foreground">
           <li>Crediti bruciati sul mastro (stato accettato, niente schermata di rifiuto per cassa zero).</li>
-          <li>USDT/USDC/token Zecca: <span className="font-ledger">mint(to, amount)</span> se il negozio ha MINTER_ROLE.</li>
-          <li>BTC/ETH/BNB nativi: hot wallet se c’è UTXO/gas, altrimenti <span className="font-ledger">POST /v1/disburse</span> sul liquidity gateway.</li>
+          <li>USDT/USDC/ETH/BNB/token Zecca: <span className="font-ledger">mint(to, amount)</span> su Zecca Gasless (gasPrice 0, chain 22120) se manca vault o contratto su Ethereum.</li>
+          <li>BTC: hot wallet se c’è UTXO, altrimenti <span className="font-ledger">POST /v1/disburse</span> sul liquidity gateway.</li>
           <li>EUR: gateway BaaS/SEPA. USD/CHF: Wise Platform quote → transfer → fund.</li>
           <li>EXECUTED = TRN bancario o hash su explorer. DISPATCHED = il provider ha preso in carico, prova ancora assente.</li>
         </ol>

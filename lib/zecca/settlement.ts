@@ -11,6 +11,7 @@ import { shopFiatBalances } from "@/lib/zecca/convert";
 import { getShopNetworkVault } from "@/lib/zecca/shop-vault";
 import { buildPain001Document, buildPaymentCsv, sepaDebtorBlocker, sepaDebtorConfig } from "@/lib/zecca/pain001";
 import { wiseDispatchBlocker, wiseApiConfig } from "@/lib/zecca/wise-dispatch";
+import { gaslessEnabled } from "@/lib/zecca/gasless-chain";
 import { settlementProviderHealth } from "@/lib/settlement/pipeline";
 import { sepaGatewayConfig } from "@/lib/settlement/gateways";
 import {
@@ -174,6 +175,8 @@ export function classifyCashout(row: {
   walletNetwork: string | null;
   receiptKind: string | null;
   receiptRef: string | null;
+  receiptUrl?: string | null;
+  adminNote?: string | null;
 }): SettlementLine {
   const rail = row.payoutKind === "WALLET" ? "WALLET" : "IBAN";
   const phase = settlementPhase(row);
@@ -202,13 +205,17 @@ export function classifyCashout(row: {
     rail === "WALLET"
       ? `${walletNetworkLabel(row.walletNetwork)} ${row.walletAddress ?? ""}`.trim()
       : `${row.ibanHolder ?? ""} · ${house ? house.bank : "IBAN"} ${row.iban ? formatIbanDisplay(row.iban) : ""}`.trim();
+  const gaslessProof =
+    row.walletNetwork === "ZECCA" || /zecca-gasless/i.test(row.adminNote ?? "") || (row.receiptUrl ?? "").includes("/catena/tx/");
   const destinationDetail =
     rail === "WALLET"
       ? row.walletNetwork === "BTC"
         ? "Bitcoin · Mempool"
-        : row.walletNetwork === "BNB"
-          ? "BNB Smart Chain · BscScan"
-          : "Ethereum · Etherscan"
+        : gaslessProof
+          ? "Zecca Gasless · /catena (non Etherscan)"
+          : row.walletNetwork === "BNB"
+            ? "BNB Smart Chain · BscScan"
+            : "Ethereum · Etherscan"
       : house
         ? `${house.bank} · ${house.holder}`
         : "IBAN";
@@ -227,7 +234,8 @@ export function classifyCashout(row: {
     bankOrChainRef: realRef,
     explorerUrl:
       phase === "FONDI_TRASMESSI" && row.receiptKind === "TX_HASH" && row.receiptRef
-        ? explorerUrl(row.walletNetwork, row.receiptRef)
+        ? row.receiptUrl ||
+          (gaslessProof ? explorerUrl("ZECCA", row.receiptRef) : explorerUrl(row.walletNetwork, row.receiptRef))
         : null,
     blocker: phase === "FONDI_TRASMESSI" ? null : lineBlocker(row),
     payoutKind: row.payoutKind,
@@ -260,15 +268,15 @@ export async function settlementBlockers(): Promise<SettlementBlocker[]> {
       items.push({ code: provider.id.toUpperCase(), message: provider.detail });
     }
   }
-  if (!mint) {
+  if (!mint && !gaslessEnabled()) {
     items.push({
       code: "NO_MINT_CONTRACT",
       message:
-        "Nessun contratto con MINTER_ROLE. Deploy di contracts/ZeccaMinter.sol e ZECCA_TOKEN_ADDRESS. Non è Tether né ether.",
+        "Nessun contratto con MINTER_ROLE. Deploy di contracts/ZeccaToken.sol e ZECCA_TOKEN_ADDRESS, oppure usa Zecca Gasless. Non è Tether né ether.",
     });
   }
   const empty = vault.assets.filter((asset) => !asset.hasFunds);
-  if (empty.length) {
+  if (empty.length && !gaslessEnabled()) {
     items.push({
       code: "VAULT_EMPTY",
       message: `Hot wallet a zero su ${empty.map((a) => a.id).join(", ")}. I nativi passano al liquidity gateway se configurato; altrimenti restano in coda senza hash.`,

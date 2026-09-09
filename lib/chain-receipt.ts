@@ -1,5 +1,6 @@
 import { normalizeReceipt } from "@/lib/receipt";
 import { normalizeWalletAddress } from "@/lib/wallet";
+import { lookupGaslessTx } from "@/lib/zecca/gasless-chain";
 
 export type OnChainTx = {
   hash: string;
@@ -107,6 +108,9 @@ async function lookupTrx(hash: string): Promise<OnChainTx | null> {
 export const defaultChainLookup: ChainLookup = async ({ network, hash }) => {
   if (network === "BTC") return lookupBtc(hash);
   if (network === "TRX") return lookupTrx(hash);
+  if (network === "ZECCA") return lookupGaslessTx(hash);
+  const onGasless = await lookupGaslessTx(hash);
+  if (onGasless) return onGasless;
   if (network === "BNB") return lookupBsc(hash);
   return lookupEth(hash);
 };
@@ -196,7 +200,7 @@ export async function verifyCryptoReceipt(input: {
   const expected = input.expectedAddress ? normalizeWalletAddress(input.expectedAddress) : "";
   if (expected && found.recipients.length > 0) {
     const match = found.recipients.some((recipient) => sameAddress(recipient, expected));
-    if (!match && (input.network === "ETH" || input.network === "USDT" || input.network === "USDC" || input.network === "BNB" || input.network === "BTC")) {
+    if (!match && (input.network === "ETH" || input.network === "USDT" || input.network === "USDC" || input.network === "BNB" || input.network === "BTC" || input.network === "ZECCA")) {
       throw new Error(
         "L’hash è reale ma non va al wallet indicato in questo prelievo. Controlla destinazione e rete.",
       );

@@ -33,6 +33,11 @@ function sealedPrivateKey(): Hex | null {
   return `0x${digest}` as Hex;
 }
 
+/** Solo per avviare la catena gasless in-process. Non serializzare in JSON di API. */
+export function kmsSealedPrivateKey(): Hex | null {
+  return sealedPrivateKey();
+}
+
 export function kmsBackend(): KmsBackend {
   const named = (process.env.ZECCA_KMS_BACKEND ?? "").trim().toLowerCase();
   if (named === "aws" || named === "aws-kms" || process.env.AWS_KMS_KEY_ID?.trim()) return "aws-kms";

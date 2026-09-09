@@ -33,6 +33,7 @@ import { sepaBinaryToken, signSepaBody } from "../lib/settlement/sepa-auth";
 import { kmsSignerHealth } from "../lib/zecca/kms-signer";
 import { MINTER_ROLE } from "../lib/zecca/minter-role";
 import { mintContractForAsset } from "../lib/zecca/token-mint";
+import { tryGaslessEvmMint, gaslessRpcRequest } from "../lib/zecca/gasless-chain";
 import { buildPain001Document } from "../lib/zecca/pain001";
 import { wiseApiConfig } from "../lib/zecca/wise-dispatch";
 import { encodeErc20Transfer, nativeWeiFromUsdCents, tokenAmountFromUsdCents } from "../lib/evm-send";
@@ -51,6 +52,7 @@ const dbPath = path.join(process.cwd(), "prisma", "test.db");
 const dbUrl = "file:./test.db";
 
 async function main() {
+  process.env.ZECCA_GASLESS = "0";
   delete process.env.ZECCA_EVM_PRIVATE_KEY;
   if (existsSync(dbPath)) unlinkSync(dbPath);
   execSync("npx prisma db push --skip-generate --accept-data-loss", {
@@ -373,6 +375,9 @@ async function main() {
     const bscExplorers = explorerLinks("BNB", realEthHash).map((link) => link.url).join(" ");
     assert.equal(bscExplorers.includes("bscscan.com"), true);
     assert.equal(explorerLinks("BTC", "ab".repeat(32)).some((link) => link.url.includes("mempool.space")), true);
+    const zExplorers = explorerLinks("ZECCA", realEthHash).map((link) => link.url).join(" ");
+    assert.equal(zExplorers.includes("etherscan.io"), false);
+    assert.equal(zExplorers.includes("/catena/tx/"), true);
     assert.equal(tokenAmountFromUsdCents(10_800_000, 6), BigInt(108_000) * BigInt(1_000_000));
     assert.equal(nativeWeiFromUsdCents(10_800_000, 3000, 18), BigInt(36) * BigInt("1000000000000000000"));
     assert.equal(
@@ -1290,6 +1295,38 @@ async function main() {
     delete process.env.ZECCA_LIQUIDITY_TOKEN;
     delete process.env.ZECCA_SEPA_GATEWAY_URL;
     delete process.env.ZECCA_SEPA_GATEWAY_TOKEN;
+
+    process.env.ZECCA_GASLESS = "1";
+    const gaslessDest = "0x742d35Cc6634C0532925a3b844Bc454e4438f44e" as const;
+    const gaslessMint = await tryGaslessEvmMint({ walletAddress: gaslessDest, usdCents: 1080 });
+    assert.ok(gaslessMint, "mint gasless deve produrre un hash reale");
+    assert.equal(gaslessMint.gasPrice, 0);
+    assert.match(gaslessMint.hash, /^0x[a-fA-F0-9]{64}$/);
+    assert.equal(/etherscan/i.test(gaslessMint.explorerUrl), false);
+    assert.match(gaslessMint.explorerUrl, /\/catena\/tx\//);
+    const gaslessReceipt = (await gaslessRpcRequest("eth_getTransactionReceipt", [gaslessMint.hash])) as {
+      status?: string;
+    };
+    assert.equal(gaslessReceipt.status, "0x1");
+    const gaslessTx = (await gaslessRpcRequest("eth_getTransactionByHash", [gaslessMint.hash])) as {
+      gasPrice?: string;
+    };
+    assert.equal(BigInt(gaslessTx.gasPrice ?? "0x1"), 0n);
+    const gaslessSettled = await executeCryptoSettlement({
+      rail: "WALLET",
+      asset: "USDT",
+      destination: gaslessDest,
+      usdCents: 250,
+      idempotencyKey: "test-gasless-usdt",
+    });
+    assert.equal(gaslessSettled.status, "EXECUTED");
+    if (gaslessSettled.status === "EXECUTED") {
+      assert.match(gaslessSettled.ref, /^0x[a-fA-F0-9]{64}$/);
+      assert.equal(/etherscan/i.test(gaslessSettled.url ?? ""), false);
+      assert.equal(gaslessSettled.provider, "zecca-gasless");
+    }
+    process.env.ZECCA_GASLESS = "0";
+
     assert.match(
       transmitAllSummary({
         attempts: [
@@ -1319,6 +1356,7 @@ async function main() {
     console.log("Conversione 150 cr→USDT e prelievo verso wallet del form. OK.");
     console.log("Prelievi da generazione: EUR/USD/CHF in cassa + BTC/ETH/USDT/USDC/BNB + IBAN. OK.");
     console.log("Pipeline settlement: mint/liquidity/SEPA mock EXECUTED, deferred senza provider. OK.");
+    console.log("Zecca Gasless: mint a gasPrice 0 con receipt 0x1 e explorer /catena. OK.");
     console.log("Bonifico SEPA in ingresso senza Stripe/webhook. OK.");
     console.log("Casa Fornara: generazione senza pagamento + prelievo IBAN EUR/USD/CHF. OK.");
   } finally {

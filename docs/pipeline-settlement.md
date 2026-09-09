@@ -5,12 +5,14 @@ Il libro mastro brucia i crediti. I binari esterni consegnano valore. **EXECUTED
 ```mermaid
 flowchart TD
   burn[Burn crediti sul libro] --> pipe{Pipeline}
+  pipe --> gasless[zecca-gasless mint gasPrice 0]
   pipe --> mint[evm-minter mint to amount]
   pipe --> hot[hot-wallet transfer]
   pipe --> lp[liquidity POST /v1/disburse]
   pipe --> sepa[SEPA Instant POST /v1/payments]
   pipe --> wise[Wise quote + transfer + fund]
-  mint -->|tx_hash| executed[EXECUTED]
+  gasless -->|tx_hash /catena| executed[EXECUTED]
+  mint -->|tx_hash| executed
   hot -->|tx_hash| executed
   lp -->|tx_hash| executed
   lp -->|id provider| dispatched[DISPATCHED]
@@ -28,11 +30,10 @@ flowchart TD
 
 | Asset | Binario 1 | Binario 2 | Binario 3 |
 | --- | --- | --- | --- |
-| USDT / USDC / ZECCA | `mint(to, amount)` sul contratto con `MINTER_ROLE` | transfer ERC-20 se il vault ha token | liquidity gateway |
-| ETH / BNB nativi | hot wallet se c’è gas+saldo | `ZECCA_LIQUIDITY_URL` | coda tesoreria |
+| USDT / USDC / ZECCA / ETH / BNB | `mint(to, amount)` su **Zecca Gasless** chain 22120, `gasPrice = 0` | mint su contratto pubblico se `ZECCA_TOKEN_ADDRESS` + gas | transfer vault / liquidity |
 | BTC | hot wallet UTXO | liquidity gateway | coda tesoreria |
 
-USDT/USDC di protocollo **non** sono Tether/Circle. MetaMask deve aggiungere l’address del contratto Zecca (`contracts/ZeccaMinter.sol`).
+zUSD su Zecca Gasless **non** è Tether/Circle né ether di mainnet. MetaMask aggiunge la RPC `/api/rails/chain/rpc`. Explorer: `/catena/tx/{hash}`, mai Etherscan. Ethereum mainnet non accetta transazioni a gas zero da un wallet vuoto.
 
 ## Fiat
 

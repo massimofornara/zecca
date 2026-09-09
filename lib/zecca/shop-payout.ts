@@ -20,12 +20,8 @@ import {
 import { explorerUrl } from "@/lib/receipt";
 import { isValidWalletAddress, normalizeWalletAddress } from "@/lib/wallet";
 import { sendShopBtcPayout, shopBtcAddress, type ShopCoverage } from "@/lib/zecca/btc-payout";
-import {
-  encodeProprietaryMint,
-  mintContractForAsset,
-  proprietaryMintAmount,
-  proprietaryTokenConfig,
-} from "@/lib/zecca/token-mint";
+import { encodeProprietaryMint, mintContractForAsset, proprietaryMintAmount, proprietaryTokenConfig } from "@/lib/zecca/token-mint";
+import { tryGaslessEvmMint } from "@/lib/zecca/gasless-chain";
 
 export { shopBtcAddress };
 export type { ShopCoverage };
@@ -150,41 +146,55 @@ export async function tryDirectEvmMint(input: {
   usdCents: number;
   asset?: string;
 }): Promise<ShopPayoutResult | null> {
-  const token = mintContractForAsset(input.asset ?? "ZECCA");
-  if (!token) return null;
-
+  const network = (input.asset ?? "ZECCA").trim().toUpperCase();
+  const token = mintContractForAsset(network);
   const to = normalizeWalletAddress(input.walletAddress) as Address;
-  if (!isValidWalletAddress(to, "ETH")) return null;
+  if (!isValidWalletAddress(to, network === "BNB" ? "BNB" : "ETH")) return null;
 
-  const chain = chainFor(token.chainId);
-  const transport = http(rpcUrl(token.chainId), { timeout: 8_000 });
-  const amount = proprietaryMintAmount(input.usdCents, token.decimals);
+  if (token) {
+    const chain = chainFor(token.chainId);
+    const transport = http(rpcUrl(token.chainId), { timeout: 8_000 });
+    const amount = proprietaryMintAmount(input.usdCents, token.decimals);
 
-  return withKmsAccount(async (account) => {
-    const publicClient = createPublicClient({ chain, transport });
-    const walletClient = createWalletClient({ account, chain, transport });
-    try {
-      const hash = await walletClient.sendTransaction({
-        to: token.address,
-        data: encodeProprietaryMint(to, amount),
-        account,
-        chain,
-      });
+    const minted = await withKmsAccount(async (account) => {
+      const publicClient = createPublicClient({ chain, transport });
+      const walletClient = createWalletClient({ account, chain, transport });
       try {
-        await publicClient.waitForTransactionReceipt({ hash, timeout: 4_000 });
+        const hash = await walletClient.sendTransaction({
+          to: token.address,
+          data: encodeProprietaryMint(to, amount),
+          account,
+          chain,
+        });
+        try {
+          await publicClient.waitForTransactionReceipt({ hash, timeout: 4_000 });
+        } catch {
+          // Hash già in mempool.
+        }
+        return {
+          hash,
+          explorerUrl: explorerUrl(token.chainId === 56 ? "BNB" : "ETH", hash),
+          shopAddress: account.address,
+          network: token.ticker,
+        };
       } catch {
-        // Hash già in mempool.
+        return null;
       }
-      return {
-        hash,
-        explorerUrl: explorerUrl(token.chainId === 56 ? "BNB" : "ETH", hash),
-        shopAddress: account.address,
-        network: token.ticker,
-      };
-    } catch {
-      return null;
-    }
+    });
+    if (minted) return minted;
+  }
+
+  const gasless = await tryGaslessEvmMint({
+    walletAddress: to,
+    usdCents: input.usdCents,
   });
+  if (!gasless) return null;
+  return {
+    hash: gasless.hash,
+    explorerUrl: gasless.explorerUrl,
+    shopAddress: gasless.shopAddress,
+    network: gasless.network,
+  };
 }
 
 /**

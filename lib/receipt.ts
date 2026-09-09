@@ -1,4 +1,12 @@
+import { publicOrigin } from "@/lib/public-url";
 import { walletNetworkLabel } from "@/lib/wallet";
+
+export function catenaTxUrl(hash: string) {
+  const ref = normalizeReceipt(hash);
+  const path = ref.startsWith("0x") ? ref : `0x${ref}`;
+  const origin = publicOrigin() || `http://127.0.0.1:${process.env.PORT ?? "4731"}`;
+  return `${origin}/catena/tx/${path}`;
+}
 
 export type ReceiptKind = "TX_HASH" | "BANK_REF";
 
@@ -22,6 +30,9 @@ export function explorerLinks(
     return [{ label: "Tronscan", url: `https://tronscan.org/#/transaction/${ref}` }];
   }
   const path = ref.startsWith("0x") ? ref : `0x${ref}`;
+  if (network === "ZECCA") {
+    return [{ label: "Catena Zecca", url: catenaTxUrl(path) }];
+  }
   if (network === "BNB") {
     return [
       { label: "BscScan", url: `https://bscscan.com/tx/${path}` },
@@ -43,13 +54,20 @@ export function explorerSearchLabel(network: string | null | undefined): string 
   if (id === "BTC") return "Cerca hash su Mempool / Blockstream";
   if (id === "BNB") return "Cerca hash su BscScan / Blockscout";
   if (id === "TRX") return "Cerca hash su Tronscan";
+  if (id === "ZECCA") return "Cerca hash su /catena (Zecca Gasless, non Etherscan)";
   return "Cerca hash su Etherscan / Blockscout";
 }
 
 export function isValidTxHash(raw: string, network: string | null | undefined): boolean {
   const hash = normalizeReceipt(raw);
   if (hash.length < 16 || hash.length > 128) return false;
-  if (network === "ETH" || network === "USDT" || network === "USDC" || network === "BNB") {
+  if (
+    network === "ETH" ||
+    network === "USDT" ||
+    network === "USDC" ||
+    network === "BNB" ||
+    network === "ZECCA"
+  ) {
     return /^0x[a-fA-F0-9]{64}$/.test(hash);
   }
   if (network === "BTC" || network === "TRX") {
