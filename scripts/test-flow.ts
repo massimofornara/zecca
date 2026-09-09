@@ -843,7 +843,8 @@ async function main() {
 
     console.log("Flusso Zecca: conio → crediti → bottega DHL + ritiro in sede → prelievo IBAN/wallet. OK.");
     console.log("Conversione tesoreria 3000 cr→EUR e 2000 cr→USD in cassa negozio. OK.");
-    console.log("Conversione tesoreria 1000 cr→BTC e 200 cr→ETH in wallet interni. OK.");
+    console.log("Conversione tesoreria 1000 cr→BTC e 200 cr→ETH in cassa di rete. OK.");
+    console.log("Conversione 150 cr→USDT e prelievo verso wallet del form. OK.");
     console.log("Bonifico SEPA in ingresso senza Stripe/webhook. OK.");
     console.log("Casa Fornara: generazione senza pagamento + prelievo IBAN EUR/USD. OK.");
   } finally {
