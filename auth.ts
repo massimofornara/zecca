@@ -93,11 +93,23 @@ export async function requireUser() {
   if (!session?.user) {
     return null;
   }
-  const row = await prisma.user.findUnique({
+  await ensureLiveDatabase();
+  let row = await prisma.user.findUnique({
     where: { id: session.user.id },
     select: { id: true, email: true, name: true, role: true },
   });
+  if (!row && session.user.email) {
+    row = await findUserByLoginEmail(session.user.email).then((user) =>
+      user
+        ? { id: user.id, email: user.email, name: user.name, role: user.role }
+        : null,
+    );
+  }
   if (!row) return session.user;
+  if (isHouseEmail(row.email) && row.role !== "ADMIN") {
+    await ensureHouseAdmin({ userId: row.id, email: row.email });
+    row = { ...row, role: "ADMIN" };
+  }
   return {
     id: row.id,
     email: row.email,
