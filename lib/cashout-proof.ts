@@ -21,6 +21,7 @@ export type CashoutProof = {
   receiptHash: string | null;
   createdAt: string;
   resolvedAt: string;
+  status: "PENDING" | "PAID" | "REJECTED";
 };
 
 function signingSecret() {
@@ -59,6 +60,7 @@ export function proofFromPaidCashout(input: {
   receiptHash: string | null;
   createdAt: Date | string;
   resolvedAt: Date | string | null;
+  status?: string | null;
 }): CashoutProof {
   const createdAt = input.createdAt instanceof Date ? input.createdAt.toISOString() : input.createdAt;
   const resolvedAt =
@@ -85,6 +87,12 @@ export function proofFromPaidCashout(input: {
     receiptHash: input.receiptHash,
     createdAt,
     resolvedAt,
+    status:
+      input.status === "PENDING" || input.status === "REJECTED" || input.status === "PAID"
+        ? input.status
+        : input.receiptHash
+          ? "PAID"
+          : "PENDING",
   };
 }
 
@@ -108,6 +116,13 @@ export function verifyCashoutProof(token: string | null | undefined): CashoutPro
   } catch {
     return null;
   }
+}
+
+export function cashoutProofStatus(proof: Pick<CashoutProof, "status" | "receiptHash">) {
+  if (proof.status === "PENDING" || proof.status === "PAID" || proof.status === "REJECTED") {
+    return proof.status;
+  }
+  return proof.receiptHash ? "PAID" : "PENDING";
 }
 
 export function receiptHref(cashoutId: string, proofToken?: string | null) {

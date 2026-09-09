@@ -8,6 +8,8 @@ import { officialReceiptHash, sepaEndToEndId } from "@/lib/official-receipt";
 import { parsePayoutReceipt, type ReceiptKind } from "@/lib/receipt";
 import { appendLedger, pocketBalance } from "@/lib/zecca/ledger";
 import { creditsToEurCents, creditsToUsdCents, getSettings } from "@/lib/zecca/settings";
+import { cashoutProofStatus, type CashoutProof } from "@/lib/cashout-proof";
+import { ensureHouseWalletCredits, isHouseEmail } from "@/lib/zecca/house";
 
 export type PayoutKind = "IBAN" | "WALLET";
 export type CashoutCurrency = "EUR" | "USD";
@@ -22,6 +24,8 @@ export async function requestCustomerCashout(input: {
   ibanHolder?: string;
   walletAddress?: string;
   walletNetwork?: string;
+  id?: string;
+  createdAt?: Date | string;
   db?: PrismaClient;
 }) {
   const db = input.db ?? defaultPrisma;
@@ -91,6 +95,10 @@ export async function requestCustomerCashout(input: {
 
     const cashout = await tx.cashoutRequest.create({
       data: {
+        ...(input.id ? { id: input.id } : {}),
+        ...(input.createdAt
+          ? { createdAt: input.createdAt instanceof Date ? input.createdAt : new Date(input.createdAt) }
+          : {}),
         userId: input.userId,
         credits,
         eurCents,
@@ -125,6 +133,51 @@ export async function requestCustomerCashout(input: {
     );
 
     return cashout;
+  });
+}
+
+/**
+ * Su Vercel ogni lambda ha il suo SQLite. Se la riga non c’è su questa
+ * istanza, la ricostruisce dal cookie/token firmato e poi si può chiudere.
+ */
+export async function materializeCashoutFromProof(input: {
+  proof: CashoutProof;
+  actorId: string;
+  db?: PrismaClient;
+}) {
+  const db = input.db ?? defaultPrisma;
+  const existing = await db.cashoutRequest.findUnique({ where: { id: input.proof.id } });
+  if (existing) return existing;
+  if (cashoutProofStatus(input.proof) !== "PENDING") {
+    throw new ZeccaError("Richiesta di prelievo non trovata.", "NOT_FOUND");
+  }
+
+  const owner = input.proof.userId
+    ? await db.user.findUnique({ where: { id: input.proof.userId } })
+    : null;
+  const actor = await db.user.findUnique({ where: { id: input.actorId } });
+  const userId = owner?.id ?? actor?.id;
+  if (!userId) {
+    throw new ZeccaError("Richiesta di prelievo non trovata.", "NOT_FOUND");
+  }
+  const target = owner ?? actor;
+  if (target && (isHouseEmail(target.email) || target.role === "ADMIN")) {
+    await ensureHouseWalletCredits({ userId, credits: input.proof.credits, db });
+  }
+
+  return requestCustomerCashout({
+    id: input.proof.id,
+    createdAt: input.proof.createdAt,
+    userId,
+    role: target?.role ?? "CUSTOMER",
+    credits: input.proof.credits,
+    payoutKind: input.proof.payoutKind === "WALLET" ? "WALLET" : "IBAN",
+    currency: input.proof.currency,
+    iban: input.proof.iban ?? undefined,
+    ibanHolder: input.proof.ibanHolder ?? undefined,
+    walletAddress: input.proof.walletAddress ?? undefined,
+    walletNetwork: input.proof.walletNetwork ?? undefined,
+    db,
   });
 }
 

@@ -13,7 +13,7 @@ import { userWallet } from "@/lib/zecca/ledger";
 import { getSettings } from "@/lib/zecca/settings";
 import { walletNetworkLabel } from "@/lib/wallet";
 import { houseDisplayName, housePayoutLabel } from "@/lib/zecca/house-accounts";
-import { proofFromPaidCashout, signCashoutProof } from "@/lib/cashout-proof";
+import { cashoutProofStatus, proofFromPaidCashout, signCashoutProof } from "@/lib/cashout-proof";
 import { loadRememberedProofs } from "@/lib/cashout-proof-store";
 import { ensureHouseAdmin, isHouseEmail } from "@/lib/zecca/house";
 
@@ -96,8 +96,8 @@ export default async function FusionePage() {
         ) : (
           <ul className="mt-4 space-y-3">
             {listed.map((r) => {
-              const pending = requests.find((row) => row.id === r.id);
-              const status = pending?.status ?? "PAID";
+              const dbRow = requests.find((row) => row.id === r.id);
+              const status = dbRow?.status ?? cashoutProofStatus(r);
               return (
                 <li key={r.id} className="rounded-md px-4 py-3 text-sm ring-1 ring-primary/20">
                   <div className="flex items-start justify-between gap-3">
@@ -125,8 +125,12 @@ export default async function FusionePage() {
                       proofToken={signCashoutProof(r)}
                     />
                   ) : null}
-                  {house && status === "PENDING" && pending ? (
-                    <SettleCashoutForm cashoutId={r.id} payoutKind={r.payoutKind} />
+                  {house && status === "PENDING" ? (
+                    <SettleCashoutForm
+                      cashoutId={r.id}
+                      payoutKind={r.payoutKind}
+                      proofToken={signCashoutProof(r)}
+                    />
                   ) : null}
                 </li>
               );

@@ -4,7 +4,9 @@ import { revalidatePath } from "next/cache";
 import { requireAdmin } from "@/auth";
 import { isZeccaError, publicErrorMessage } from "@/lib/errors";
 import { mintCredits } from "@/lib/zecca/mint";
-import { resolveCashout } from "@/lib/zecca/cashout";
+import { materializeCashoutFromProof, resolveCashout } from "@/lib/zecca/cashout";
+import { proofFromPaidCashout, verifyCashoutProof } from "@/lib/cashout-proof";
+import { findRememberedProof, rememberCashoutProof } from "@/lib/cashout-proof-store";
 import { convertTreasuryToShopFiat } from "@/lib/zecca/convert";
 import { saveSettings, type ForgeTier } from "@/lib/zecca/settings";
 import { cancelBonificoPurchase, confirmBonificoPurchase, saveShopBank } from "@/lib/zecca/bank";
@@ -101,7 +103,13 @@ export async function resolveCashoutAction(
     }
   }
   try {
-    await resolveCashout({
+    const proofToken = String(formData.get("proofToken") ?? "");
+    const remembered =
+      verifyCashoutProof(proofToken) ?? (await findRememberedProof(cashoutId));
+    if (remembered && remembered.id === cashoutId) {
+      await materializeCashoutFromProof({ proof: remembered, actorId: admin.id });
+    }
+    const settled = await resolveCashout({
       cashoutId,
       actorId: admin.id,
       action,
@@ -114,10 +122,18 @@ export async function resolveCashoutAction(
             : "Bonifico disposto dal zecchiere"
           : undefined),
     });
+    await rememberCashoutProof(
+      proofFromPaidCashout({
+        ...settled,
+        userName: admin.name ?? "Casa",
+        status: settled.status,
+      }),
+    );
     revalidatePath("/zecchiere/fusioni");
     revalidatePath("/zecchiere/libro-mastro");
     revalidatePath("/portafoglio");
     revalidatePath("/fusione");
+    revalidatePath(`/ricevuta/${settled.id}`);
     return {
       ok:
         action === "pay"

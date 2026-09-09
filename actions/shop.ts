@@ -116,6 +116,7 @@ export type CashoutActionState = {
   pending?: boolean;
   instruction?: string;
   status?: string;
+  payoutKind?: string;
 };
 
 export async function requestCashoutAction(
@@ -171,12 +172,21 @@ export async function requestCashoutAction(
           usdCents: settled.usdCents,
           cashoutId: settled.id,
         });
+        const proofToken = await rememberCashoutProof(
+          proofFromPaidCashout({
+            ...settled,
+            userName: user.name,
+            status: "PENDING",
+          }),
+        );
         return {
-          ok: "Richiesta aperta. Nessun euro, dollaro o crypto è partito: Zecca non ha i conti né i wallet. Disponi tu il bonifico da UniCredit o Wise, poi incolla il CRO vero in Le tue richieste.",
+          ok: "Prelievo aperto. Copia i dati, invia da UniCredit o Wise, poi incolla il CRO qui sotto per chiudere.",
           receiptId: settled.id,
           pending: true,
           status: settled.status,
+          payoutKind: settled.payoutKind,
           instruction: guide?.text,
+          proofToken,
         };
       }
       const proofToken = await rememberCashoutProof(
@@ -198,6 +208,7 @@ export async function requestCashoutAction(
         walletNetwork: settled.walletNetwork,
         proofToken,
         status: settled.status,
+        payoutKind: settled.payoutKind,
       };
     }
     const asked = await requestCustomerCashout({
@@ -211,14 +222,23 @@ export async function requestCashoutAction(
       walletAddress,
       walletNetwork,
     });
+    const proofToken = await rememberCashoutProof(
+      proofFromPaidCashout({
+        ...asked,
+        userName: user.name,
+        status: "PENDING",
+      }),
+    );
     revalidatePath("/portafoglio");
     revalidatePath("/fusione");
     revalidatePath("/zecchiere/fusioni");
     return {
-      ok: "Richiesta registrata. Massimo deve inviare dalla banca o dal wallet, poi chiude con CRO o hash. Zecca non muove i soldi.",
+      ok: "Richiesta registrata. Resta visibile in Prelievo. Massimo la chiude dopo il bonifico o l’invio crypto.",
       receiptId: asked.id,
       pending: true,
       status: asked.status,
+      payoutKind: asked.payoutKind,
+      proofToken,
     };
   } catch (error) {
     if (!houseActor && isZeccaError(error) && error.code === "INSUFFICIENT_CREDITS") {

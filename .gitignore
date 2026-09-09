@@ -44,6 +44,10 @@ yarn-error.log*
 next-env.d.ts
 
 # sqlite
+/dev.db
+/dev.db-journal
+/dev.db-wal
+/dev.db-shm
 prisma/*.db
 prisma/*.db-journal
 prisma/*.db-wal

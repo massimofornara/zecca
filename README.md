@@ -110,9 +110,9 @@ Controlla lo stato: `npm run check:live`. In **Zecchiere → Tesoreria** vedi la
 3. Dispone il bonifico con la causale mostrata (importo esatto).
 4. Tu in **Versamenti** confronti causale e importo in banca, spunti la conferma, accrediti.
 
-**Euro o dollari in uscita (veri):** il cliente (o la casa) indica IBAN e valuta. In **Prelievo** o **Fusioni** la richiesta resta aperta. Tu invii **dal proprio home banking** (UniCredit per EUR, Wise per USD) o dal tuo wallet, poi incolli il CRO o l’hash di rete. L’app non ha accesso ai conti e non spedisce crypto. Un codice `ZECCA/…` non è un bonifico.
+**Euro o dollari in uscita (veri):** il cliente (o la casa) indica IBAN e valuta. In **Prelievo** la richiesta resta aperta **sulla stessa schermata**. Tu invii **dal proprio home banking** (UniCredit per EUR, Wise per USD) o dal tuo wallet, poi incolli il CRO o l’hash di rete lì sotto. Anche se Vercel apre un’altra istanza, il cookie firmato ricostruisce la richiesta e la chiude. L’app non ha accesso ai conti e non spedisce crypto. Un codice `ZECCA/…` non è un bonifico.
 
-Su Vercel il SQLite in `/tmp` è per istanza: senza `DATABASE_URL` Postgres i prelievi restano nel libro di quella lambda. La ricevuta ufficiale (`/ricevuta/…`) può tenere una prova firmata. Non è un accredito bancario.
+Su Vercel il SQLite in `/tmp` è per istanza. Senza `DATABASE_URL` Postgres il libro non è condiviso: la prova firmata nel cookie è quella che fa funzionare chiusura e ricevuta. Non è un accredito bancario.
 
 Non esiste un pulsante che manda soldi a un IBAN o a un wallet da sola.
 

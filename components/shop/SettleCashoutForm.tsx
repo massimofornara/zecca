@@ -9,9 +9,11 @@ import { Input } from "@/components/ui/input";
 export function SettleCashoutForm({
   cashoutId,
   payoutKind,
+  proofToken,
 }: {
   cashoutId: string;
   payoutKind: string;
+  proofToken?: string | null;
 }) {
   const [state, action] = useActionState(resolveCashoutAction, null);
   const isWallet = payoutKind === "WALLET";
@@ -23,6 +25,7 @@ export function SettleCashoutForm({
       <input type="hidden" name="cashoutId" value={cashoutId} />
       <input type="hidden" name="action" value="pay" />
       <input type="hidden" name="payoutKind" value={isWallet ? "WALLET" : "IBAN"} />
+      {proofToken ? <input type="hidden" name="proofToken" value={proofToken} /> : null}
       <input type="hidden" name={isWallet ? "payoutConfirm" : "sepaConfirm"} value="on" />
       <label className="block text-sm">
         {isWallet ? "Hash reale della transazione (ricevuta)" : "CRO / riferimento bonifico (ricevuta)"}

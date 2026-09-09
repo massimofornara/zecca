@@ -3,6 +3,7 @@
 import { useActionState, useMemo, useState } from "react";
 import { requestCashoutAction, type CashoutActionState } from "@/actions/shop";
 import { CashoutReceipt } from "@/components/shop/CashoutReceipt";
+import { SettleCashoutForm } from "@/components/shop/SettleCashoutForm";
 import { SubmitButton } from "@/components/forms/SubmitButton";
 import { ErrorBanner, OkBanner } from "@/components/ui/banners";
 import { Input } from "@/components/ui/input";
@@ -77,12 +78,12 @@ export function CashoutForm({
       <div className="metal-frame relative z-20 space-y-4 rounded-md bg-card p-5 md:p-7">
         <OkBanner message={state.ok} />
         <h2 className="font-display text-2xl text-primary">
-          {pending ? "I soldi non sono partiti" : "Prova registrata"}
+          {pending ? "Prelievo aperto" : "Prelievo registrato"}
         </h2>
         <p className="text-sm text-muted-foreground">
           {pending
-            ? "I crediti sono in attesa. Euro, dollari e crypto arrivano sul conto o sul wallet solo se li invii tu da UniCredit, Wise o dal tuo wallet. Zecca non ha accesso a quei conti."
-            : "CRO o hash sotto sono la prova che hai già inviato tu, non un accredito creato dal sito."}
+            ? "La richiesta è attiva. Copia i dati, invia da banca o wallet, poi incolla CRO o hash qui sotto per chiuderla."
+            : "CRO o hash sotto chiudono il prelievo nel libro. Non sono un accredito creato dal sito."}
         </p>
         <p className="font-ledger text-xl text-ember">
           {formatCredits(amount)} → {preview}
@@ -93,10 +94,22 @@ export function CashoutForm({
           </pre>
         ) : null}
         {pending ? (
-          <p className="text-sm text-muted-foreground">
-            Dopo il bonifico vero, in «Le tue richieste» incolla il CRO UniCredit o l’ID Wise. Per la crypto,
-            l’hash deve essere della transazione che hai inviato tu.
-          </p>
+          <>
+            <p className="text-sm text-muted-foreground">
+              Chiudi il prelievo su questa stessa schermata. Non serve cambiare pagina.
+            </p>
+            {house ? (
+              <SettleCashoutForm
+                cashoutId={state.receiptId}
+                payoutKind={state.payoutKind ?? payoutKind}
+                proofToken={state.proofToken}
+              />
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                Massimo chiude la richiesta dopo il bonifico o l’invio crypto.
+              </p>
+            )}
+          </>
         ) : (
           <CashoutReceipt
             cashoutId={state.receiptId}

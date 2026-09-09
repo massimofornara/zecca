@@ -9,8 +9,13 @@ import { purchaseCredits } from "../lib/zecca/credits";
 import { requestBonificoPurchase, confirmBonificoPurchase, saveShopBank } from "../lib/zecca/bank";
 import { lastCustomerAddress, placeOrder, refreshOrderTracking } from "../lib/zecca/shop";
 import { getForgeState } from "../lib/zecca/forge";
-import { requestAndFulfillCashout, requestCustomerCashout, resolveCashout } from "../lib/zecca/cashout";
-import { proofFromPaidCashout, signCashoutProof, verifyCashoutProof } from "../lib/cashout-proof";
+import {
+  materializeCashoutFromProof,
+  requestAndFulfillCashout,
+  requestCustomerCashout,
+  resolveCashout,
+} from "../lib/zecca/cashout";
+import { cashoutProofStatus, proofFromPaidCashout, signCashoutProof, verifyCashoutProof } from "../lib/cashout-proof";
 import { explorerUrl } from "../lib/receipt";
 import { convertTreasuryToShopFiat, shopFiatBalances } from "../lib/zecca/convert";
 import { pocketBalance, treasuryBalance } from "../lib/zecca/ledger";
@@ -565,6 +570,48 @@ async function main() {
     assert.equal(verifyCashoutProof(bankToken)?.id, paidBank.id);
     assert.equal(verifyCashoutProof(`${bankToken}x`), null);
     assert.equal(verifyCashoutProof("not-a-token"), null);
+    assert.equal(await pocketBalance("USER", houseB.id, db), 0);
+
+    await ensureHouseWalletCredits({ userId: houseB.id, credits: 15, db });
+    const otherLambda = await requestAndFulfillCashout({
+      userId: houseB.id,
+      role: "ADMIN",
+      credits: 15,
+      payoutKind: "IBAN",
+      currency: "EUR",
+      iban: HOUSE_PAYOUT_ACCOUNTS[0].iban,
+      ibanHolder: HOUSE_PAYOUT_ACCOUNTS[0].holder,
+      db,
+    });
+    const pendingProof = proofFromPaidCashout({
+      ...otherLambda,
+      userName: "Maxi",
+      status: "PENDING",
+    });
+    assert.equal(cashoutProofStatus(pendingProof), "PENDING");
+    await db.ledgerEntry.deleteMany({ where: { cashoutId: otherLambda.id } });
+    await db.cashoutRequest.delete({ where: { id: otherLambda.id } });
+    const restored = await materializeCashoutFromProof({
+      proof: pendingProof,
+      actorId: houseB.id,
+      db,
+    });
+    assert.equal(restored.id, otherLambda.id);
+    assert.equal(restored.status, "PENDING");
+    const same = await materializeCashoutFromProof({
+      proof: pendingProof,
+      actorId: houseB.id,
+      db,
+    });
+    assert.equal(same.id, restored.id);
+    await resolveCashout({
+      cashoutId: restored.id,
+      actorId: houseB.id,
+      action: "pay",
+      receipt: "UNICREDIT-CRO-LAMBDA-2",
+      db,
+    });
+    assert.equal((await db.cashoutRequest.findUniqueOrThrow({ where: { id: restored.id } })).status, "PAID");
     assert.equal(await pocketBalance("USER", houseB.id, db), 0);
 
     const aliasUser = await db.user.create({
