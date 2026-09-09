@@ -31,6 +31,7 @@ export function destinationInstruction(input: {
   payoutKind: string;
   holder: string | null;
   iban: string | null;
+  bic?: string | null;
   walletAddress: string | null;
   walletNetwork: string | null;
   currency?: string;
@@ -67,6 +68,7 @@ export function destinationInstruction(input: {
       ...sepaInstruction({
         holder: input.holder,
         iban: input.iban,
+        bic: input.bic,
         amountCents,
         currency,
         cashoutId: input.cashoutId,

@@ -2,7 +2,9 @@
 
 import { useActionState, useState } from "react";
 import {
+  markSepaDisposedAction,
   resolveCashoutAction,
+  sendUsdcAction,
   treasuryConvertAction,
   treasuryCryptoWithdrawAction,
   type InternalWithdrawState,
@@ -13,8 +15,10 @@ import { CashoutReceipt } from "@/components/shop/CashoutReceipt";
 import { ErrorBanner, OkBanner } from "@/components/ui/banners";
 import { Input } from "@/components/ui/input";
 import { formatCashoutValue, formatCredits, formatEurFromCents, formatFiatFromCents, formatUsdFromCents } from "@/lib/format";
+import { maskIban } from "@/lib/iban";
 import { destinationInstruction } from "@/lib/payout";
 import { CRYPTO_ASSETS, isValidWalletAddress, walletNetworkLabel } from "@/lib/wallet";
+import { isUsdcCashoutNetwork } from "@/lib/settlement/circle-ref";
 import { housePayoutByIban } from "@/lib/zecca/house-accounts";
 import type { InternalCryptoWallet, TreasuryCryptoAsset } from "@/lib/zecca/convert";
 import { isShopSendableNetwork } from "@/lib/evm-send";
@@ -402,8 +406,10 @@ export function PendingCashoutCard({
   payoutKind,
   iban,
   ibanHolder,
+  ibanBic,
   walletAddress,
   walletNetwork,
+  walletChain,
   createdLabel,
   status = "PENDING",
   receiptKind,
@@ -422,8 +428,10 @@ export function PendingCashoutCard({
   payoutKind: string;
   iban: string | null;
   ibanHolder: string | null;
+  ibanBic?: string | null;
   walletAddress: string | null;
   walletNetwork: string | null;
+  walletChain?: string | null;
   createdLabel: string;
   status?: string;
   receiptKind?: string | null;
@@ -433,12 +441,15 @@ export function PendingCashoutCard({
 }) {
   const [payState, payAction] = useActionState(resolveCashoutAction, null);
   const [rejectState, rejectAction] = useActionState(resolveCashoutAction, null);
+  const [disposeState, disposeAction] = useActionState(markSepaDisposedAction, null);
+  const [usdcState, usdcAction] = useActionState(sendUsdcAction, null);
   const amountLabel = formatCashoutValue({ currency, eurCents, usdCents, chfCents });
 
   const dest = destinationInstruction({
     payoutKind,
     holder: ibanHolder,
     iban,
+    bic: ibanBic,
     walletAddress,
     walletNetwork,
     currency,
@@ -448,6 +459,7 @@ export function PendingCashoutCard({
     cashoutId: id,
   });
   const isWallet = dest?.kind === "WALLET";
+  const usdcOut = isWallet && isUsdcCashoutNetwork(walletNetwork);
   const isUsd = currency === "USD";
   const isChf = currency === "CHF";
   const houseBank = housePayoutByIban(iban, currency);
@@ -493,19 +505,30 @@ export function PendingCashoutCard({
           {houseBank ? <CopyField label="Banca" value={houseBank.bank} /> : null}
           <CopyField label="Beneficiario" value={ibanHolder} />
           <CopyField label="IBAN" value={dest.ibanDisplay} mono />
+          {iban ? <CopyField label="IBAN mascherato (libro)" value={maskIban(iban)} mono /> : null}
+          {ibanBic ? <CopyField label="BIC" value={ibanBic} mono /> : null}
           <CopyField label="Importo" value={dest.amountLabel ?? amountLabel} mono />
           <CopyField label="Causale" value={dest.causal} mono />
           <CopyField label="Tutto il blocco" value={dest.text} />
+          <p className="text-xs text-muted-foreground">
+            Il bonifico lo disponi tu da UniCredit o Wise. Stripe, se lo usi, versa solo sul conto
+            bancario collegato al tuo account Stripe: non accredita l’IBAN del cliente.
+          </p>
         </div>
       ) : dest?.kind === "WALLET" && walletAddress ? (
         <div className="mt-4 space-y-3 rounded-md bg-background/50 p-3 ring-1 ring-primary/20">
-          <p className="text-xs uppercase tracking-[0.2em] text-primary/80">Destinazione: il negozio invia qui</p>
+          <p className="text-xs uppercase tracking-[0.2em] text-primary/80">
+            {usdcOut ? "USDC su Base (Circle)" : "Destinazione: il negozio invia qui"}
+          </p>
           <CopyField label="Crypto" value={walletNetworkLabel(walletNetwork)} />
+          {walletChain ? <CopyField label="Catena" value={walletChain} mono /> : null}
           <CopyField label="Indirizzo che riceve" value={walletAddress} mono />
           <CopyField label="Importo" value={dest.amountLabel ?? amountLabel} mono />
           <CopyField label="Riferimento" value={dest.causal} mono />
           <p className="text-xs text-muted-foreground">
-            MetaMask, Trust Wallet e gli exchange ricevono. Non devono firmare.
+            {usdcOut
+              ? "1 USDC = 1 USD di libro. Invia USDC parte dal wallet Circle del negozio su Base, se CIRCLE_API_KEY e CIRCLE_WALLET_ID sono impostati. Senza wallet configurato la richiesta resta aperta."
+              : "MetaMask, Trust Wallet e gli exchange ricevono. Non devono firmare."}
           </p>
         </div>
       ) : (
@@ -514,12 +537,24 @@ export function PendingCashoutCard({
         </p>
       )}
 
-      <ErrorBanner message={payState?.error || rejectState?.error} />
-      <OkBanner message={payState?.ok || rejectState?.ok} />
+      <ErrorBanner message={payState?.error || rejectState?.error || disposeState?.error || usdcState?.error} />
+      <OkBanner message={payState?.ok || rejectState?.ok || disposeState?.ok || usdcState?.ok} />
 
       {isWallet ? (
         status === "QUEUED" ? null : (
-        <div className="mt-3">
+        <div className="mt-3 flex flex-wrap items-end gap-3">
+          {usdcOut ? (
+            <form action={usdcAction} className="w-full space-y-2 sm:w-auto">
+              <input type="hidden" name="cashoutId" value={id} />
+              <label className="flex items-start gap-2 text-xs text-muted-foreground">
+                <input type="checkbox" name="usdcConfirm" value="on" className="mt-0.5" required />
+                Invio USDC nativo su Base dal wallet Circle del negozio. Non è un mint Zecca Gasless.
+              </label>
+              <SubmitButton size="sm" pendingLabel="Invio USDC…">
+                Invia USDC
+              </SubmitButton>
+            </form>
+          ) : null}
           <form action={rejectAction}>
             <input type="hidden" name="cashoutId" value={id} />
             <input type="hidden" name="action" value="reject" />
@@ -531,11 +566,25 @@ export function PendingCashoutCard({
         )
       ) : (
       <div className="mt-3 flex flex-wrap items-end gap-2">
+        <form action={disposeAction} className="w-full space-y-2 sm:w-auto">
+          <input type="hidden" name="cashoutId" value={id} />
+          <label className="flex items-start gap-2 text-xs text-muted-foreground">
+            <input type="checkbox" name="sepaDisposedConfirm" value="on" className="mt-0.5" required />
+            {isUsd
+              ? "Ho disposto il bonifico in dollari dalla mia banca verso questo IBAN. Non è un CRO e non è un payout Stripe."
+              : isChf
+                ? "Ho disposto il bonifico in franchi dalla mia banca verso questo IBAN. Non è un CRO e non è un payout Stripe."
+                : "Ho disposto il bonifico SEPA dalla mia banca verso questo IBAN. Non è un CRO e non è un payout Stripe."}
+          </label>
+          <SubmitButton size="sm" pendingLabel="Registrazione…">
+            Segna bonifico disposto
+          </SubmitButton>
+        </form>
         <form action={payAction} noValidate className="w-full space-y-2 sm:w-auto">
           <input type="hidden" name="cashoutId" value={id} />
           <input type="hidden" name="payoutKind" value="IBAN" />
           <label className="block text-sm">
-            CRO / riferimento bonifico (ricevuta)
+            CRO / riferimento bonifico (facoltativo, se lo hai)
             <Input
               name="receipt"
               required
@@ -547,10 +596,10 @@ export function PendingCashoutCard({
           <label className="flex items-start gap-2 text-xs text-muted-foreground">
             <input type="checkbox" name="sepaConfirm" value="on" className="mt-0.5" required />
             {isUsd
-              ? "Ho disposto il bonifico in dollari (SWIFT/estero) dal mio conto verso questo IBAN."
+              ? "Ho il CRO del bonifico in dollari già disposto."
               : isChf
-                ? "Ho disposto il bonifico in franchi svizzeri (SIC/estero) dal mio conto verso questo IBAN."
-                : "Ho disposto il bonifico SEPA dal mio conto verso questo IBAN."}
+                ? "Ho il CRO del bonifico in franchi già disposto."
+                : "Ho il CRO UniCredit del bonifico SEPA già disposto."}
           </label>
           <SubmitButton size="sm" formNoValidate name="action" value="pay">
             Chiudi prelievo con CRO

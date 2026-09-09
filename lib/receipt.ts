@@ -63,6 +63,9 @@ export function explorerLinks(
       { label: "Blockscout", url: `https://bsc.blockscout.com/tx/${path}` },
     ];
   }
+  if (network === "USDC" || network === "BASE" || network === "USDC_BASE") {
+    return [{ label: "BaseScan", url: `https://basescan.org/tx/${path}` }];
+  }
   return [
     { label: "Etherscan", url: `https://etherscan.io/tx/${path}` },
     { label: "Blockscout", url: `https://eth.blockscout.com/tx/${path}` },
@@ -130,10 +133,10 @@ export function parsePayoutReceipt(input: {
     };
   }
   const ref = input.receipt.trim();
-  if (isZeccaLedgerBankRef(ref) || isGatewayReceiptRef(ref)) {
+  if (isZeccaLedgerBankRef(ref) || isGatewayReceiptRef(ref) || /^DISPOTO\//i.test(ref)) {
     return {
       error:
-        "ZECCA/… o GW-/SEPA-… è la ricevuta del libro o del gateway, non un CRO UniCredit o Wise. Incolla il riferimento del bonifico già disposto dalla banca.",
+        "ZECCA/…, DISPOTO/… o GW-/SEPA-… è la ricevuta del libro o un’attestazione operatore, non un CRO UniCredit o Wise. Incolla il riferimento del bonifico già disposto dalla banca.",
     };
   }
   if (!isValidBankRef(ref)) {
@@ -153,6 +156,8 @@ export function receiptLabel(kind: string | null | undefined, network?: string |
   if (kind === "AUTHORIZED_PENDING_GATEWAY" || kind === "QUEUED_FOR_SETTLEMENT") {
     return "Istruzione AUTHORIZED_PENDING_GATEWAY";
   }
+  if (kind === "SEPA_DISPOSED") return "Bonifico disposto (attestazione operatore, non CRO)";
+  if (kind === "CIRCLE_TRANSFER") return "ID trasferimento Circle (USDC su Base)";
   if (kind === "BANK_REF") return "CRO / riferimento bonifico";
   return "Ricevuta";
 }

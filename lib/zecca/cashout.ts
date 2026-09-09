@@ -1,7 +1,8 @@
 import type { PrismaClient, Role } from "@prisma/client";
 import { prisma as defaultPrisma } from "@/lib/db";
 import { ZeccaError } from "@/lib/errors";
-import { isValidIban, normalizeIban } from "@/lib/iban";
+import { isValidBic, isValidIban, isItalianIban, maskIban, normalizeBic, normalizeIban } from "@/lib/iban";
+import { CIRCLE_USDC_CHAIN, isUsdcCashoutNetwork, transferUsdcOnBase } from "@/lib/settlement/circle";
 import { isValidWalletAddress, normalizeWalletAddress, walletNetworkLabel } from "@/lib/wallet";
 import { type ChainLookup, verifyCryptoReceipt } from "@/lib/chain-receipt";
 import { officialReceiptHash, sepaEndToEndId } from "@/lib/official-receipt";
@@ -328,8 +329,11 @@ export async function requestCustomerCashout(input: {
   currency?: string;
   iban?: string;
   ibanHolder?: string;
+  ibanBic?: string;
   walletAddress?: string;
   walletNetwork?: string;
+  walletChain?: string;
+  requireItalianIban?: boolean;
   id?: string;
   createdAt?: Date | string;
   db?: PrismaClient;
@@ -341,11 +345,15 @@ export async function requestCustomerCashout(input: {
   }
 
   const payoutKind: PayoutKind = input.payoutKind === "WALLET" ? "WALLET" : "IBAN";
-  const currency: CashoutCurrency = parseFiatCurrency(input.currency);
+  const italianOnly = input.requireItalianIban ?? (input.role === "CUSTOMER" && payoutKind === "IBAN");
+  const currency: CashoutCurrency =
+    payoutKind === "IBAN" && italianOnly ? "EUR" : parseFiatCurrency(input.currency);
   let iban: string | null = null;
   let ibanHolder: string | null = null;
+  let ibanBic: string | null = null;
   let walletAddress: string | null = null;
   let walletNetwork: string | null = null;
+  let walletChain: string | null = null;
   let destinationNote = "";
 
   if (payoutKind === "IBAN") {
@@ -353,27 +361,43 @@ export async function requestCustomerCashout(input: {
     if (holder.length < 2) {
       throw new ZeccaError("Indica l’intestatario del conto che riceverà il bonifico.", "INVALID_IBAN");
     }
+    if (italianOnly && !isItalianIban(input.iban ?? "")) {
+      throw new ZeccaError(
+        "Per il bonifico in euro indica un IBAN italiano (IT, 27 caratteri). Massimo dispone il SEPA dalla banca, non Stripe.",
+        "INVALID_IBAN",
+      );
+    }
     if (!isValidIban(input.iban ?? "")) {
       throw new ZeccaError(
         "IBAN non valido. Controlla le cifre. Zecca non dispone il bonifico: lo fai tu dalla banca verso questo IBAN.",
         "INVALID_IBAN",
       );
     }
+    const bicRaw = (input.ibanBic ?? "").trim();
+    if (bicRaw && !isValidBic(bicRaw)) {
+      throw new ZeccaError("BIC non valido. Lascia vuoto oppure usa 8 o 11 caratteri (es. UNCRITMM).", "INVALID_BIC");
+    }
     iban = normalizeIban(input.iban ?? "");
     ibanHolder = holder;
-    destinationNote = `verso ${iban}`;
+    ibanBic = bicRaw ? normalizeBic(bicRaw) : null;
+    destinationNote = `verso ${maskIban(iban)}`;
   } else {
     const network = (input.walletNetwork ?? "").trim().toUpperCase();
     const address = normalizeWalletAddress(input.walletAddress ?? "");
-    if (!isValidWalletAddress(address, network)) {
+    if (!isValidWalletAddress(address, network === "USDC_BASE" || network === "BASE" ? "USDC" : network)) {
       throw new ZeccaError(
         "Indirizzo wallet non valido per la rete scelta. Controlla rete e indirizzo: il negozio invia, il destinatario riceve senza firmare.",
         "INVALID_WALLET",
       );
     }
     walletAddress = address;
-    walletNetwork = network;
-    destinationNote = `verso ${walletNetworkLabel(network)} ${address}`;
+    walletNetwork = isUsdcCashoutNetwork(network) ? "USDC" : network;
+    walletChain = isUsdcCashoutNetwork(network)
+      ? CIRCLE_USDC_CHAIN
+      : (input.walletChain ?? "").trim().toUpperCase() || null;
+    destinationNote = `verso ${walletNetworkLabel(walletNetwork)} ${address}${
+      walletChain ? ` · ${walletChain}` : ""
+    }`;
   }
 
   const settings = await getSettings(db);
@@ -430,8 +454,10 @@ export async function requestCustomerCashout(input: {
         payoutKind,
         iban,
         ibanHolder,
+        ibanBic,
         walletAddress,
         walletNetwork,
+        walletChain,
       },
     });
 
@@ -510,8 +536,10 @@ export async function materializeCashoutFromProof(input: {
     currency: input.proof.currency,
     iban: input.proof.iban ?? undefined,
     ibanHolder: input.proof.ibanHolder ?? undefined,
+    ibanBic: input.proof.ibanBic ?? undefined,
     walletAddress: input.proof.walletAddress ?? undefined,
     walletNetwork: input.proof.walletNetwork ?? undefined,
+    walletChain: input.proof.walletChain ?? undefined,
     db,
   });
   if (proofStatus === "QUEUED" && created.status !== "QUEUED") {
@@ -763,6 +791,9 @@ export async function fulfillWalletCashoutFromShop(input: {
   if (cashout.payoutKind !== "WALLET" || !cashout.walletAddress || !cashout.walletNetwork) {
     throw new ZeccaError("Questo prelievo non è un invio crypto dal negozio.", "INVALID");
   }
+  if (isUsdcCashoutNetwork(cashout.walletNetwork) && !cashout.isTreasury) {
+    return sendUsdcFromShop({ cashoutId: cashout.id, actorId: input.actorId, db });
+  }
   const blocked = shopPayoutConfigError(cashout.walletNetwork);
   if (blocked) {
     throw new ZeccaError(blocked, "UNSUPPORTED_ASSET", cashout.id);
@@ -960,6 +991,186 @@ export async function fulfillIbanFromRails(input: {
   return acceptQueuedSettlement(db, cashout);
 }
 
+export const SEPA_DISPOSED_KIND = "SEPA_DISPOSED";
+export const CIRCLE_TRANSFER_KIND = "CIRCLE_TRANSFER";
+
+/** Massimo conferma di aver disposto il SEPA dalla banca. Non è un CRO UniCredit. */
+export async function markSepaDisposed(input: {
+  cashoutId: string;
+  actorId: string;
+  db?: PrismaClient;
+}) {
+  const db = input.db ?? defaultPrisma;
+  const cashout = await db.cashoutRequest.findUnique({ where: { id: input.cashoutId } });
+  if (!cashout) throw new ZeccaError("Richiesta di prelievo non trovata.", "NOT_FOUND");
+  if (cashout.status === "PAID") return cashout;
+  if (!isSettleableCashoutStatus(cashout.status)) {
+    throw new ZeccaError("Questa richiesta è già stata chiusa.", "ALREADY_RESOLVED");
+  }
+  if (cashout.payoutKind !== "IBAN" || !cashout.iban) {
+    throw new ZeccaError("Questo prelievo non è un bonifico IBAN.", "INVALID");
+  }
+  const masked = maskIban(cashout.iban);
+  const day = new Date().toISOString().slice(0, 10).replaceAll("-", "");
+  const receiptRef = `DISPOTO/${day}/${cashout.id.slice(0, 8).toUpperCase()}`;
+  return resolveOperatorPaid(db, cashout, {
+    actorId: input.actorId,
+    receiptKind: SEPA_DISPOSED_KIND,
+    receiptRef,
+    receiptUrl: null,
+    adminNote: `Bonifico disposto da Massimo verso ${masked}. Non è un CRO UniCredit e non è un payout Stripe verso l’IBAN del cliente.`,
+  });
+}
+
+/** Invia USDC su Base dal wallet Circle. Senza env la richiesta resta aperta. */
+export async function sendUsdcFromShop(input: {
+  cashoutId: string;
+  actorId: string;
+  db?: PrismaClient;
+  fetchImpl?: typeof fetch;
+}) {
+  const db = input.db ?? defaultPrisma;
+  const cashout = await db.cashoutRequest.findUnique({ where: { id: input.cashoutId } });
+  if (!cashout) throw new ZeccaError("Richiesta di prelievo non trovata.", "NOT_FOUND");
+  if (cashout.status === "PAID") return cashout;
+  if (!isSettleableCashoutStatus(cashout.status)) {
+    throw new ZeccaError("Questa richiesta è già stata chiusa.", "ALREADY_RESOLVED");
+  }
+  if (cashout.payoutKind !== "WALLET" || !cashout.walletAddress || !isUsdcCashoutNetwork(cashout.walletNetwork)) {
+    throw new ZeccaError("Questo prelievo non è un invio USDC.", "INVALID");
+  }
+  const sent = await transferUsdcOnBase({
+    destination: cashout.walletAddress,
+    amountUsdCents: cashout.usdCents,
+    idempotencyKey: cashout.id,
+    fetchImpl: input.fetchImpl,
+  });
+  const hash = sent.txHash && /^0x[a-fA-F0-9]{64}$/.test(sent.txHash) ? sent.txHash : null;
+  return resolveOperatorPaid(db, cashout, {
+    actorId: input.actorId,
+    receiptKind: hash ? "TX_HASH" : CIRCLE_TRANSFER_KIND,
+    receiptRef: hash ?? sent.id,
+    receiptUrl: sent.url,
+    adminNote: `USDC inviato su Base dal wallet Circle del negozio · ${sent.id}`,
+  });
+}
+
+async function resolveOperatorPaid(
+  db: PrismaClient,
+  cashout: {
+    id: string;
+    userId: string | null;
+    credits: number;
+    currency: string;
+    eurCents: number;
+    usdCents: number;
+    chfCents: number;
+    payoutKind: string;
+    iban: string | null;
+    ibanHolder: string | null;
+    walletAddress: string | null;
+    walletNetwork: string | null;
+    isTreasury: boolean;
+    status: string;
+  },
+  paid: {
+    actorId: string;
+    receiptKind: string;
+    receiptRef: string;
+    receiptUrl: string | null;
+    adminNote: string;
+  },
+) {
+  const currency = parseFiatCurrency(cashout.currency);
+  const resolvedAt = new Date();
+  const destination =
+    cashout.payoutKind === "WALLET"
+      ? `${cashout.walletNetwork ?? ""} ${cashout.walletAddress ?? ""}`.trim()
+      : `${cashout.ibanHolder ?? ""} ${maskIban(cashout.iban ?? "")}`.trim();
+  const documentHash = officialReceiptHash({
+    cashoutId: cashout.id,
+    credits: cashout.credits,
+    currency,
+    eurCents: cashout.eurCents,
+    usdCents: cashout.usdCents,
+    chfCents: cashout.chfCents,
+    payoutKind: cashout.payoutKind,
+    destination,
+    receiptRef: paid.receiptRef,
+    resolvedAt: resolvedAt.toISOString(),
+  });
+  return db.$transaction(async (tx) => {
+    const latest = await tx.cashoutRequest.findUnique({ where: { id: cashout.id } });
+    if (!latest || !isSettleableCashoutStatus(latest.status)) {
+      throw new ZeccaError("Questa richiesta è già stata chiusa.", "ALREADY_RESOLVED");
+    }
+    const alreadyBurned =
+      latest.status === "QUEUED" || (cashout.isTreasury && cashout.payoutKind === "IBAN");
+    await tx.cashoutRequest.update({
+      where: { id: cashout.id },
+      data: {
+        status: "PAID",
+        resolvedAt,
+        receiptKind: paid.receiptKind,
+        receiptRef: paid.receiptRef,
+        receiptUrl: paid.receiptUrl,
+        receiptHash: documentHash,
+        adminNote: paid.adminNote,
+      },
+    });
+    if (!alreadyBurned && !(cashout.isTreasury && cashout.payoutKind === "IBAN")) {
+      if (cashout.isTreasury) {
+        await appendLedger(
+          {
+            type: "TREASURY_CRYPTO_WITHDRAW",
+            amountCredits: cashout.credits,
+            fromPocket: "VOID",
+            toPocket: "VOID",
+            actorId: paid.actorId,
+            cashoutId: cashout.id,
+            usdCents: cashout.usdCents,
+            fiatCurrency: "USD",
+            note: `${paid.adminNote} · ${cashout.credits} cr`,
+            metadata: {
+              receiptKind: paid.receiptKind,
+              receiptRef: paid.receiptRef,
+              receiptHash: documentHash,
+              ibanMasked: cashout.iban ? maskIban(cashout.iban) : null,
+            },
+          },
+          tx,
+        );
+      } else {
+        await appendLedger(
+          {
+            type: "CASHOUT_PAID",
+            amountCredits: cashout.credits,
+            fromPocket: "ESCROW",
+            toPocket: "BURN",
+            fromUserId: cashout.userId,
+            actorId: paid.actorId,
+            cashoutId: cashout.id,
+            eurCents: cashout.eurCents,
+            usdCents: cashout.usdCents,
+            chfCents: cashout.chfCents,
+            fiatCurrency: currency,
+            eurDirection: currency === "EUR" ? "OUT" : null,
+            note: `${paid.adminNote} · ${cashout.credits} cr · ${maskIban(cashout.iban ?? "") || cashout.walletAddress}`,
+            metadata: {
+              receiptKind: paid.receiptKind,
+              receiptRef: paid.receiptRef,
+              receiptHash: documentHash,
+              ibanMasked: cashout.iban ? maskIban(cashout.iban) : null,
+            },
+          },
+          tx,
+        );
+      }
+    }
+    return tx.cashoutRequest.findUniqueOrThrow({ where: { id: cashout.id } });
+  });
+}
+
 /**
  * Casa: senza CRO la richiesta IBAN resta aperta.
  * Crypto: con shopSend i crediti si bruciano e la richiesta viene accettata
@@ -974,8 +1185,10 @@ export async function requestAndFulfillCashout(input: {
   currency?: string;
   iban?: string;
   ibanHolder?: string;
+  ibanBic?: string;
   walletAddress?: string;
   walletNetwork?: string;
+  walletChain?: string;
   receipt?: string;
   chainLookup?: ChainLookup;
   shopSend?: boolean;
@@ -991,8 +1204,10 @@ export async function requestAndFulfillCashout(input: {
     currency: input.currency,
     iban: input.iban,
     ibanHolder: input.ibanHolder,
+    ibanBic: input.ibanBic,
     walletAddress: input.walletAddress,
     walletNetwork: input.walletNetwork,
+    walletChain: input.walletChain,
     db,
   });
   const typed = (input.receipt ?? "").trim();

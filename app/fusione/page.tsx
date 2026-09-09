@@ -68,7 +68,7 @@ export default async function FusionePage() {
       <p className="mt-3 max-w-2xl text-muted-foreground">
         {house
           ? `${who}, i crediti generati si convertono nella crypto scelta. Alla conferma i crediti si bruciano e il prelievo viene accettato. MetaMask, Trust Wallet o l’exchange ricevono. Il bonifico IBAN resta da UniCredit o Wise, anche in franchi svizzeri.`
-          : "Chiedi euro, dollari, franchi svizzeri o crypto. Per la crypto indichi il wallet: alla conferma i crediti si bruciano e il prelievo viene accettato."}
+          : "Chiedi un bonifico SEPA su IBAN italiano, oppure USDC su Base. Massimo dispone il bonifico dalla banca; USDC parte dal wallet Circle del negozio quando è configurato. Stripe non accredita il tuo IBAN."}
       </p>
       {house ? (
         <div className="mt-8">

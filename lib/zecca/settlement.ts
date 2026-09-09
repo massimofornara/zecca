@@ -108,6 +108,12 @@ export function settlementPhase(row: {
     if (row.payoutKind === "WALLET" && row.receiptKind === "TX_HASH" && row.receiptRef) {
       return "EXECUTED_AND_RECEIVED";
     }
+    if (row.receiptKind === "CIRCLE_TRANSFER" && row.receiptRef) {
+      return "EXECUTED_AND_RECEIVED";
+    }
+    if (row.receiptKind === "SEPA_DISPOSED" && row.receiptRef) {
+      return "FONDI_TRASMESSI";
+    }
     if (
       row.payoutKind === "IBAN" &&
       row.receiptKind === "BANK_REF" &&
@@ -164,8 +170,11 @@ function lineBlocker(row: {
   if (net === "ETH" || net === "BNB") {
     return `Pipeline: ${net} nativo via hot wallet o liquidity gateway, non via mint.`;
   }
-  if (net === "USDT" || net === "USDC") {
-    return `Pipeline: mint sul contratto Zecca (MINTER_ROLE), non su Tether/Circle. Senza ZECCA_TOKEN_ADDRESS / ZECCA_MINT_${net}_ADDRESS niente hash.`;
+  if (net === "USDC") {
+    return "USDC su Base: CIRCLE_API_KEY + CIRCLE_WALLET_ID e wallet Circle finanziato. Senza env: Wallet negozio non configurato.";
+  }
+  if (net === "USDT") {
+    return "Pipeline: mint sul contratto Zecca (MINTER_ROLE), non su Tether. Senza ZECCA_TOKEN_ADDRESS / ZECCA_MINT_USDT_ADDRESS niente hash.";
   }
   return "Liquidazione on-chain non eseguita: manca cassa di rete o contratto di mint.";
 }
@@ -195,11 +204,16 @@ export function classifyCashout(row: {
     row.receiptKind === "QUEUED_FOR_SETTLEMENT" ||
     row.receiptKind === "PROVIDER_REF" ||
     row.receiptKind === GATEWAY_RECEIVED_KIND ||
+    row.receiptKind === "SEPA_DISPOSED" ||
     isZeccaLedgerBankRef(row.receiptRef ?? "")
       ? row.receiptRef
       : null;
   const realRef =
-    phase === "FONDI_TRASMESSI" || phase === "EXECUTED_AND_RECEIVED" ? row.receiptRef : null;
+    row.receiptKind === "SEPA_DISPOSED"
+      ? null
+      : phase === "FONDI_TRASMESSI" || phase === "EXECUTED_AND_RECEIVED"
+        ? row.receiptRef
+        : null;
   const asset =
     rail === "WALLET" ? (row.walletNetwork ?? "CRYPTO").toUpperCase() : parseFiatCurrency(row.currency);
   const amountLabel =
@@ -228,7 +242,9 @@ export function classifyCashout(row: {
           ? "Zecca Gasless · /catena (non Etherscan)"
           : row.walletNetwork === "BNB"
             ? "BNB Smart Chain · BscScan"
-            : "Ethereum · Etherscan"
+            : row.walletNetwork === "USDC" || row.walletNetwork === "BASE"
+              ? "USDC su Base · Circle / BaseScan"
+              : "Ethereum · Etherscan"
       : house
         ? `${house.bank} · ${house.holder}`
         : "IBAN";

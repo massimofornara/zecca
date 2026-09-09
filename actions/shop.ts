@@ -9,6 +9,7 @@ import { purchaseCredits } from "@/lib/zecca/credits";
 import { placeOrder } from "@/lib/zecca/shop";
 import { parseShipping } from "@/lib/shipping";
 import { requestAndFulfillCashout, requestCustomerCashout } from "@/lib/zecca/cashout";
+import { isUsdcCashoutNetwork } from "@/lib/settlement/circle-ref";
 import { shopPayoutConfigError } from "@/lib/zecca/shop-payout";
 import { destinationInstruction } from "@/lib/payout";
 import { proofFromPaidCashout } from "@/lib/cashout-proof";
@@ -138,18 +139,21 @@ export async function requestCashoutAction(
     : null;
   const iban = houseAccount?.iban ?? String(formData.get("iban") ?? "");
   const ibanHolder = houseAccount?.holder ?? String(formData.get("ibanHolder") ?? "");
+  const ibanBic = String(formData.get("ibanBic") ?? "");
   const walletAddress = String(formData.get("walletAddress") ?? "");
   const walletNetwork = String(formData.get("walletNetwork") ?? formData.get("cryptoChoice") ?? "");
+  const walletChain = String(formData.get("walletChain") ?? "");
   const receipt = String(formData.get("receipt") ?? "");
   if (String(formData.get("confirmed") ?? "") !== "on") {
     return { error: "Conferma la destinazione prima di prelevare. La schermata resta qui." };
   }
-  if (payoutKind === "WALLET") {
+  if (payoutKind === "WALLET" && !isUsdcCashoutNetwork(walletNetwork)) {
     const blocked = shopPayoutConfigError(walletNetwork);
     if (blocked) return { error: blocked };
   }
+  const customerUsdc = !houseActor && payoutKind === "WALLET" && isUsdcCashoutNetwork(walletNetwork);
   try {
-    if (houseActor || payoutKind === "WALLET") {
+    if ((houseActor || payoutKind === "WALLET") && !customerUsdc) {
       if (houseActor) {
         await ensureHouseWalletCredits({ userId: user.id, credits });
       }
@@ -161,8 +165,10 @@ export async function requestCashoutAction(
         currency,
         iban,
         ibanHolder,
+        ibanBic,
         walletAddress,
         walletNetwork,
+        walletChain,
         receipt,
         shopSend: payoutKind === "WALLET" && !receipt.trim(),
       });
@@ -242,8 +248,11 @@ export async function requestCashoutAction(
       currency,
       iban,
       ibanHolder,
+      ibanBic,
       walletAddress,
       walletNetwork,
+      walletChain,
+      requireItalianIban: !houseActor && payoutKind === "IBAN",
     });
     const proofToken = await rememberCashoutProof(
       proofFromPaidCashout({
@@ -258,8 +267,10 @@ export async function requestCashoutAction(
     return {
       ok:
         asked.payoutKind === "WALLET"
-          ? "Richiesta registrata. Dopo la conferma il negozio invia alla destinazione: tu ricevi, senza firmare."
-          : "Richiesta registrata. Resta visibile in Prelievo. Massimo la chiude dopo il bonifico.",
+          ? isUsdcCashoutNetwork(asked.walletNetwork)
+            ? "Richiesta USDC registrata. Massimo invia dal wallet Circle del negozio su Base quando il saldo c’è. Tu non firmi."
+            : "Richiesta registrata. Dopo la conferma il negozio invia alla destinazione: tu ricevi, senza firmare."
+          : "Richiesta registrata. Massimo dispone il bonifico SEPA dal suo conto verso il tuo IBAN. Stripe non accredita il cliente.",
       receiptId: asked.id,
       pending: true,
       status: asked.status,

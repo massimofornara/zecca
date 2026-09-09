@@ -16,6 +16,7 @@ import {
   sepaGatewayHealth,
 } from "@/lib/settlement/gateways";
 import { executeWisePlatformTransfer, wiseHealth } from "@/lib/settlement/wise";
+import { circleHealth } from "@/lib/settlement/circle";
 import type {
   CryptoInstruction,
   FiatInstruction,
@@ -185,5 +186,15 @@ export function settlementProviderHealth(): ProviderHealth[] {
     liquidityHealth(),
     sepaGatewayHealth(),
     wiseHealth(),
+    (() => {
+      const circle = circleHealth();
+      return {
+        id: circle.id,
+        label: "Circle USDC su Base (prelievo cliente)",
+        rails: ["USDC"],
+        ready: circle.ready,
+        detail: circle.detail,
+      };
+    })(),
   ];
 }

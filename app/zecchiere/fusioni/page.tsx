@@ -30,14 +30,15 @@ export default async function FusioniPage() {
     <div>
       <h1 className="font-display text-4xl text-primary">Fusioni</h1>
       <p className="mt-2 text-muted-foreground">
-        Alla conferma la pipeline tenta in pochi secondi l’invio verso UniCredit, Wise e i wallet.
-        EXECUTED solo con TRN o tx_hash. Senza binario i fondi non arrivano: resta la ricevuta di
-        libro, visibile in{" "}
+        I crediti cliente escono solo da vendite vere, mai da conio inventato. IBAN: disponi tu il
+        SEPA dalla banca, poi «Segna bonifico disposto» (non è un CRO). Stripe, se lo usi, versa
+        solo sul tuo conto collegato a Stripe, non sull’IBAN del cliente. USDC: «Invia USDC» parte
+        dal wallet Circle su Base se le env ci sono; altrimenti «Wallet negozio non configurato» e
+        la richiesta resta aperta. Altre crypto e liquidazione restano in{" "}
         <a href="/zecchiere/liquidazione" className="text-ember underline-offset-2 hover:underline">
           Liquidazione
         </a>
-        : distinta SEPA, CRO UniCredit/Wise, ritentativo mint/transfer. Un codice ZECCA/… non è un
-        bonifico.
+        . Un codice ZECCA/… non è un bonifico.
       </p>
 
       <section className="metal-frame mt-8 rounded-md bg-card p-5">
@@ -76,8 +77,10 @@ export default async function FusioniPage() {
               payoutKind={r.payoutKind}
               iban={r.iban}
               ibanHolder={r.ibanHolder}
+              ibanBic={r.ibanBic}
               walletAddress={r.walletAddress}
               walletNetwork={r.walletNetwork}
+              walletChain={r.walletChain}
               createdLabel={formatRomeDate(r.createdAt)}
               status={r.status}
               receiptKind={r.receiptKind}

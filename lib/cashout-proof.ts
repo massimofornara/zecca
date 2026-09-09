@@ -14,8 +14,10 @@ export type CashoutProof = {
   payoutKind: string;
   iban: string | null;
   ibanHolder: string | null;
+  ibanBic?: string | null;
   walletAddress: string | null;
   walletNetwork: string | null;
+  walletChain?: string | null;
   receiptKind: string | null;
   receiptRef: string | null;
   receiptUrl: string | null;
@@ -55,8 +57,10 @@ export function proofFromPaidCashout(input: {
   payoutKind: string;
   iban: string | null;
   ibanHolder: string | null;
+  ibanBic?: string | null;
   walletAddress: string | null;
   walletNetwork: string | null;
+  walletChain?: string | null;
   receiptKind: string | null;
   receiptRef: string | null;
   receiptUrl: string | null;
@@ -84,8 +88,10 @@ export function proofFromPaidCashout(input: {
     payoutKind: input.payoutKind,
     iban: input.iban,
     ibanHolder: input.ibanHolder,
+    ibanBic: input.ibanBic ?? null,
     walletAddress: input.walletAddress,
     walletNetwork: input.walletNetwork,
+    walletChain: input.walletChain ?? null,
     receiptKind: input.receiptKind,
     receiptRef: input.receiptRef,
     receiptUrl: input.receiptUrl,

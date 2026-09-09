@@ -217,8 +217,10 @@ model CashoutRequest {
   payoutKind String        @default("IBAN")
   iban       String?
   ibanHolder String?
+  ibanBic    String?
   walletAddress String?
   walletNetwork String?
+  walletChain String?
   receiptKind String?
   receiptRef  String?
   receiptUrl  String?

@@ -30,9 +30,11 @@ export function CashoutReceipt({
   return (
     <div className="mt-2 space-y-2 rounded-md bg-background/50 p-3 ring-1 ring-primary/20">
       <p className="text-[11px] uppercase tracking-[0.18em] text-primary/80">
-        {receiptKind === "GATEWAY_RECEIVED" || receiptKind === "TX_HASH"
+        {receiptKind === "GATEWAY_RECEIVED" || receiptKind === "TX_HASH" || receiptKind === "CIRCLE_TRANSFER"
           ? "EXECUTED AND RECEIVED"
-          : "Ricevuta del prelievo"}
+          : receiptKind === "SEPA_DISPOSED"
+            ? "Bonifico disposto"
+            : "Ricevuta del prelievo"}
       </p>
       {receiptRef ? <CopyField label={receiptLabel(receiptKind, walletNetwork)} value={receiptRef} mono /> : null}
       {receiptHash ? <CopyField label="Hash ricevuta (SHA-256)" value={receiptHash} mono /> : null}
@@ -61,6 +63,16 @@ export function CashoutReceipt({
           AUTHORIZED_PENDING_GATEWAY. Istruzione contabile firmata. Non è un CRO, non è un ID Wise e
           non è un tx_hash. EXECUTED solo quando il gateway o il minter restituiscono una prova
           verificabile.
+        </p>
+      ) : receiptKind === "SEPA_DISPOSED" ? (
+        <p className="text-xs text-ember">
+          Attestazione di Massimo: il bonifico SEPA è stato disposto dalla sua banca verso l’IBAN
+          indicato. Non è un CRO UniCredit e non è un payout Stripe verso il cliente.
+        </p>
+      ) : receiptKind === "CIRCLE_TRANSFER" ? (
+        <p className="text-xs text-ember">
+          Trasferimento Circle USDC su Base dal wallet del negozio. Se manca l’hash 0x… non aprirlo
+          su BaseScan: l’ID Circle è la prova dell’API, non un CRO.
         </p>
       ) : (
         <p className="text-xs text-muted-foreground">

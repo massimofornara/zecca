@@ -8,6 +8,7 @@ export function sepaInstruction(input: {
   amountCents: number;
   currency?: FiatCurrency | string;
   cashoutId: string;
+  bic?: string | null;
   /** @deprecated usa amountCents */
   eurCents?: number;
 }) {
@@ -18,6 +19,7 @@ export function sepaInstruction(input: {
   const lines = [
     `Beneficiario: ${input.holder}`,
     `IBAN: ${formatIbanDisplay(input.iban)}`,
+    ...(input.bic ? [`BIC: ${input.bic}`] : []),
     `${rail}: ${formatFiatFromCents(amountCents, currency)}`,
     `Causale: ${causal}`,
   ];

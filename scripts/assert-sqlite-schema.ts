@@ -19,6 +19,11 @@ async function main() {
         `CashoutRequest.chfCents assente dopo db push. Colonne: ${cashoutNames.join(", ")}`,
       );
     }
+    if (!cashoutNames.includes("ibanBic") || !cashoutNames.includes("walletChain")) {
+      throw new Error(
+        `CashoutRequest.ibanBic/walletChain assenti dopo db push. Colonne: ${cashoutNames.join(", ")}`,
+      );
+    }
     const gateway = await prisma.$queryRaw<PragmaColumn[]>`PRAGMA table_info("GatewayTransmission")`;
     const gatewayNames = gateway.map((column) => column.name);
     if (!gatewayNames.includes("signature") || !gatewayNames.includes("receiptHash")) {
@@ -27,7 +32,7 @@ async function main() {
       );
     }
     console.log(
-      "Schema SQLite ok: LedgerEntry.chfCents, CashoutRequest.chfCents e GatewayTransmission presenti.",
+      "Schema SQLite ok: LedgerEntry.chfCents, CashoutRequest.ibanBic/walletChain e GatewayTransmission presenti.",
     );
   } finally {
     await prisma.$disconnect();

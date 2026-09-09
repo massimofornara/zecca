@@ -15,10 +15,14 @@ import {
   fulfillWalletCashoutFromShop,
   materializeCashoutFromProof,
   requestAndFulfillCashout,
+  markSepaDisposed,
   requestCustomerCashout,
   requestInternalCryptoWithdraw,
   resolveCashout,
+  sendUsdcFromShop,
   settleQueuedWalletCashouts,
+  SEPA_DISPOSED_KIND,
+  CIRCLE_TRANSFER_KIND,
 } from "../lib/zecca/cashout";
 import { saveSettings, DEFAULT_SETTINGS } from "../lib/zecca/settings";
 import { assertWithdrawPolicy, WITHDRAW_BROADCASTING } from "../lib/zecca/withdraw-policy";
@@ -46,7 +50,8 @@ import { convertTreasuryToShopCash, convertTreasuryToShopFiat, shopCryptoBalance
 import { pocketBalance, treasuryBalance } from "../lib/zecca/ledger";
 import { getReserveReport } from "../lib/zecca/reserves";
 import { ensureHouseWalletCredits, grantHouseCredits, houseDisplayName, HOUSE_PAYOUT_ACCOUNTS, isHouseEmail } from "../lib/zecca/house";
-import { isValidIban } from "../lib/iban";
+import { isZeccaError } from "../lib/errors";
+import { isValidIban, maskIban } from "../lib/iban";
 import { CATALOG_SEED, catalogProductFields, SHOP_CATEGORIES } from "../lib/catalog";
 import { attachCatalogSuppliers, SUPPLIER_SEED } from "../lib/suppliers";
 
@@ -270,10 +275,29 @@ async function main() {
       payoutKind: "IBAN",
       iban: "IT60X0542811101000000123456",
       ibanHolder: "Chiara Test",
+      ibanBic: "UNCRITMM",
       db,
     });
     assert.equal(await pocketBalance("USER", customer.id, db), 148);
     assert.equal(await pocketBalance("ESCROW", customer.id, db), 80);
+    assert.equal(cashout.ibanBic, "UNCRITMM");
+    assert.equal(cashout.currency, "EUR");
+
+    let foreignIban = false;
+    try {
+      await requestCustomerCashout({
+        userId: customer.id,
+        role: "CUSTOMER",
+        credits: 1,
+        payoutKind: "IBAN",
+        iban: HOUSE_PAYOUT_ACCOUNTS[1].iban,
+        ibanHolder: "Chiara Test",
+        db,
+      });
+    } catch (error) {
+      foreignIban = error instanceof Error && error.message.includes("IBAN italiano");
+    }
+    assert.equal(foreignIban, true, "IBAN estero del cliente deve fallire");
 
     let badIban = false;
     try {
@@ -294,6 +318,7 @@ async function main() {
     assert.equal(pending.length, 1);
     assert.equal(pending[0].id, cashout.id);
     assert.equal(pending[0].payoutKind, "IBAN");
+    assert.equal(pending[0].ibanBic, "UNCRITMM");
 
     const walletOut = await requestCustomerCashout({
       userId: customer.id,
@@ -1378,6 +1403,104 @@ async function main() {
       "EXECUTED_AND_RECEIVED",
     );
 
+    await purchaseCredits({ userId: customer.id, credits: 40, method: "demo", db });
+    const sepaAsk = await requestCustomerCashout({
+      userId: customer.id,
+      role: "CUSTOMER",
+      credits: 15,
+      payoutKind: "IBAN",
+      iban: "IT60X0542811101000000123456",
+      ibanHolder: "Chiara Test",
+      ibanBic: "UNCRITMMXXX",
+      db,
+    });
+    const disposed = await markSepaDisposed({ cashoutId: sepaAsk.id, actorId: admin.id, db });
+    assert.equal(disposed.status, "PAID");
+    assert.equal(disposed.receiptKind, SEPA_DISPOSED_KIND);
+    assert.match(disposed.receiptRef ?? "", /^DISPOTO\//);
+    assert.equal(settlementPhase(disposed), "FONDI_TRASMESSI");
+    const disposedLedger = await db.ledgerEntry.findFirstOrThrow({
+      where: { cashoutId: sepaAsk.id, type: "CASHOUT_PAID" },
+    });
+    assert.match(disposedLedger.note ?? "", /IT60/);
+    assert.match(disposedLedger.note ?? "", /••••/);
+    assert.equal((disposedLedger.metadata as { ibanMasked?: string } | null)?.ibanMasked, maskIban(sepaAsk.iban ?? ""));
+
+    const usdcAsk = await requestCustomerCashout({
+      userId: customer.id,
+      role: "CUSTOMER",
+      credits: 12,
+      payoutKind: "WALLET",
+      walletNetwork: "USDC",
+      walletAddress: "0x742d35Cc6634C0532925a3b844Bc454e4438f44e",
+      db,
+    });
+    assert.equal(usdcAsk.walletNetwork, "USDC");
+    assert.equal(usdcAsk.walletChain, "BASE");
+    assert.equal(usdcAsk.status, "PENDING");
+    const prevCircleKey = process.env.CIRCLE_API_KEY;
+    const prevCircleWallet = process.env.CIRCLE_WALLET_ID;
+    const prevCircleSecret = process.env.CIRCLE_ENTITY_SECRET;
+    delete process.env.CIRCLE_API_KEY;
+    delete process.env.CIRCLE_WALLET_ID;
+    delete process.env.CIRCLE_ENTITY_SECRET;
+    let circleMissing = false;
+    try {
+      await sendUsdcFromShop({ cashoutId: usdcAsk.id, actorId: admin.id, db });
+    } catch (error) {
+      circleMissing = isZeccaError(error) && error.code === "CIRCLE_NOT_CONFIGURED";
+      assert.equal(isZeccaError(error) && error.message.includes("Wallet negozio non configurato"), true);
+    }
+    assert.equal(circleMissing, true, "senza Circle la richiesta USDC resta aperta");
+    assert.equal((await db.cashoutRequest.findUniqueOrThrow({ where: { id: usdcAsk.id } })).status, "PENDING");
+
+    process.env.CIRCLE_API_KEY = "TEST_API_KEY:flow";
+    process.env.CIRCLE_WALLET_ID = "wallet-test-1";
+    const mockHash = `0x${"cd".repeat(32)}`;
+    const circlePaid = await sendUsdcFromShop({
+      cashoutId: usdcAsk.id,
+      actorId: admin.id,
+      db,
+      fetchImpl: async () =>
+        ({
+          ok: true,
+          status: 200,
+          json: async () => ({ data: { id: "circ-flow-1", transactionHash: mockHash } }),
+        }) as Response,
+    });
+    assert.equal(circlePaid.status, "PAID");
+    assert.equal(circlePaid.receiptKind, "TX_HASH");
+    assert.equal(circlePaid.receiptRef, mockHash);
+    const circleIdAsk = await requestCustomerCashout({
+      userId: customer.id,
+      role: "CUSTOMER",
+      credits: 8,
+      payoutKind: "WALLET",
+      walletNetwork: "USDC",
+      walletAddress: "0x742d35Cc6634C0532925a3b844Bc454e4438f44e",
+      db,
+    });
+    const circleIdPaid = await sendUsdcFromShop({
+      cashoutId: circleIdAsk.id,
+      actorId: admin.id,
+      db,
+      fetchImpl: async () =>
+        ({
+          ok: true,
+          status: 200,
+          json: async () => ({ data: { id: "circ-flow-2" } }),
+        }) as Response,
+    });
+    assert.equal(circleIdPaid.status, "PAID");
+    assert.equal(circleIdPaid.receiptKind, CIRCLE_TRANSFER_KIND);
+    assert.equal(circleIdPaid.receiptRef, "circ-flow-2");
+    if (prevCircleKey === undefined) delete process.env.CIRCLE_API_KEY;
+    else process.env.CIRCLE_API_KEY = prevCircleKey;
+    if (prevCircleWallet === undefined) delete process.env.CIRCLE_WALLET_ID;
+    else process.env.CIRCLE_WALLET_ID = prevCircleWallet;
+    if (prevCircleSecret === undefined) delete process.env.CIRCLE_ENTITY_SECRET;
+    else process.env.CIRCLE_ENTITY_SECRET = prevCircleSecret;
+
     process.env.ZECCA_GASLESS = "1";
     const gaslessDest = "0x742d35Cc6634C0532925a3b844Bc454e4438f44e" as const;
     const gaslessMint = await tryGaslessEvmMint({ walletAddress: gaslessDest, usdCents: 1080 });
@@ -1441,6 +1564,7 @@ async function main() {
     console.log("Zecca Gasless: mint a gasPrice 0 con receipt 0x1 e explorer /catena. OK.");
     console.log("Bonifico SEPA in ingresso senza Stripe/webhook. OK.");
     console.log("Casa Fornara: generazione senza pagamento + prelievo IBAN EUR/USD/CHF. OK.");
+    console.log("Fusione cliente: IBAN IT + BIC, rifiuto IBAN estero, bonifico disposto, USDC Circle. OK.");
   } finally {
     await db.$disconnect();
   }

@@ -16,8 +16,9 @@ export default async function ForgiaSettingsPage() {
       <h1 className="font-display text-4xl text-primary">Regola la forgia</h1>
       <p className="mt-2 text-muted-foreground">
         Il tasso in euro, dollari e franchi svizzeri è indipendente (1 cr = X EUR, 1 cr = Y USD, 1
-        cr = Z CHF). Le soglie della forgia restano in crediti. Più in basso: policy del gateway di
-        prelievo crypto (whitelist, massimali, rate limit). Non creano transazioni on-chain.
+        cr = Z CHF). Il prelievo USDC su Base riusa il tasso USD: 1 USDC = 1 USD di libro. Le soglie
+        della forgia restano in crediti. Più in basso: policy del gateway di prelievo crypto
+        (whitelist, massimali, rate limit). Non creano transazioni on-chain.
       </p>
       <form action={saveForgeSettingsForm} className="mt-8 space-y-6">
         <div className="space-y-1.5">

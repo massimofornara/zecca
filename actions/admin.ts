@@ -8,9 +8,11 @@ import {
   convertTreasuryBundle,
   executeGenerationPayouts,
   fulfillWalletCashoutFromShop,
+  markSepaDisposed,
   materializeCashoutFromProof,
   requestInternalCryptoWithdraw,
   resolveCashout,
+  sendUsdcFromShop,
   settleQueuedWalletCashouts,
 } from "@/lib/zecca/cashout";
 import { transmitAllOpenSettlements, transmitAllSummary } from "@/lib/zecca/transmit";
@@ -546,6 +548,127 @@ export async function resolveCashoutAction(
     };
   } catch (error) {
     return { error: publicErrorMessage(error, "Operazione non riuscita.") };
+  }
+}
+
+async function rememberResolvedCashout(settled: {
+  id: string;
+  userId: string | null;
+  credits: number;
+  eurCents: number;
+  usdCents: number;
+  chfCents: number;
+  currency: string;
+  payoutKind: string;
+  iban: string | null;
+  ibanHolder: string | null;
+  ibanBic?: string | null;
+  walletAddress: string | null;
+  walletNetwork: string | null;
+  walletChain?: string | null;
+  receiptKind: string | null;
+  receiptRef: string | null;
+  receiptUrl: string | null;
+  receiptHash: string | null;
+  createdAt: Date;
+  resolvedAt: Date | null;
+  status: string;
+  isTreasury: boolean;
+}, actorName: string) {
+  return rememberCashoutProof(
+    proofFromPaidCashout({
+      ...settled,
+      userName: actorName,
+      status: settled.status,
+    }),
+  );
+}
+
+function revalidateFusioni(cashoutId: string) {
+  revalidatePath("/zecchiere");
+  revalidatePath("/zecchiere/fusioni");
+  revalidatePath("/zecchiere/liquidazione");
+  revalidatePath("/zecchiere/libro-mastro");
+  revalidatePath("/portafoglio");
+  revalidatePath("/fusione");
+  revalidatePath(`/ricevuta/${cashoutId}`);
+}
+
+export async function markSepaDisposedAction(
+  _prev: ResolveCashoutState | null,
+  formData: FormData,
+): Promise<ResolveCashoutState> {
+  const admin = await requireAdmin();
+  if (!admin) return { error: "Solo il zecchiere può chiudere una fusione." };
+  const cashoutId = String(formData.get("cashoutId") ?? "");
+  if (formData.get("sepaDisposedConfirm") !== "on") {
+    return {
+      error:
+        "Conferma di aver disposto il bonifico dalla tua banca. Questo pulsante non è un CRO e non è un payout Stripe verso l’IBAN del cliente.",
+    };
+  }
+  try {
+    const proofToken = String(formData.get("proofToken") ?? "");
+    const remembered =
+      verifyCashoutProof(proofToken) ?? (await findRememberedProof(cashoutId));
+    if (remembered && remembered.id === cashoutId) {
+      await materializeCashoutFromProof({ proof: remembered, actorId: admin.id });
+    }
+    const settled = await markSepaDisposed({ cashoutId, actorId: admin.id });
+    const signed = await rememberResolvedCashout(settled, admin.name ?? "Casa");
+    revalidateFusioni(settled.id);
+    return {
+      ok: "Bonifico segnato come disposto. I crediti sono bruciati. Non è un CRO UniCredit e Stripe non ha pagato il cliente.",
+      receiptId: settled.id,
+      receiptRef: settled.receiptRef,
+      receiptHash: settled.receiptHash,
+      receiptUrl: settled.receiptUrl,
+      receiptKind: settled.receiptKind,
+      walletNetwork: settled.walletNetwork,
+      proofToken: signed,
+      status: settled.status,
+    };
+  } catch (error) {
+    return { error: publicErrorMessage(error, "Operazione non riuscita.") };
+  }
+}
+
+export async function sendUsdcAction(
+  _prev: ResolveCashoutState | null,
+  formData: FormData,
+): Promise<ResolveCashoutState> {
+  const admin = await requireAdmin();
+  if (!admin) return { error: "Solo il zecchiere può inviare USDC." };
+  const cashoutId = String(formData.get("cashoutId") ?? "");
+  try {
+    const proofToken = String(formData.get("proofToken") ?? "");
+    const remembered =
+      verifyCashoutProof(proofToken) ?? (await findRememberedProof(cashoutId));
+    if (remembered && remembered.id === cashoutId) {
+      await materializeCashoutFromProof({ proof: remembered, actorId: admin.id });
+    }
+    const settled = await sendUsdcFromShop({ cashoutId, actorId: admin.id });
+    const signed = await rememberResolvedCashout(settled, admin.name ?? "Casa");
+    revalidateFusioni(settled.id);
+    return {
+      ok:
+        settled.receiptKind === "TX_HASH"
+          ? "USDC inviato su Base dal wallet Circle del negozio. Hash sulla ricevuta."
+          : "USDC inviato su Base dal wallet Circle del negozio. ID trasferimento Circle sulla ricevuta.",
+      receiptId: settled.id,
+      receiptRef: settled.receiptRef,
+      receiptHash: settled.receiptHash,
+      receiptUrl: settled.receiptUrl,
+      receiptKind: settled.receiptKind,
+      walletNetwork: settled.walletNetwork,
+      proofToken: signed,
+      status: settled.status,
+    };
+  } catch (error) {
+    if (isZeccaError(error) && error.code === "CIRCLE_NOT_CONFIGURED") {
+      return { error: "Wallet negozio non configurato." };
+    }
+    return { error: publicErrorMessage(error, "Invio USDC non riuscito. La richiesta resta aperta.") };
   }
 }
 

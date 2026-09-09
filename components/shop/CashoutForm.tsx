@@ -8,7 +8,8 @@ import { SubmitButton } from "@/components/forms/SubmitButton";
 import { ErrorBanner, OkBanner } from "@/components/ui/banners";
 import { Input } from "@/components/ui/input";
 import { formatCredits, formatEurFromCents, formatFiatFromCents, formatUsdFromCents } from "@/lib/format";
-import { formatIbanDisplay } from "@/lib/iban";
+import { formatIbanDisplay, isItalianIban, isValidBic } from "@/lib/iban";
+import { CIRCLE_USDC_CHAIN, isUsdcCashoutNetwork } from "@/lib/settlement/circle-ref";
 import { CRYPTO_ASSETS, cryptoAsset, isValidWalletAddress } from "@/lib/wallet";
 import { LEDGER_INT_MAX } from "@/lib/zecca/amount";
 import { type FiatCurrency } from "@/lib/zecca/fiat";
@@ -46,17 +47,23 @@ export function CashoutForm({
   const [payoutKind, setPayoutKind] = useState<"IBAN" | "WALLET">("IBAN");
   const [currency, setCurrency] = useState<FiatCurrency>("EUR");
   const [accountId, setAccountId] = useState<HousePayoutAccount["id"]>("unicredit");
-  const [cryptoId, setCryptoId] = useState<(typeof CRYPTO_ASSETS)[number]["id"]>("USDT");
+  const [cryptoId, setCryptoId] = useState<(typeof CRYPTO_ASSETS)[number]["id"]>(house ? "USDT" : "USDC");
   const [walletAddress, setWalletAddress] = useState("");
   const [txHash, setTxHash] = useState("");
   const [bankRef, setBankRef] = useState("");
   const [ibanHolder, setIbanHolder] = useState("");
   const [iban, setIban] = useState("");
+  const [ibanBic, setIbanBic] = useState("");
   const [formError, setFormError] = useState<string | null>(null);
   const amount = Number.isFinite(credits) && credits > 0 ? Math.floor(credits) : 0;
   const needsGrant = house && (available <= 0 || amount > available);
   const selected = HOUSE_PAYOUT_ACCOUNTS.find((account) => account.id === accountId) ?? HOUSE_PAYOUT_ACCOUNTS[0];
-  const crypto = cryptoAsset(cryptoId) ?? CRYPTO_ASSETS[2];
+  const customerAssets = CRYPTO_ASSETS.filter((asset) => asset.id !== "OTHER" && asset.id !== "ZECCA");
+  const listedAssets = house
+    ? CRYPTO_ASSETS.filter((asset) => asset.id !== "OTHER")
+    : [...customerAssets.filter((asset) => asset.id === "USDC"), ...customerAssets.filter((asset) => asset.id !== "USDC")];
+  const crypto = cryptoAsset(cryptoId) ?? CRYPTO_ASSETS.find((asset) => asset.id === "USDC") ?? CRYPTO_ASSETS[2];
+  const customerUsdc = !house && isUsdcCashoutNetwork(cryptoId);
   const eurLabel = formatEurFromCents(amount * eurCentsPerCredit);
   const usdLabel = formatUsdFromCents(amount * usdCentsPerCredit);
   const chfLabel = formatFiatFromCents(amount * chfCentsPerCredit, "CHF");
@@ -95,6 +102,19 @@ export function CashoutForm({
         setFormError(`Indirizzo non valido per ${crypto.label}. Controlla rete e wallet.`);
         return;
       }
+    } else if (!house) {
+      if (ibanHolder.trim().length < 2) {
+        setFormError("Indica l’intestatario del conto.");
+        return;
+      }
+      if (!isItalianIban(iban)) {
+        setFormError("Per il bonifico in euro indica un IBAN italiano (IT, 27 caratteri).");
+        return;
+      }
+      if (ibanBic.trim() && !isValidBic(ibanBic)) {
+        setFormError("BIC non valido. Lascia vuoto oppure usa 8 o 11 caratteri (es. UNCRITMM).");
+        return;
+      }
     }
     setFormError(null);
     setPhase("confirm");
@@ -115,8 +135,12 @@ export function CashoutForm({
             ? "Istruzione contabile firmata (HMAC). Fiat: READY_FOR_SIGNATURE / pain.001. Crypto nativa: AUTHORIZED_PENDING_GATEWAY. EXECUTED solo con TRN o tx_hash reali."
             : pending
             ? payoutKind === "WALLET"
-              ? "I crediti sono in deposito. Alla conferma il negozio tenta l’invio in pochi secondi."
-              : "La richiesta è attiva. Copia i dati, invia da banca, poi incolla il CRO qui sotto per chiuderla."
+              ? customerUsdc
+                ? "I crediti sono in deposito. Massimo invia USDC su Base dal wallet Circle del negozio quando è configurato. Tu non firmi."
+                : "I crediti sono in deposito. Alla conferma il negozio tenta l’invio in pochi secondi."
+              : house
+                ? "La richiesta è attiva. Copia i dati, invia da banca, poi incolla il CRO qui sotto per chiuderla."
+                : "Richiesta aperta. Massimo dispone il bonifico SEPA dal suo conto verso il tuo IBAN. Stripe non accredita te."
             : "CRO sotto chiude il prelievo nel libro."}
         </p>
         <p className="font-ledger text-xl text-ember">
@@ -154,7 +178,9 @@ export function CashoutForm({
               />
             ) : (
               <p className="text-sm text-muted-foreground">
-                Massimo conferma: il negozio invia al wallet che hai indicato. Tu ricevi, senza firmare.
+                {customerUsdc
+                  ? "Massimo in Fusioni preme «Invia USDC». Senza wallet Circle la richiesta resta aperta. Tu non firmi."
+                  : "Massimo conferma: il negozio invia al wallet che hai indicato. Tu ricevi, senza firmare."}
               </p>
             )}
           </>
@@ -191,9 +217,13 @@ export function CashoutForm({
         <ErrorBanner message={state?.error} />
         <h2 className="font-display text-2xl text-primary">Conferma destinazione</h2>
         <p className="text-sm text-muted-foreground">
-          Questa conferma converte i crediti generati nella crypto scelta e apre il prelievo. Il
-          negozio crea la transazione: chi riceve non firma. Il bonifico IBAN resta da UniCredit o
-          Wise.
+          {house
+            ? "Questa conferma apre il prelievo. Crypto: il negozio tenta l’invio. IBAN: il bonifico resta da UniCredit o Wise."
+            : payoutKind === "WALLET"
+              ? customerUsdc
+                ? "I crediti diventano USDC al tasso libro (1 USDC = 1 USD). Massimo invia dal wallet Circle del negozio su Base quando è configurato e finanziato. Tu non firmi."
+                : "Indichi solo il wallet che riceve. Il negozio invia: tu non firmi."
+              : "Massimo dispone il bonifico SEPA dal suo conto verso il tuo IBAN italiano. Stripe, se usato, paga solo il conto bancario collegato a Stripe di Massimo: non accredita te."}
         </p>
         <section className="space-y-2 rounded-md bg-background/50 p-4 ring-1 ring-primary/20">
           <p className="font-ledger text-xl text-ember">
@@ -204,27 +234,31 @@ export function CashoutForm({
               ? `${crypto.label} · ${walletAddress || "wallet da indicare"}`
               : house
                 ? `${selected.bank} · ${formatIbanDisplay(selected.iban)} · ${selected.holder}`
-                : `${ibanHolder || "intestatario"} · ${iban || "IBAN"}`}
+                : `${ibanHolder || "intestatario"} · ${iban || "IBAN"}${ibanBic ? ` · BIC ${ibanBic}` : ""}`}
           </p>
           {payoutKind === "WALLET" ? (
             <p className="text-sm text-muted-foreground">
-              I crediti diventano {preview} e si bruciano sul libro. Il prelievo viene accettato
-              verso il wallet indicato: chi riceve non firma.
+              {customerUsdc
+                ? `I crediti diventano ${preview} su Base. Massimo preme «Invia USDC» in Fusioni: senza wallet Circle la richiesta resta aperta.`
+                : `I crediti diventano ${preview} e si bruciano sul libro. Il prelievo viene accettato verso il wallet indicato: chi riceve non firma.`}
             </p>
           ) : (
             <p className="text-sm text-muted-foreground">
-              Per far arrivare i soldi su questo IBAN devi disporre tu il bonifico da un conto con saldo
-              reale. Poi incolla il CRO della banca, non un codice ZECCA/…
+              {house
+                ? "Per far arrivare i soldi su questo IBAN devi disporre tu il bonifico da un conto con saldo reale. Poi incolla il CRO della banca, non un codice ZECCA/…"
+                : "Massimo esegue il SEPA fuori da questa app (home banking). Un payout Stripe non arriva su questo IBAN."}
             </p>
           )}
         </section>
         <input type="hidden" name="credits" value={amount} />
         <input type="hidden" name="payoutKind" value={payoutKind} />
-        <input type="hidden" name="currency" value={payoutKind === "WALLET" ? "USD" : currency} />
+        <input type="hidden" name="currency" value={payoutKind === "WALLET" ? "USD" : house ? currency : "EUR"} />
         <input type="hidden" name="houseAccount" value={accountId} />
         <input type="hidden" name="iban" value={house ? selected.iban : iban} />
         <input type="hidden" name="ibanHolder" value={house ? selected.holder : ibanHolder} />
+        <input type="hidden" name="ibanBic" value={house ? "" : ibanBic} />
         <input type="hidden" name="walletNetwork" value={cryptoId} />
+        <input type="hidden" name="walletChain" value={isUsdcCashoutNetwork(cryptoId) ? CIRCLE_USDC_CHAIN : ""} />
         <input type="hidden" name="walletAddress" value={walletAddress} />
         <input type="hidden" name="receipt" value={payoutKind === "WALLET" ? txHash : bankRef} />
         {payoutKind === "IBAN" && house ? (
@@ -247,8 +281,10 @@ export function CashoutForm({
               ? "Ho capito: i crediti si convertono nella crypto scelta, si bruciano e il prelievo viene accettato. Chi riceve non firma."
               : "Ho capito: Zecca non accredita questi conti. Il bonifico lo faccio io da UniCredit o Wise."
             : payoutKind === "WALLET"
-              ? "Ho capito: indico solo il wallet che riceve. Non firmo transazioni e non do consensi."
-              : "Ho capito: Zecca non accredita questi conti. Il bonifico lo dispone Massimo dalla banca."}
+              ? customerUsdc
+                ? "Ho capito: chiedo USDC su Base. Massimo invia dal wallet Circle del negozio quando è configurato. Io non firmo."
+                : "Ho capito: indico solo il wallet che riceve. Non firmo transazioni e non do consensi."
+              : "Ho capito: Massimo dispone il SEPA dalla sua banca verso il mio IBAN. Stripe non accredita me."}
         </label>
         <div className="flex flex-wrap gap-3">
           <SubmitButton formNoValidate className="relative z-30 cursor-pointer">
@@ -285,8 +321,10 @@ export function CashoutForm({
             ? `${houseName ?? "La casa"} genera i crediti, li converte nella crypto scelta e alla conferma il prelievo viene accettato. MetaMask, Trust Wallet o l’exchange ricevono: non firmano.`
             : `${houseName ?? "La casa"} indica destinazione. I crediti escono dal portafoglio solo come richiesta: UniCredit e Wise non vengono accreditati da questo sito.`
           : payoutKind === "WALLET"
-            ? "Indica il wallet che riceve. Dopo la conferma i crediti si bruciano e il prelievo viene accettato: tu non firmi nulla."
-            : "Scegli bonifico o crypto. Il bonifico lo dispone Massimo dalla banca; la crypto parte dal wallet del negozio."}
+            ? customerUsdc
+              ? "USDC su Base: 1 credito al tasso USD di libro (1 USDC = 1 USD). Massimo invia dal wallet Circle del negozio. Tu non firmi."
+              : "Indica il wallet che riceve. Massimo conferma l’invio dalla coda Fusioni. Tu non firmi nulla."
+            : "Bonifico in euro su IBAN italiano. Massimo dispone il SEPA dal suo conto. Stripe non versa sul tuo IBAN."}
       </p>
       {available <= 0 ? (
         <p className="text-sm text-ember">
@@ -306,7 +344,10 @@ export function CashoutForm({
             name="payoutKind"
             value="IBAN"
             checked={payoutKind === "IBAN"}
-            onChange={() => setPayoutKind("IBAN")}
+            onChange={() => {
+              setPayoutKind("IBAN");
+              if (!house) setCurrency("EUR");
+            }}
             className="mt-1 size-4 shrink-0 accent-primary"
           />
           Conto bancario (IBAN)
@@ -357,6 +398,8 @@ export function CashoutForm({
 
       {payoutKind === "IBAN" ? (
         <fieldset className="space-y-3">
+          {house ? (
+            <>
           <legend className="text-sm">Valuta del bonifico</legend>
           <div className="flex flex-wrap gap-2">
             <label className={chip}>
@@ -387,6 +430,12 @@ export function CashoutForm({
               Franchi svizzeri
             </label>
           </div>
+            </>
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              Bonifico in euro (SEPA) verso IBAN italiano. Massimo lo dispone dalla banca.
+            </p>
+          )}
           {house ? (
             <>
               <p className="text-sm">Conto della casa</p>
@@ -432,12 +481,22 @@ export function CashoutForm({
                 />
               </label>
               <label className="block text-sm">
-                IBAN
+                IBAN italiano
                 <Input
                   value={iban}
                   onChange={(e) => setIban(e.target.value)}
                   className="mt-1 max-w-md font-ledger"
                   placeholder="IT00 X000 0000 0000 0000 0000 000"
+                  autoComplete="off"
+                />
+              </label>
+              <label className="block text-sm">
+                BIC (facoltativo)
+                <Input
+                  value={ibanBic}
+                  onChange={(e) => setIbanBic(e.target.value)}
+                  className="mt-1 max-w-md font-ledger"
+                  placeholder="UNCRITMM"
                   autoComplete="off"
                 />
               </label>
@@ -448,7 +507,7 @@ export function CashoutForm({
         <fieldset className="space-y-3">
           <legend className="text-sm">Crypto da inviare</legend>
           <div className="grid gap-2 sm:grid-cols-2 md:grid-cols-3">
-            {CRYPTO_ASSETS.filter((asset) => asset.id !== "OTHER").map((asset) => (
+            {listedAssets.map((asset) => (
               <label key={asset.id} className={`${chip} py-3`}>
                 <input
                   type="radio"
@@ -475,7 +534,9 @@ export function CashoutForm({
             />
           </label>
           <p className="text-sm text-muted-foreground">
-            Destinazione: {preview}. Alla conferma i crediti si bruciano e il prelievo viene accettato.
+            {customerUsdc
+              ? `Destinazione: ${preview} su Base (Circle). Massimo invia dal wallet del negozio; senza env la richiesta resta aperta.`
+              : `Destinazione: ${preview}. Alla conferma i crediti restano in deposito finché Massimo conferma l’invio.`}
           </p>
         </fieldset>
       )}
