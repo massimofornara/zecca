@@ -213,6 +213,9 @@ model CashoutRequest {
   ibanHolder String?
   walletAddress String?
   walletNetwork String?
+  receiptKind String?
+  receiptRef  String?
+  receiptUrl  String?
   adminNote  String?
   createdAt  DateTime      @default(now())
   resolvedAt DateTime?

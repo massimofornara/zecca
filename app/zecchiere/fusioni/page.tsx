@@ -1,4 +1,5 @@
 import { PendingCashoutCard, TreasuryConvertForm } from "@/components/zecchiere/FusioniForms";
+import { CashoutReceipt } from "@/components/shop/CashoutReceipt";
 import { EmptyState } from "@/components/ui/banners";
 import { formatCredits, formatEurFromCents, formatFiatFromCents } from "@/lib/format";
 import { formatRomeDate } from "@/lib/rome-day";
@@ -29,9 +30,8 @@ export default async function FusioniPage() {
     <div>
       <h1 className="font-display text-4xl text-primary">Fusioni</h1>
       <p className="mt-2 text-muted-foreground">
-        Chiunque abbia crediti può chiedere un prelievo verso IBAN (euro o dollari) o wallet. Copia i dati, invia{" "}
-        <strong>dalla tua banca o dal tuo wallet</strong>, poi conferma qui. Zecca non ha accesso
-        ai conti e non spedisce da sola.
+        Copia i dati, invia <strong>dalla tua banca o dal tuo wallet</strong>, poi chiudi qui con
+        l’hash della transazione o il CRO del bonifico. Quella è la ricevuta. Zecca non spedisce da sola.
       </p>
 
       <section className="metal-frame mt-8 rounded-md bg-card p-5">
@@ -78,18 +78,28 @@ export default async function FusioniPage() {
       <h2 className="mt-10 font-display text-2xl text-primary">Chiuse</h2>
       <ul className="mt-4 divide-y divide-primary/15 rounded-md ring-1 ring-primary/20">
         {closed.map((r) => (
-          <li key={r.id} className="flex items-center justify-between px-4 py-3 text-sm">
-            <span>
-              {r.isTreasury ? "Tesoreria" : r.user?.name} · {formatCredits(r.credits)}
-              {r.status === "PAID"
-                ? r.currency === "USD"
-                  ? ` → ${formatFiatFromCents(r.usdCents, "USD")}`
-                  : ` → ${formatEurFromCents(r.eurCents)}`
-                : ""}
-            </span>
-            <span className="uppercase tracking-wider text-primary">
-              {r.status === "PAID" ? "Pagata" : "Rifiutata"}
-            </span>
+          <li key={r.id} className="px-4 py-3 text-sm">
+            <div className="flex items-center justify-between gap-3">
+              <span>
+                {r.isTreasury ? "Tesoreria" : r.user?.name} · {formatCredits(r.credits)}
+                {r.status === "PAID"
+                  ? r.currency === "USD"
+                    ? ` → ${formatFiatFromCents(r.usdCents, "USD")}`
+                    : ` → ${formatEurFromCents(r.eurCents)}`
+                  : ""}
+              </span>
+              <span className="uppercase tracking-wider text-primary">
+                {r.status === "PAID" ? "Pagata" : "Rifiutata"}
+              </span>
+            </div>
+            {r.status === "PAID" ? (
+              <CashoutReceipt
+                receiptKind={r.receiptKind}
+                receiptRef={r.receiptRef}
+                receiptUrl={r.receiptUrl}
+                walletNetwork={r.walletNetwork}
+              />
+            ) : null}
           </li>
         ))}
       </ul>

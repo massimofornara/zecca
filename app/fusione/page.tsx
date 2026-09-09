@@ -2,7 +2,9 @@ import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { PageShell } from "@/components/layout/SiteChrome";
 import { CashoutForm } from "@/components/shop/CashoutForm";
+import { CashoutReceipt } from "@/components/shop/CashoutReceipt";
 import { HouseGrantForm } from "@/components/shop/HouseGrantForm";
+import { SettleCashoutForm } from "@/components/shop/SettleCashoutForm";
 import { EmptyState } from "@/components/ui/banners";
 import { formatCashoutValue, formatCredits } from "@/lib/format";
 import { formatRomeDate } from "@/lib/rome-day";
@@ -49,8 +51,8 @@ export default async function FusionePage() {
       <h1 className="mt-1 font-display text-4xl text-primary">Preleva i crediti</h1>
       <p className="mt-3 max-w-2xl text-muted-foreground">
         {house
-          ? `${who}, indica quanti crediti prelevare. Bonifico su UniCredit o Wise, oppure crypto (BTC, ETH, USDT, USDC) verso il wallet che scrivi: la finestra mostra il valore da inviare.`
-          : "Tutti possono convertire i crediti del portafoglio in euro, dollari o crypto, verso un conto bancario o un wallet. Massimo fa il bonifico o l’invio: l’app non è una banca e non spedisce da sola."}
+          ? `${who}, indica i crediti e la destinazione. Poi invii tu da banca o wallet e chiudi il prelievo con l’hash (crypto) o il CRO (bonifico): quella è la ricevuta.`
+          : "Chiedi euro, dollari o crypto verso IBAN o wallet. Massimo invia dalla banca o dal wallet, poi registra l’hash o il CRO: quella è la ricevuta. L’app non spedisce da sola."}
       </p>
       {house ? (
         <div className="mt-8">
@@ -79,21 +81,34 @@ export default async function FusionePage() {
             />
           </div>
         ) : (
-          <ul className="mt-4 divide-y divide-primary/15 rounded-md ring-1 ring-primary/20">
+          <ul className="mt-4 space-y-3">
             {requests.map((r) => (
-              <li key={r.id} className="flex items-center justify-between px-4 py-3 text-sm">
-                <div>
-                  <p className="font-ledger">
-                    {formatCredits(r.credits)} → {formatCashoutValue(r)}
-                    {r.payoutKind === "WALLET"
-                      ? ` · ${walletNetworkLabel(r.walletNetwork)} ${r.walletAddress ?? ""}`
-                      : r.iban
-                        ? ` · ${housePayoutLabel(r.iban) ?? r.iban}`
-                        : ""}
-                  </p>
-                  <p className="text-xs text-muted-foreground">{formatRomeDate(r.createdAt)}</p>
+              <li key={r.id} className="rounded-md px-4 py-3 text-sm ring-1 ring-primary/20">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="font-ledger">
+                      {formatCredits(r.credits)} → {formatCashoutValue(r)}
+                      {r.payoutKind === "WALLET"
+                        ? ` · ${walletNetworkLabel(r.walletNetwork)} ${r.walletAddress ?? ""}`
+                        : r.iban
+                          ? ` · ${housePayoutLabel(r.iban) ?? r.iban}`
+                          : ""}
+                    </p>
+                    <p className="text-xs text-muted-foreground">{formatRomeDate(r.createdAt)}</p>
+                  </div>
+                  <Status status={r.status} />
                 </div>
-                <Status status={r.status} />
+                {r.status === "PAID" ? (
+                  <CashoutReceipt
+                    receiptKind={r.receiptKind}
+                    receiptRef={r.receiptRef}
+                    receiptUrl={r.receiptUrl}
+                    walletNetwork={r.walletNetwork}
+                  />
+                ) : null}
+                {house && r.status === "PENDING" ? (
+                  <SettleCashoutForm cashoutId={r.id} payoutKind={r.payoutKind} />
+                ) : null}
               </li>
             ))}
           </ul>

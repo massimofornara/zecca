@@ -139,10 +139,10 @@ export async function requestCashoutAction(
     return {
       ok:
         payoutKind === "WALLET"
-          ? "Richiesta inviata. In Fusioni compare la crypto, l’importo e il wallet. Zecca non spedisce crypto da sola: l’invio lo fai tu dal wallet."
+          ? "Richiesta pronta. Invia dal tuo wallet, poi incolla l’hash: quella è la ricevuta. Zecca non spedisce crypto da sola."
           : currency === "USD"
-            ? "Richiesta inviata. Il bonifico in dollari va all’IBAN indicato. Zecca non invia i soldi da sola: lo fai tu dalla banca, poi confermi in Fusioni."
-            : "Richiesta inviata. Il bonifico in euro va all’IBAN indicato. Zecca non invia i soldi da sola: lo fai tu dalla banca, poi confermi in Fusioni.",
+            ? "Richiesta pronta. Fai il bonifico in dollari, poi incolla il CRO: quella è la ricevuta. Zecca non invia i soldi da sola."
+            : "Richiesta pronta. Fai il bonifico in euro, poi incolla il CRO: quella è la ricevuta. Zecca non invia i soldi da sola.",
     };
   } catch (error) {
     if (!houseActor && isZeccaError(error) && error.code === "INSUFFICIENT_CREDITS") {

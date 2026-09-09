@@ -10,6 +10,7 @@ import { requestBonificoPurchase, confirmBonificoPurchase, saveShopBank } from "
 import { lastCustomerAddress, placeOrder, refreshOrderTracking } from "../lib/zecca/shop";
 import { getForgeState } from "../lib/zecca/forge";
 import { requestCustomerCashout, resolveCashout } from "../lib/zecca/cashout";
+import { explorerUrl } from "../lib/receipt";
 import { convertTreasuryToShopFiat, shopFiatBalances } from "../lib/zecca/convert";
 import { pocketBalance, treasuryBalance } from "../lib/zecca/ledger";
 import { getReserveReport } from "../lib/zecca/reserves";
@@ -232,11 +233,38 @@ async function main() {
     }
     assert.equal(badWallet, true, "wallet invalido deve fallire");
 
-    await resolveCashout({ cashoutId: cashout.id, actorId: admin.id, action: "pay", db });
-    await resolveCashout({ cashoutId: walletOut.id, actorId: admin.id, action: "pay", db });
+    let missingReceipt = false;
+    try {
+      await resolveCashout({ cashoutId: cashout.id, actorId: admin.id, action: "pay", db });
+    } catch (error) {
+      missingReceipt = error instanceof Error && error.message.includes("CRO");
+    }
+    assert.equal(missingReceipt, true, "senza CRO il bonifico non si chiude");
+
+    const ethHash = `0x${"ab".repeat(32)}`;
+    await resolveCashout({
+      cashoutId: cashout.id,
+      actorId: admin.id,
+      action: "pay",
+      receipt: "CRO-UNICREDIT-2212",
+      db,
+    });
+    await resolveCashout({
+      cashoutId: walletOut.id,
+      actorId: admin.id,
+      action: "pay",
+      receipt: ethHash,
+      db,
+    });
     assert.equal(await pocketBalance("ESCROW", customer.id, db), 0);
     const paid = await db.cashoutRequest.findUniqueOrThrow({ where: { id: cashout.id } });
     assert.equal(paid.status, "PAID");
+    assert.equal(paid.receiptKind, "BANK_REF");
+    assert.equal(paid.receiptRef, "CRO-UNICREDIT-2212");
+    const paidWallet = await db.cashoutRequest.findUniqueOrThrow({ where: { id: walletOut.id } });
+    assert.equal(paidWallet.receiptKind, "TX_HASH");
+    assert.equal(paidWallet.receiptRef, ethHash);
+    assert.equal(paidWallet.receiptUrl, explorerUrl("ETH", ethHash));
 
     const types = await db.ledgerEntry.groupBy({ by: ["type"], _count: true });
     const typeSet = new Set(types.map((t) => t.type));
@@ -389,7 +417,13 @@ async function main() {
     assert.equal(eurCashout.eurCents, 5000);
     assert.equal(await pocketBalance("USER", houseA.id, db), 100);
 
-    await resolveCashout({ cashoutId: usdCashout.id, actorId: houseA.id, action: "pay", db });
+    await resolveCashout({
+      cashoutId: usdCashout.id,
+      actorId: houseA.id,
+      action: "pay",
+      receipt: "SWIFT-WISE-NEONOBLE-1",
+      db,
+    });
     const paidUsd = await db.cashoutRequest.findUniqueOrThrow({ where: { id: usdCashout.id } });
     assert.equal(paidUsd.status, "PAID");
     assert.equal(paidUsd.currency, "USD");

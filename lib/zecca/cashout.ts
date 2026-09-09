@@ -3,6 +3,7 @@ import { prisma as defaultPrisma } from "@/lib/db";
 import { ZeccaError } from "@/lib/errors";
 import { isValidIban, normalizeIban } from "@/lib/iban";
 import { isValidWalletAddress, normalizeWalletAddress, walletNetworkLabel } from "@/lib/wallet";
+import { parsePayoutReceipt, type ReceiptKind } from "@/lib/receipt";
 import { appendLedger, pocketBalance } from "@/lib/zecca/ledger";
 import { creditsToEurCents, creditsToUsdCents, getSettings } from "@/lib/zecca/settings";
 
@@ -130,6 +131,7 @@ export async function resolveCashout(input: {
   actorId: string;
   action: "pay" | "reject";
   adminNote?: string;
+  receipt?: string;
   db?: PrismaClient;
 }) {
   const db = input.db ?? defaultPrisma;
@@ -150,14 +152,36 @@ export async function resolveCashout(input: {
     }
 
     const currency = cashout.currency === "USD" ? "USD" : "EUR";
+    let receiptKind: ReceiptKind | null = null;
+    let receiptRef: string | null = null;
+    let receiptUrl: string | null = null;
 
     if (input.action === "pay") {
+      const parsed = parsePayoutReceipt({
+        payoutKind: cashout.payoutKind,
+        walletNetwork: cashout.walletNetwork,
+        receipt: input.receipt ?? "",
+      });
+      if ("error" in parsed) {
+        throw new ZeccaError(parsed.error, "INVALID_RECEIPT");
+      }
+      receiptKind = parsed.kind;
+      receiptRef = parsed.ref;
+      receiptUrl = parsed.url;
+      const receiptNote =
+        receiptKind === "TX_HASH"
+          ? `ricevuta hash ${receiptRef}`
+          : `ricevuta bonifico ${receiptRef}`;
+
       await tx.cashoutRequest.update({
         where: { id: cashout.id },
         data: {
           status: "PAID",
           resolvedAt: new Date(),
-          adminNote: input.adminNote?.trim() || "Pagata",
+          adminNote: input.adminNote?.trim() || (receiptKind === "TX_HASH" ? "Invio crypto eseguito" : "Bonifico eseguito"),
+          receiptKind,
+          receiptRef,
+          receiptUrl,
         },
       });
       await appendLedger(
@@ -177,7 +201,8 @@ export async function resolveCashout(input: {
             currency === "USD"
               ? `${(cashout.usdCents / 100).toFixed(2)} USD`
               : `${(cashout.eurCents / 100).toFixed(2)} EUR`
-          }`,
+          } · ${receiptNote}`,
+          metadata: { receiptKind, receiptRef, receiptUrl },
         },
         tx,
       );

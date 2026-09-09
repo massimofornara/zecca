@@ -174,10 +174,20 @@ export function PendingCashoutCard({
       <OkBanner message={payState?.ok || rejectState?.ok} />
 
       <div className="mt-3 flex flex-wrap items-end gap-2">
-        <form action={payAction} className="space-y-2">
+        <form action={payAction} noValidate className="w-full space-y-2 sm:w-auto">
           <input type="hidden" name="cashoutId" value={id} />
           <input type="hidden" name="action" value="pay" />
           <input type="hidden" name="payoutKind" value={isWallet ? "WALLET" : "IBAN"} />
+          <label className="block text-sm">
+            {isWallet ? "Hash della transazione (ricevuta)" : "CRO / riferimento bonifico (ricevuta)"}
+            <Input
+              name="receipt"
+              required
+              autoComplete="off"
+              className="mt-1 max-w-xl font-ledger"
+              placeholder={isWallet ? "0x… oppure l’id della rete" : "CRO o end-to-end ID"}
+            />
+          </label>
           <label className="flex items-start gap-2 text-xs text-muted-foreground">
             <input
               type="checkbox"
@@ -187,13 +197,13 @@ export function PendingCashoutCard({
               required
             />
             {isWallet
-              ? "Ho inviato da un wallet a mio nome verso questo indirizzo."
+              ? "Ho inviato dal mio wallet verso questo indirizzo. L’hash è la prova."
               : isUsd
-                ? "Ho disposto il bonifico in dollari (SWIFT/estero) da un conto a mio nome verso questo IBAN."
-                : "Ho disposto il bonifico SEPA da un conto a mio nome verso questo IBAN."}
+                ? "Ho disposto il bonifico in dollari (SWIFT/estero) dal mio conto verso questo IBAN."
+                : "Ho disposto il bonifico SEPA dal mio conto verso questo IBAN."}
           </label>
-          <SubmitButton size="sm">
-            {isWallet ? "Conferma invio eseguito" : "Conferma bonifico eseguito"}
+          <SubmitButton size="sm" formNoValidate>
+            {isWallet ? "Chiudi prelievo con hash" : "Chiudi prelievo con CRO"}
           </SubmitButton>
         </form>
         <form action={rejectAction}>

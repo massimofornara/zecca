@@ -77,6 +77,7 @@ export async function resolveCashoutAction(
   const cashoutId = String(formData.get("cashoutId") ?? "");
   const action = String(formData.get("action") ?? "") as "pay" | "reject";
   const adminNote = String(formData.get("adminNote") ?? "");
+  const receipt = String(formData.get("receipt") ?? "");
   if (action !== "pay" && action !== "reject") return { error: "Azione non valida." };
   const paidVia = String(formData.get("payoutKind") ?? "IBAN");
   if (action === "pay") {
@@ -87,7 +88,15 @@ export async function resolveCashoutAction(
         error:
           paidVia === "WALLET"
             ? "Conferma di aver inviato dal tuo wallet verso questo indirizzo. Zecca non spedisce crypto."
-            : "Conferma di aver disposto il bonifico SEPA dal tuo conto. Zecca non invia i soldi.",
+            : "Conferma di aver disposto il bonifico dal tuo conto. Zecca non invia i soldi.",
+      };
+    }
+    if (!receipt.trim()) {
+      return {
+        error:
+          paidVia === "WALLET"
+            ? "Incolla l’hash della transazione: è la ricevuta del prelievo crypto."
+            : "Incolla il CRO o il riferimento del bonifico: è la ricevuta del prelievo.",
       };
     }
   }
@@ -96,18 +105,27 @@ export async function resolveCashoutAction(
       cashoutId,
       actorId: admin.id,
       action,
+      receipt,
       adminNote:
         adminNote ||
         (action === "pay"
           ? paidVia === "WALLET"
             ? "Invio da wallet del zecchiere"
-            : "Bonifico SEPA disposto dal zecchiere"
+            : "Bonifico disposto dal zecchiere"
           : undefined),
     });
     revalidatePath("/zecchiere/fusioni");
     revalidatePath("/zecchiere/libro-mastro");
     revalidatePath("/portafoglio");
-    return { ok: action === "pay" ? "Fusione pagata." : "Fusione rifiutata, crediti restituiti." };
+    revalidatePath("/fusione");
+    return {
+      ok:
+        action === "pay"
+          ? paidVia === "WALLET"
+            ? "Prelievo chiuso. L’hash è la ricevuta."
+            : "Prelievo chiuso. Il riferimento del bonifico è la ricevuta."
+          : "Fusione rifiutata, crediti restituiti.",
+    };
   } catch (error) {
     return { error: isZeccaError(error) ? error.message : "Operazione non riuscita." };
   }
