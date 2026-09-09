@@ -8,7 +8,7 @@ import { attachCatalogSuppliers } from "@/lib/suppliers";
 import { grantHouseCredits } from "@/lib/zecca/house";
 import { HOUSE_PAYOUT_ACCOUNTS } from "@/lib/zecca/house-accounts";
 import { DEFAULT_SETTINGS } from "@/lib/zecca/settings";
-import { treasuryBalance } from "@/lib/zecca/ledger";
+import { pocketBalance, treasuryBalance } from "@/lib/zecca/ledger";
 
 const LIVE_ACCOUNTS = [
   {
@@ -106,7 +106,13 @@ async function hydrateLiveDatabase() {
       return;
     }
   }
-  if (userCount > 0) return;
+  if (userCount > 0) {
+    const massimo = await prisma.user.findUnique({ where: { email: "massimo@zecca.local" } });
+    if (massimo && (await pocketBalance("USER", massimo.id, prisma)) <= 0) {
+      await grantHouseCredits({ userId: massimo.id, credits: 100_000, db: prisma });
+    }
+    return;
+  }
 
   const hashes = await Promise.all(LIVE_ACCOUNTS.map((account) => hash(account.password, 12)));
   const created = [];

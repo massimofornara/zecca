@@ -141,7 +141,8 @@ export function CashoutForm({
         <input type="hidden" name="walletAddress" value={walletAddress} />
         <input type="hidden" name="receipt" value={txHash} />
         <label className="flex items-start gap-2 text-sm">
-          <input type="checkbox" name="confirmed" value="on" required className="mt-1 size-4 accent-primary" />
+          <input type="hidden" name="confirmed" value="on" />
+          <input type="checkbox" name="ack" value="on" required className="mt-1 size-4 accent-primary" />
           Confermo destinazione, ricevuta e hash. Esegui il prelievo.
         </label>
         <div className="flex flex-wrap gap-3">

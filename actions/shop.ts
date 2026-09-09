@@ -130,7 +130,7 @@ export async function requestCashoutAction(
   const walletAddress = String(formData.get("walletAddress") ?? "");
   const walletNetwork = String(formData.get("walletNetwork") ?? formData.get("cryptoChoice") ?? "");
   const receipt = String(formData.get("receipt") ?? "");
-  if (formData.get("confirmed") !== "on") {
+  if (String(formData.get("confirmed") ?? "") !== "on") {
     return { error: "Conferma ricevuta e hash prima di prelevare. La schermata resta qui." };
   }
   try {
