@@ -18,6 +18,7 @@ import { destinationInstruction } from "@/lib/payout";
 import { CRYPTO_ASSETS, isValidWalletAddress, walletNetworkLabel } from "@/lib/wallet";
 import { housePayoutByIban } from "@/lib/zecca/house-accounts";
 import type { InternalCryptoWallet, TreasuryCryptoAsset } from "@/lib/zecca/convert";
+import type { ShopVaultAsset } from "@/lib/zecca/shop-vault";
 import { isShopSendableNetwork } from "@/lib/evm-send";
 import { explorerSearchLabel } from "@/lib/receipt";
 
@@ -141,9 +142,11 @@ export function TreasuryConvertForm({
 
 export function InternalCryptoWithdrawForm({
   wallets,
+  vault = [],
   usdCentsPerCredit,
 }: {
   wallets: InternalCryptoWallet[];
+  vault?: ShopVaultAsset[];
   usdCentsPerCredit: number;
 }) {
   const [state, action] = useActionState(
@@ -156,6 +159,7 @@ export function InternalCryptoWithdrawForm({
   const [walletAddress, setWalletAddress] = useState("");
   const [formError, setFormError] = useState<string | null>(null);
   const selected = wallets.find((wallet) => wallet.asset === asset) ?? wallets[0];
+  const selectedVault = vault.find((item) => item.id === asset);
   const amount = Number.isFinite(credits) && credits > 0 ? Math.floor(credits) : 0;
   const usdLabel = formatUsdFromCents(amount * usdCentsPerCredit);
   const pending = Boolean(state?.receiptId && (state.pending || state.status === "PENDING"));
@@ -204,7 +208,10 @@ export function InternalCryptoWithdrawForm({
           walletAddress={state.walletAddress}
           walletNetwork={state.walletNetwork}
           usdCents={state.usdCents}
-          shopAddress={wallets.find((wallet) => wallet.asset === state.walletNetwork)?.shopAddress}
+          shopAddress={
+            vault.find((item) => item.id === state.walletNetwork)?.address ??
+            wallets.find((wallet) => wallet.asset === state.walletNetwork)?.shopAddress
+          }
           initialError={state.error}
         />
       </div>
@@ -236,25 +243,49 @@ export function InternalCryptoWithdrawForm({
       <input type="hidden" name="cryptoAsset" value={asset} />
       <input type="hidden" name="confirmed" value="on" />
       <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-        {wallets.map((wallet) => (
-          <label key={wallet.asset} className={chip}>
-            <input
-              type="radio"
-              className="mt-1"
-              checked={asset === wallet.asset}
-              disabled={wallet.remainingCredits <= 0}
-              onChange={() => pickAsset(wallet.asset)}
-            />
-            <span>
-              <span className="block">{wallet.label}</span>
-              <span className="block font-ledger text-xs text-ember">{wallet.amountLabel}</span>
-              <span className="block text-xs text-muted-foreground">
-                {formatCredits(wallet.remainingCredits)}
+        {wallets.map((wallet) => {
+          const rete = vault.find((item) => item.id === wallet.asset);
+          return (
+            <label key={wallet.asset} className={chip}>
+              <input
+                type="radio"
+                className="mt-1"
+                checked={asset === wallet.asset}
+                disabled={wallet.remainingCredits <= 0}
+                onChange={() => pickAsset(wallet.asset)}
+              />
+              <span>
+                <span className="block">{wallet.label}</span>
+                <span className="block font-ledger text-xs text-ember">{wallet.amountLabel}</span>
+                <span className="block text-xs text-muted-foreground">
+                  Libro {formatCredits(wallet.remainingCredits)} · Rete {rete?.amountLabel ?? "—"}
+                </span>
               </span>
-            </span>
-          </label>
-        ))}
+            </label>
+          );
+        })}
       </div>
+      {selectedVault?.address ? (
+        <div className="rounded-md bg-background/50 p-3 ring-1 ring-primary/20">
+          <CopyField label={`Cassa di rete ${selectedVault.ticker} da caricare`} value={selectedVault.address} mono />
+          {selectedVault.explorer ? (
+            <a
+              href={selectedVault.explorer}
+              className="mt-2 inline-block text-xs underline hover:text-primary"
+              target="_blank"
+              rel="noreferrer"
+            >
+              Verifica su {selectedVault.id === "BTC" ? "Mempool" : selectedVault.id === "BNB" ? "BscScan" : "Etherscan"}
+            </a>
+          ) : null}
+          {!selectedVault.hasFunds ? (
+            <p className="mt-2 text-xs text-muted-foreground">
+              Ora la rete ha {selectedVault.amountLabel}. Finché questo indirizzo è a zero il negozio
+              non può creare l’hash: i crediti del libro non sono {selectedVault.ticker}.
+            </p>
+          ) : null}
+        </div>
+      ) : null}
       <div className="grid gap-4 sm:grid-cols-2">
         <label className="text-sm">
           Crediti da prelevare
@@ -287,8 +318,9 @@ export function InternalCryptoWithdrawForm({
         </label>
       </div>
       <p className="text-xs text-muted-foreground">
-        Massimo preleva dal wallet interno. Il negozio crea l’hash sulla rete in pochi secondi se
-        la cassa di rete ha già {selected?.ticker}. Chi riceve non firma.
+        Massimo preleva dal wallet interno. Il negozio invia {selected?.ticker} dalla cassa di rete
+        ({selectedVault?.amountLabel ?? "saldo in lettura"}): MetaMask, Trust Wallet o l’exchange
+        ricevono senza firmare.
       </p>
       <SubmitButton pendingLabel="Invio sulla rete…">
         Preleva: il negozio invia e genera l’hash

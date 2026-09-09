@@ -1,4 +1,5 @@
 import { createHmac } from "node:crypto";
+import { secp256k1 } from "@noble/curves/secp256k1";
 import { HDKey } from "@scure/bip32";
 import * as btc from "@scure/btc-signer";
 import { ZeccaError } from "@/lib/errors";
@@ -17,7 +18,33 @@ function shopBtcSeed(): Uint8Array | null {
   return createHmac("sha512", "zecca-shop-btc-v1").update(secret).digest();
 }
 
+function envBtcPrivateKey(): Uint8Array | null {
+  const wif = process.env.ZECCA_BTC_WIF?.trim();
+  if (wif) {
+    try {
+      const decoded = btc.WIF().decode(wif);
+      if (decoded.length === 32) return decoded;
+    } catch {
+      return null;
+    }
+  }
+  const hex = (process.env.ZECCA_BTC_PRIVATE_KEY ?? "").trim().replace(/^0x/i, "");
+  if (/^[a-fA-F0-9]{64}$/.test(hex)) {
+    return Uint8Array.from(Buffer.from(hex, "hex"));
+  }
+  return null;
+}
+
+function keyFromPrivate(privateKey: Uint8Array) {
+  const publicKey = secp256k1.getPublicKey(privateKey, true);
+  const spend = btc.p2wpkh(publicKey, btc.NETWORK);
+  if (!spend.address) return null;
+  return { privateKey, spend, address: spend.address };
+}
+
 function shopBtcKey() {
+  const fromEnv = envBtcPrivateKey();
+  if (fromEnv) return keyFromPrivate(fromEnv);
   const seed = shopBtcSeed();
   if (!seed) return null;
   const child = HDKey.fromMasterSeed(seed).derive("m/84'/0'/0'/0/0");

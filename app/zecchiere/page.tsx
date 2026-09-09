@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { formatCredits, formatEurFromCents, formatFiatFromCents } from "@/lib/format";
 import { totals } from "@/lib/zecca/ledger";
 import { prisma } from "@/lib/db";
@@ -7,6 +6,7 @@ import { getLiveReport } from "@/lib/live";
 import { formatReserveRatio, getReserveReport } from "@/lib/zecca/reserves";
 import { getSettings } from "@/lib/zecca/settings";
 import { getShopNetworkVault } from "@/lib/zecca/shop-vault";
+import { CopyField } from "@/components/copy/CopyField";
 import { TreasuryConvertForm, InternalCryptoWithdrawForm } from "@/components/zecchiere/FusioniForms";
 import { shopInternalCryptoWallets } from "@/lib/zecca/convert";
 
@@ -29,68 +29,66 @@ export default async function TesoreriaPage() {
       <p className="text-xs uppercase tracking-[0.28em] text-primary/80">Casa della zecca</p>
       <h1 className="mt-1 font-display text-4xl text-primary">Tesoreria</h1>
       <p className="mt-2 text-muted-foreground">
-        Tesoreria crediti, cassa EUR/USD e wallet interni crypto sono il libro. I bitcoin (e l’ETH)
-        che Massimo invia al wallet di destinazione sono solo quelli della{" "}
-        <strong>cassa di rete</strong>, visibili su Mempool e Etherscan. Il prelievo parte da lì:
-        chi riceve non firma.
+        I crediti convertiti stanno nel libro. BTC, ETH, USDT, USDC e BNB che partono verso
+        MetaMask, Trust Wallet o un exchange sono solo il saldo on-chain della{" "}
+        <strong>cassa di rete</strong> qui sotto, lo stesso wallet per tutte le crypto EVM.
       </p>
 
       <section className="metal-frame mt-6 rounded-md bg-card p-5">
         <p className="text-xs uppercase tracking-[0.2em] text-primary/80">Cassa di rete (prelievo crypto)</p>
         <p className="mt-2 text-sm text-muted-foreground">
-          Massimo usa questo saldo on-chain in{" "}
-          <Link href="/fusione" className="underline hover:text-primary">
-            Prelievo
-          </Link>{" "}
-          e dal wallet interno qui sotto: in pochi secondi parte verso MetaMask, Trust Wallet o un
-          exchange. Convertire crediti riempie i wallet interni del libro, non questi numeri.
+          Questo è il saldo vero su Mempool, Etherscan e BscScan. Il negozio invia da qui: chi
+          riceve non firma. Convertire crediti non crea satoshi né ether; per prelevare carica
+          questi indirizzi, poi conferma l’invio.
         </p>
-        <div className="mt-4 grid gap-3 sm:grid-cols-2">
-          <div>
-            <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">Bitcoin</p>
-            <p className="font-ledger text-xl text-ember">{vault.btcLabel}</p>
-            {vault.btcAddress ? (
-              <p className="mt-1 break-all font-ledger text-xs text-muted-foreground">{vault.btcAddress}</p>
-            ) : null}
-            {vault.btcExplorer ? (
-              <a href={vault.btcExplorer} className="mt-1 inline-block text-xs underline hover:text-primary" target="_blank" rel="noreferrer">
-                Mempool / Blockstream
-              </a>
-            ) : null}
-          </div>
-          <div>
-            <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">Ethereum</p>
-            <p className="font-ledger text-xl">{vault.ethLabel}</p>
-            {vault.evmAddress ? (
-              <p className="mt-1 break-all font-ledger text-xs text-muted-foreground">{vault.evmAddress}</p>
-            ) : null}
-            {vault.ethExplorer ? (
-              <a href={vault.ethExplorer} className="mt-1 inline-block text-xs underline hover:text-primary" target="_blank" rel="noreferrer">
-                Etherscan
-              </a>
-            ) : null}
-          </div>
+        <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {vault.assets.map((asset) => (
+            <div key={asset.id} className="rounded-md bg-background/40 p-3 ring-1 ring-primary/15">
+              <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">{asset.label}</p>
+              <p className="font-ledger text-lg text-ember">{asset.amountLabel}</p>
+              <p className="mt-1 text-[11px] text-muted-foreground">{asset.chainName}</p>
+              {asset.address ? (
+                <div className="mt-2">
+                  <CopyField label="Indirizzo da caricare" value={asset.address} mono />
+                </div>
+              ) : null}
+              {asset.explorer ? (
+                <a
+                  href={asset.explorer}
+                  className="mt-2 inline-block text-xs underline hover:text-primary"
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  {asset.id === "BTC" ? "Mempool / Blockstream" : asset.id === "BNB" ? "BscScan" : "Etherscan"}
+                </a>
+              ) : null}
+            </div>
+          ))}
         </div>
       </section>
 
       <section className="metal-frame mt-6 rounded-md bg-card p-5">
         <p className="text-xs uppercase tracking-[0.2em] text-primary/80">Wallet interni (libro)</p>
         <p className="mt-2 text-sm text-muted-foreground">
-          Qui arrivano i crediti convertiti in BTC, ETH, USDT, USDC e BNB. È la stessa cassa del
-          libro degli euro e dei dollari: non è Mempool né Etherscan. Massimo preleva quando vuole
-          verso qualsiasi wallet; l’invio vero usa la cassa di rete sopra.
+          Crediti convertiti in BTC, ETH, USDT, USDC e BNB. Accanto c’è il saldo di rete della
+          stessa cassa. Il prelievo verso qualsiasi wallet usa la riga Rete, non il libro.
         </p>
         <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-          {internalWallets.map((wallet) => (
-            <div key={wallet.asset}>
-              <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">{wallet.label}</p>
-              <p className="font-ledger text-lg text-ember">{wallet.amountLabel}</p>
-              <p className="mt-1 text-xs text-muted-foreground">{formatCredits(wallet.remainingCredits)}</p>
-            </div>
-          ))}
+          {internalWallets.map((wallet) => {
+            const rete = vault.assets.find((asset) => asset.id === wallet.asset);
+            return (
+              <div key={wallet.asset}>
+                <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">{wallet.label}</p>
+                <p className="font-ledger text-lg text-ember">{wallet.amountLabel}</p>
+                <p className="mt-1 text-xs text-muted-foreground">Libro {formatCredits(wallet.remainingCredits)}</p>
+                <p className="mt-1 text-xs text-muted-foreground">Rete {rete?.amountLabel ?? "—"}</p>
+              </div>
+            );
+          })}
         </div>
         <InternalCryptoWithdrawForm
           wallets={internalWallets}
+          vault={vault.assets}
           usdCentsPerCredit={settings.usdCentsPerCredit}
         />
       </section>

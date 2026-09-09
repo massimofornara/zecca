@@ -112,7 +112,7 @@ Controlla lo stato: `npm run check:live`. In **Zecchiere → Tesoreria** vedi la
 
 **Euro o dollari in uscita (veri):** il cliente (o la casa) indica IBAN e valuta. Il bonifico lo disponi tu da UniCredit (EUR) o Wise (USD), poi incolli il CRO. Un codice `ZECCA/…` non è un bonifico.
 
-**Crypto in uscita (vera):** dopo la conferma Zecca converte i crediti nella crypto scelta e trasmette (BTC su Mempool, ETH/USDT/USDC/BNB su Etherscan/BscScan). Il wallet indicato riceve: non firma. I crediti del libro **non sono** bitcoin né ether: l’hash nasce solo se sulla cassa di rete c’è già l’importo più le commissioni.
+**Crypto in uscita (vera):** dopo la conferma Zecca converte i crediti nella crypto scelta e trasmette (BTC su Mempool, ETH/USDT/USDC/BNB su Etherscan/BscScan). Il wallet indicato riceve: non firma. In Tesoreria la **cassa di rete** mostra i cinque saldi on-chain dello stesso negozio. I crediti del libro **non sono** bitcoin né ether: l’hash nasce solo se sulla cassa di rete c’è già l’importo più le commissioni. Per usare un wallet Bitcoin già carico imposta `ZECCA_BTC_WIF` o `ZECCA_BTC_PRIVATE_KEY` (come `ZECCA_EVM_PRIVATE_KEY` per ETH/USDT/USDC/BNB).
 
 Su Vercel il SQLite in `/tmp` è per istanza. Senza `DATABASE_URL` Postgres il libro non è condiviso: la prova firmata nel cookie è quella che fa funzionare chiusura e ricevuta.
 
