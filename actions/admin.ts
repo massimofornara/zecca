@@ -70,10 +70,23 @@ export async function treasuryConvertAction(
   }
 }
 
+export type ResolveCashoutState = {
+  error?: string;
+  ok?: string;
+  receiptId?: string;
+  receiptRef?: string | null;
+  receiptHash?: string | null;
+  receiptUrl?: string | null;
+  receiptKind?: string | null;
+  walletNetwork?: string | null;
+  proofToken?: string;
+  status?: string;
+};
+
 export async function resolveCashoutAction(
-  _prev: { error?: string; ok?: string } | null,
+  _prev: ResolveCashoutState | null,
   formData: FormData,
-): Promise<{ error?: string; ok?: string }> {
+): Promise<ResolveCashoutState> {
   const admin = await requireAdmin();
   if (!admin) return { error: "Solo il zecchiere può chiudere una fusione." };
   const cashoutId = String(formData.get("cashoutId") ?? "");
@@ -122,7 +135,7 @@ export async function resolveCashoutAction(
             : "Bonifico disposto dal zecchiere"
           : undefined),
     });
-    await rememberCashoutProof(
+    const signed = await rememberCashoutProof(
       proofFromPaidCashout({
         ...settled,
         userName: admin.name ?? "Casa",
@@ -141,6 +154,14 @@ export async function resolveCashoutAction(
             ? "Prelievo chiuso. L’hash è la ricevuta."
             : "Prelievo chiuso. Il riferimento del bonifico è la ricevuta."
           : "Fusione rifiutata, crediti restituiti.",
+      receiptId: settled.id,
+      receiptRef: settled.receiptRef,
+      receiptHash: settled.receiptHash,
+      receiptUrl: settled.receiptUrl,
+      receiptKind: settled.receiptKind,
+      walletNetwork: settled.walletNetwork,
+      proofToken: signed,
+      status: settled.status,
     };
   } catch (error) {
     return { error: publicErrorMessage(error, "Operazione non riuscita.") };

@@ -45,7 +45,7 @@ export default async function FusionePage() {
       where: { userId: session.user.id },
       orderBy: { createdAt: "desc" },
     }),
-    loadRememberedProofs(session.user.id),
+    loadRememberedProofs(house ? undefined : session.user.id),
   ]);
   const dbIds = new Set(requests.map((row) => row.id));
   const listed = [
