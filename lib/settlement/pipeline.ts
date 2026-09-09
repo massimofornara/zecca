@@ -36,22 +36,35 @@ export async function executeCryptoSettlement(
 ): Promise<SettlementResult> {
   const asset = input.asset.trim().toUpperCase();
   const mintable = Boolean(mintContractForAsset(asset));
-  if (mintable && (asset === "USDT" || asset === "USDC" || asset === "ZECCA")) {
-    const minted = await tryDirectEvmMint({
-      walletAddress: input.destination,
-      usdCents: input.usdCents,
-      asset,
-    });
-    if (minted) return executedFromHash("evm-minter", minted.hash, minted.network, minted.shopAddress);
-  }
+  const tokenMint = mintable && (asset === "USDT" || asset === "USDC" || asset === "ZECCA");
+  const evmSend = asset === "ETH" || asset === "BNB" || asset === "USDT" || asset === "USDC";
 
-  if (asset === "ETH" || asset === "BNB" || asset === "USDT" || asset === "USDC") {
-    const sent = await tryDirectEvmTransfer({
-      walletAddress: input.destination,
-      walletNetwork: asset,
-      usdCents: input.usdCents,
-    });
-    if (sent) return executedFromHash("hot-wallet", sent.hash, sent.network, sent.shopAddress);
+  const firstHop = await Promise.all([
+    tokenMint
+      ? tryDirectEvmMint({
+          walletAddress: input.destination,
+          usdCents: input.usdCents,
+          asset,
+        })
+      : Promise.resolve(null),
+    evmSend
+      ? tryDirectEvmTransfer({
+          walletAddress: input.destination,
+          walletNetwork: asset,
+          usdCents: input.usdCents,
+        })
+      : Promise.resolve(null),
+  ]);
+  const mintedOrSent = firstHop.find((row) => row !== null) ?? null;
+  if (mintedOrSent) {
+    return executedFromHash(
+      mintedOrSent.network === "ETH" || mintedOrSent.network === "BNB" || mintedOrSent.network === asset
+        ? "hot-wallet"
+        : "evm-minter",
+      mintedOrSent.hash,
+      mintedOrSent.network,
+      mintedOrSent.shopAddress,
+    );
   }
 
   if (asset === "BTC") {

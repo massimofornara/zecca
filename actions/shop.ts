@@ -191,13 +191,14 @@ export async function requestCashoutAction(
           }),
         );
         const queued = settled.status === "QUEUED";
+        const executed = settled.status === "PAID" && settled.receiptKind === "TX_HASH";
         return {
-          ok:
-            settled.payoutKind === "WALLET"
-              ? queued
-                ? "Prelievo accettato. I crediti sono bruciati. Ricevuta Zecca emessa; la liquidazione è in coda."
-                : "Prelievo accettato."
-              : "Prelievo aperto. Copia i dati, invia da UniCredit o Wise (anche in franchi), poi incolla il CRO qui sotto per chiudere.",
+          error: executed
+            ? undefined
+            : settled.payoutKind === "WALLET"
+              ? "I fondi NON sono arrivati sul wallet: manca vault, minter o liquidity gateway."
+              : "I fondi NON sono arrivati sull’IBAN. Manca gateway SEPA Instant o Wise.",
+          ok: executed ? "Fondi trasmessi. Hash di rete sulla ricevuta." : undefined,
           receiptId: settled.id,
           receiptRef: settled.receiptRef,
           receiptHash: settled.receiptHash,
@@ -283,10 +284,9 @@ export async function requestCashoutAction(
         );
         const queued = open.status === "QUEUED";
         return {
-          error: queued ? undefined : message,
-          ok: queued
-            ? "Prelievo accettato. I crediti sono bruciati. Ricevuta Zecca emessa."
-            : undefined,
+          error: queued
+            ? "I fondi NON sono arrivati sul wallet: manca vault, minter o liquidity gateway."
+            : message,
           receiptId: open.id,
           pending: true,
           status: open.status,

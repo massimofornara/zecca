@@ -21,9 +21,9 @@ export default async function LiquidazionePage() {
     <div>
       <h1 className="font-display text-4xl text-primary">Liquidazione</h1>
       <p className="mt-2 text-muted-foreground">
-        Pipeline esecutiva: burn sul libro → mint EVM / liquidity / SEPA / Wise → EXECUTED solo con
-        TRN o tx_hash verificabile. La conferma di conversione non si ferma a vault zero. Senza
-        provider la linea resta in coda tesoreria, senza prove inventate.
+        Pipeline esecutiva in pochi secondi: burn sul libro → mint EVM / liquidity / SEPA Instant /
+        Wise. EXECUTED solo con TRN o tx_hash verificabile. Senza provider i destinatari non
+        ricevono: resta la coda tesoreria, senza prove inventate.
       </p>
 
       <section className="metal-frame mt-8 rounded-md bg-card p-5">

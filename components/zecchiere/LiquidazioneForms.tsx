@@ -28,9 +28,8 @@ export function RetryOnChainForm() {
         <OkBanner message={state?.ok} />
         <SubmitButton pendingLabel="Trasmissione in corso…">Trasmetti tutti i fondi</SubmitButton>
         <p className="text-xs text-muted-foreground">
-          Tenta ogni linea aperta: mint/transfer on-chain, SEPA se c’è il conto ordinante, Wise se
-          c’è il token API. Senza cassa di rete o banca collegata lo stato resta ricevuta tesoreria:
-          nessun CRO e nessun hash inventato.
+          Tenta ogni linea aperta in pochi secondi: mint/transfer, SEPA Instant, Wise. Senza cassa
+          di rete o banca collegata i fondi non partono: nessun CRO e nessun hash inventato.
         </p>
       </form>
       <form action={retryAction} className="space-y-2">

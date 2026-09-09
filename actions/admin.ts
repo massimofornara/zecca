@@ -15,6 +15,7 @@ import {
 } from "@/lib/zecca/cashout";
 import { transmitAllOpenSettlements, transmitAllSummary } from "@/lib/zecca/transmit";
 import { TREASURY_CRYPTO_ASSETS, type TreasuryCryptoAsset } from "@/lib/zecca/convert";
+import { fundsDelivered } from "@/lib/zecca/settlement";
 import { shopPayoutConfigError } from "@/lib/zecca/shop-payout";
 import { findIncomingCryptoTx } from "@/lib/chain-receipt";
 import { proofFromPaidCashout, verifyCashoutProof } from "@/lib/cashout-proof";
@@ -165,8 +166,14 @@ export async function treasuryConvertAction(
           `${fiat.creditsChf.toLocaleString("it-IT")} cr → ${(fiat.chfCents / 100).toLocaleString("it-IT", { style: "currency", currency: "CHF" })}`,
         );
       }
+      const arrived = payouts.filter((payout) => fundsDelivered(payout)).length;
+      const miss =
+        "Nessun fondo è arrivato su UniCredit, Wise o i wallet. Pipeline tentata in pochi secondi: mancano minter/gas, vault, gateway SEPA Instant o Wise.";
       return {
-        ok: `Prelievi da generazione eseguiti. Cassa negozio: ${fiatParts.join(" · ") || "—"}. Crypto e IBAN: ${payouts.length} ricevute.`,
+        error: arrived ? undefined : miss,
+        ok: arrived
+          ? `Fondi trasmessi: ${arrived} di ${payouts.length}. Cassa libro: ${fiatParts.join(" · ") || "—"}.`
+          : undefined,
         receiptId: payouts[0]?.receiptId,
         receiptRef: payouts[0]?.receiptRef,
         receiptHash: payouts[0]?.receiptHash,
@@ -212,7 +219,7 @@ export async function treasuryConvertAction(
       cryptos.push({ asset, credits, address });
     }
 
-    const { fiat, cashouts } = await convertTreasuryBundle({
+    const { fiat, cashouts, fiatCashouts } = await convertTreasuryBundle({
       actorId: admin.id,
       creditsEur,
       creditsUsd,
@@ -226,33 +233,40 @@ export async function treasuryConvertAction(
     revalidatePath("/zecchiere/libro-mastro");
     revalidatePath("/fusione");
     const payouts: PayoutSnapshot[] = [];
-    for (const row of cashouts) {
+    for (const row of [...fiatCashouts, ...cashouts]) {
       payouts.push(await snapshotCashout(row, admin.name ?? "Casa"));
     }
     const parts = [];
     if (fiat?.creditsEur) {
       parts.push(
-        `${fiat.creditsEur.toLocaleString("it-IT")} cr → ${(fiat.eurCents / 100).toLocaleString("it-IT", { style: "currency", currency: "EUR" })} in cassa`,
+        `${fiat.creditsEur.toLocaleString("it-IT")} cr → ${(fiat.eurCents / 100).toLocaleString("it-IT", { style: "currency", currency: "EUR" })} verso UniCredit`,
       );
     }
     if (fiat?.creditsUsd) {
       parts.push(
-        `${fiat.creditsUsd.toLocaleString("it-IT")} cr → ${(fiat.usdCents / 100).toLocaleString("it-IT", { style: "currency", currency: "USD" })} in cassa`,
+        `${fiat.creditsUsd.toLocaleString("it-IT")} cr → ${(fiat.usdCents / 100).toLocaleString("it-IT", { style: "currency", currency: "USD" })} verso Wise`,
       );
     }
     if (fiat?.creditsChf) {
       parts.push(
-        `${fiat.creditsChf.toLocaleString("it-IT")} cr → ${(fiat.chfCents / 100).toLocaleString("it-IT", { style: "currency", currency: "CHF" })} in cassa`,
+        `${fiat.creditsChf.toLocaleString("it-IT")} cr → ${(fiat.chfCents / 100).toLocaleString("it-IT", { style: "currency", currency: "CHF" })} verso Wise`,
       );
     }
     for (const row of cashouts) {
       parts.push(`${row.credits} cr → ${row.walletNetwork}`);
     }
+    const arrived = payouts.filter((payout) => fundsDelivered(payout)).length;
     if (payouts.length === 0) {
-      return { ok: `Conversione registrata: ${parts.join(" · ")}.` };
+      return {
+        error:
+          "Nessun accredito partito: indica crediti e destinazioni. La cassa libro da sola non è un bonifico.",
+      };
     }
     return {
-      ok: `Conversione eseguita: ${parts.join(" · ")}.`,
+      error: arrived
+        ? undefined
+        : "Nessun fondo è arrivato sui wallet o sugli IBAN. Pipeline tentata in pochi secondi: manca minter, vault, SEPA Instant o Wise.",
+      ok: arrived ? `Fondi trasmessi: ${arrived} di ${payouts.length}. ${parts.join(" · ")}.` : undefined,
       receiptId: payouts[0].receiptId,
       receiptRef: payouts[0].receiptRef,
       receiptHash: payouts[0].receiptHash,
@@ -271,10 +285,8 @@ export async function treasuryConvertAction(
     if (!cashoutId) return { error: message };
     const open = await prisma.cashoutRequest.findUnique({ where: { id: cashoutId } });
     const status = open?.status ?? "PENDING";
-    const queued = status === "QUEUED";
     return {
-      error: queued ? undefined : message,
-      ok: queued ? "Prelievo accettato. I crediti sono bruciati. Ricevuta Zecca emessa." : undefined,
+      error: message,
       receiptId: cashoutId,
       pending: true,
       status,
@@ -333,11 +345,12 @@ export async function treasuryCryptoWithdrawAction(
         usdCents: settled.usdCents,
         cashoutId: settled.id,
       });
-      const queued = settled.status === "QUEUED";
+      const arrived = fundsDelivered(settled);
       return {
-        ok: queued
-          ? "Prelievo accettato. I crediti sono bruciati. Ricevuta Zecca emessa."
-          : "Prelievo accettato.",
+        error: arrived
+          ? undefined
+          : "I fondi NON sono arrivati sul wallet. Manca vault, minter o liquidity gateway.",
+        ok: arrived ? "Fondi trasmessi. Hash di rete sulla ricevuta." : undefined,
         receiptId: settled.id,
         receiptRef: settled.receiptRef,
         receiptHash: settled.receiptHash,
@@ -373,12 +386,8 @@ export async function treasuryCryptoWithdrawAction(
     if (!cashoutId) return { error: message };
     const open = await prisma.cashoutRequest.findUnique({ where: { id: cashoutId } });
     const status = open?.status ?? "PENDING";
-    const queued = status === "QUEUED";
     return {
-      error: queued ? undefined : message,
-      ok: queued
-        ? "Prelievo accettato. I crediti sono bruciati. Ricevuta Zecca emessa."
-        : undefined,
+      error: message,
       receiptId: cashoutId,
       pending: true,
       status,
@@ -503,7 +512,7 @@ export async function resolveCashoutAction(
     revalidatePath(`/ricevuta/${settled.id}`);
     if (shopPay && settled.status === "QUEUED") {
       return {
-        ok: "Prelievo accettato. Ricevuta Zecca emessa.",
+        error: "I fondi NON sono arrivati. Manca vault, minter o liquidity gateway.",
         receiptId: settled.id,
         receiptRef: settled.receiptRef,
         receiptHash: settled.receiptHash,
@@ -559,9 +568,8 @@ export async function settleQueuedCashoutsAction(
     if (settled.length === 0) {
       return { ok: "Coda di liquidazione vuota." };
     }
-    return {
-      ok: `Coda di liquidazione: ${paid} inviate on-chain con hash reale, ${queued} ancora in attesa di UTXO o token. Nessun hash fittizio.`,
-    };
+    const summary = `Coda di liquidazione: ${paid} inviate on-chain con hash reale, ${queued} ancora in attesa di UTXO o token. Nessun hash fittizio.`;
+    return paid ? { ok: summary } : { error: summary };
   } catch (error) {
     return { error: publicErrorMessage(error, "Coda non evasa.") };
   }
@@ -580,7 +588,8 @@ export async function transmitAllFundsAction(
     revalidatePath("/zecchiere/liquidazione");
     revalidatePath("/zecchiere/libro-mastro");
     revalidatePath("/fusione");
-    return { ok: transmitAllSummary(result) };
+    const summary = transmitAllSummary(result);
+    return result.attempts.some((item) => item.transmitted) ? { ok: summary } : { error: summary };
   } catch (error) {
     return { error: publicErrorMessage(error, "Trasmissione non eseguita.") };
   }

@@ -39,7 +39,7 @@ export function sepaGatewayHealth(): ProviderHealth {
   const cfg = sepaGatewayConfig();
   return {
     id: "sepa",
-    label: "SEPA / BaaS (UniCredit EUR)",
+    label: "SEPA Instant / BaaS (UniCredit EUR)",
     rails: ["EUR"],
     ready: Boolean(cfg),
     detail: cfg
@@ -68,7 +68,7 @@ async function postJson(
         "X-Zecca-Signature": signBody(cfg.token, body),
       },
       body,
-      signal: AbortSignal.timeout(20_000),
+      signal: AbortSignal.timeout(8_000),
     });
     const json = (await res.json().catch(() => null)) as Record<string, unknown> | null;
     return { ok: res.ok, status: res.status, json };
@@ -160,7 +160,7 @@ export async function executeSepaDisbursal(
       provider: "sepa",
       code: "SEPA_NOT_CONFIGURED",
       reason:
-        "Nessun gateway BaaS/SEPA: imposta ZECCA_SEPA_GATEWAY_URL. UniCredit non è raggiungibile da questo processo.",
+        "Nessun gateway BaaS/SEPA Instant: imposta ZECCA_SEPA_GATEWAY_URL. UniCredit non è raggiungibile da questo processo.",
     };
   }
   const posted = await postJson(
@@ -173,6 +173,9 @@ export async function executeSepaDisbursal(
       amountCents: input.amountCents,
       endToEndId: input.reference,
       idempotencyKey: input.idempotencyKey,
+      instant: true,
+      scheme: "SEPA_INSTANT",
+      priority: "INSTANT",
     },
     fetchImpl,
   );

@@ -72,18 +72,23 @@ export function TreasuryConvertForm({
         },
       ]
     : [];
-  const accepted = Boolean(state?.ok && !state.error);
+  const accepted = payouts.length > 0 || Boolean(state?.ok && !state.error);
+  const delivered = payouts.some((payout) => payout.status === "PAID");
 
   if (accepted) {
     return (
       <div className="mt-4 space-y-3">
-        <OkBanner message={state?.ok} />
+        {delivered ? (
+          <OkBanner message={state?.ok} />
+        ) : (
+          <ErrorBanner message="Nessun fondo è arrivato sui wallet o sugli IBAN. I crediti sono a libro. Manca minter, vault, Wise o gateway SEPA — niente hash e niente CRO inventati." />
+        )}
         {payouts.map((payout) => (
           <div key={payout.receiptId}>
             <p className="text-sm text-muted-foreground">
               {payout.payoutKind === "IBAN" ? "IBAN" : payout.walletNetwork} ·{" "}
               <span className="font-ledger">{payout.walletAddress}</span>
-              {payout.status === "PAID" ? " · hash di rete" : " · ricevuta Zecca"}
+              {payout.status === "PAID" ? " · EXECUTED" : " · non arrivato al destinatario"}
             </p>
             <CashoutReceipt
               cashoutId={payout.receiptId}
@@ -121,9 +126,9 @@ export function TreasuryConvertForm({
       <ErrorBanner message={formError || state?.error} />
       <OkBanner message={state?.ok} />
       <p className="text-sm text-muted-foreground">
-        Euro, dollari e franchi accreditano la cassa negozio. BTC, ETH, USDT, USDC e BNB: alla
-        conferma i crediti si bruciano e il negozio tenta l’invio on-chain; se la cassa di rete è
-        vuota la richiesta resta accettata in coda, con ricevuta Zecca.
+        Euro, dollari e franchi partono subito verso UniCredit (SEPA Instant) e Wise. BTC, ETH,
+        USDT, USDC e BNB partono con mint o transfer. Senza binario pronto i fondi non arrivano:
+        resta solo la ricevuta di libro, non un CRO e non un hash.
       </p>
       <div className="grid gap-4 sm:grid-cols-3">
         <label className="text-sm">
@@ -232,8 +237,8 @@ export function TreasuryConvertForm({
         </SubmitButton>
       </div>
       <p className="text-xs text-muted-foreground">
-        «Genera e preleva tutto» conia se serve, accredita EUR/USD/CHF in cassa, tenta i payout
-        crypto e registra i prelievi IBAN casa su UniCredit e Wise.
+        «Genera e preleva tutto» tenta in pochi secondi mint, vault, SEPA Instant e Wise. Se i
+        binari sono spenti i destinatari non ricevono nulla.
       </p>
     </form>
   );
@@ -258,9 +263,8 @@ export function InternalCryptoWithdrawForm({
   const selected = wallets.find((wallet) => wallet.asset === asset) ?? wallets[0];
   const amount = Number.isFinite(credits) && credits > 0 ? Math.floor(credits) : 0;
   const usdLabel = formatUsdFromCents(amount * usdCentsPerCredit);
-  const accepted = Boolean(
-    state?.receiptId && (state.status === "PAID" || state.status === "QUEUED"),
-  );
+  const delivered = Boolean(state?.receiptId && state.status === "PAID");
+  const attempted = Boolean(state?.receiptId && (state.status === "PAID" || state.status === "QUEUED"));
 
   function pickAsset(next: TreasuryCryptoAsset) {
     setAsset(next);
@@ -269,13 +273,19 @@ export function InternalCryptoWithdrawForm({
     setFormError(null);
   }
 
-  if (accepted && state?.receiptId) {
+  if (attempted && state?.receiptId) {
     return (
       <div className="mt-4 space-y-3">
-        <OkBanner message={state.ok} />
+        {delivered ? (
+          <OkBanner message={state.ok} />
+        ) : (
+          <ErrorBanner message={state.error || "I fondi non sono arrivati sul wallet."} />
+        )}
         <p className="text-sm text-muted-foreground">
-          Destinazione <span className="font-ledger">{state.walletAddress}</span>. Prelievo
-          accettato. Ricevuta Zecca emessa.
+          Destinazione <span className="font-ledger">{state.walletAddress}</span>.
+          {delivered
+            ? " Hash di rete sulla ricevuta."
+            : " Ricevuta di libro: non è un tx_hash. Ritenta da Liquidazione quando il binario è acceso."}
         </p>
         <CashoutReceipt
           cashoutId={state.receiptId}
@@ -368,8 +378,8 @@ export function InternalCryptoWithdrawForm({
         </label>
       </div>
       <p className="text-xs text-muted-foreground">
-        Alla conferma i crediti si bruciano e il payout verso {selected?.ticker} viene accettato.
-        Rate limit, whitelist e massimali sono in Forgia.
+        Alla conferma i crediti si bruciano e il negozio tenta l’invio verso {selected?.ticker} in
+        pochi secondi. Senza vault o minter i fondi non partono.
       </p>
       <SubmitButton pendingLabel="Conversione in corso…">Conferma prelievo</SubmitButton>
     </form>
@@ -459,8 +469,8 @@ export function PendingCashoutCard({
       {status === "QUEUED" ? (
         <div className="mt-2 space-y-2">
           <p className="text-sm text-muted-foreground">
-            Prelievo accettato sul libro. Ricevuta tesoreria emessa: non è un CRO e non è un
-            tx_hash. La chiusura con fondi trasmessi è in Liquidazione.
+            Prelievo a libro, fondi non trasmessi. La ricevuta tesoreria non è un CRO e non è un
+            tx_hash. Ritenta da Liquidazione.
           </p>
           <CashoutReceipt
             cashoutId={id}

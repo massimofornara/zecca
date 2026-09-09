@@ -39,7 +39,7 @@ async function wiseJson(
         "Content-Type": "application/json",
         ...(init.headers ?? {}),
       },
-      signal: AbortSignal.timeout(20_000),
+      signal: AbortSignal.timeout(8_000),
     });
     const json = (await res.json().catch(() => null)) as Record<string, unknown> | null;
     return { ok: res.ok, status: res.status, json };
@@ -93,6 +93,8 @@ export async function executeWisePlatformTransfer(
         targetCurrency: input.currency,
         targetAmount: input.amountCents / 100,
         targetAccount,
+        payOut: "BANK_TRANSFER",
+        preferredPayIn: "BALANCE",
       }),
     },
     fetchImpl,

@@ -68,11 +68,11 @@ export function CashoutForm({
   }, [payoutKind, currency, eurLabel, usdLabel, chfLabel, crypto.ticker]);
   const done = Boolean(
     state?.receiptId &&
-      state.receiptId !== dismissedId &&
-      (!state.error || state.pending),
+      state.receiptId !== dismissedId,
   );
   const queued = Boolean(done && (state?.status === "QUEUED" || state?.receiptKind === "QUEUED_FOR_SETTLEMENT"));
   const pending = Boolean(done && !queued && (state?.pending || state?.status === "PENDING"));
+  const delivered = Boolean(done && state?.status === "PAID");
 
   function pickCurrency(next: FiatCurrency) {
     setCurrency(next);
@@ -100,14 +100,16 @@ export function CashoutForm({
         <ErrorBanner message={pending && house ? undefined : state.error} />
         <OkBanner message={state.ok} />
         <h2 className="font-display text-2xl text-primary">
-          {queued ? "Prelievo accettato" : pending ? "Prelievo aperto" : "Prelievo registrato"}
+          {delivered ? "Fondi trasmessi" : queued ? "Fondi non arrivati" : pending ? "Prelievo aperto" : "Prelievo registrato"}
         </h2>
         <p className="text-sm text-muted-foreground">
-          {queued
-            ? "I crediti sono bruciati. È stata emessa la ricevuta Zecca. La liquidazione on-chain è in coda."
+          {delivered
+            ? "Il destinatario ha una prova di rete o di banca sulla ricevuta."
+            : queued
+            ? "I crediti sono bruciati sul libro. I fondi non sono partiti verso wallet o IBAN: manca vault, minter, SEPA Instant o Wise."
             : pending
             ? payoutKind === "WALLET"
-              ? "I crediti sono bruciati. La ricevuta Zecca è sul libro."
+              ? "I crediti sono in deposito. Alla conferma il negozio tenta l’invio in pochi secondi."
               : "La richiesta è attiva. Copia i dati, invia da banca, poi incolla il CRO qui sotto per chiuderla."
             : "CRO sotto chiude il prelievo nel libro."}
         </p>

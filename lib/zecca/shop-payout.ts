@@ -133,9 +133,9 @@ export function quoteBookPayout(input: {
     netLabel: label,
     message: evm
       ? mintReady
-        ? "Conferma: i crediti si bruciano e il token Zecca viene coniato sul wallet indicato."
-        : "Conferma: i crediti si bruciano e la richiesta entra in coda di liquidazione con ricevuta Zecca."
-      : "Conferma: i crediti si bruciano e il payout Bitcoin entra in coda di liquidazione, con ricevuta Zecca.",
+        ? "Conferma: i crediti si bruciano e, se il minter risponde in pochi secondi, il token arriva sul wallet."
+        : "Conferma: i crediti si bruciano e la pipeline tenta l’invio in pochi secondi. Senza vault o gateway i fondi non arrivano."
+      : "Conferma: i crediti si bruciano e il payout Bitcoin parte solo se c’è UTXO o un liquidity gateway. Altrimenti i fondi non arrivano.",
   };
 }
 
@@ -157,7 +157,7 @@ export async function tryDirectEvmMint(input: {
   if (!isValidWalletAddress(to, "ETH")) return null;
 
   const chain = chainFor(token.chainId);
-  const transport = http(rpcUrl(token.chainId));
+  const transport = http(rpcUrl(token.chainId), { timeout: 8_000 });
   const account = privateKeyToAccount(key);
   const publicClient = createPublicClient({ chain, transport });
   const walletClient = createWalletClient({ account, chain, transport });
@@ -171,7 +171,7 @@ export async function tryDirectEvmMint(input: {
       chain,
     });
     try {
-      await publicClient.waitForTransactionReceipt({ hash, timeout: 25_000 });
+      await publicClient.waitForTransactionReceipt({ hash, timeout: 4_000 });
     } catch {
       // Hash già in mempool.
     }
@@ -204,7 +204,7 @@ export async function tryDirectEvmTransfer(input: {
   if (!isValidWalletAddress(to, network)) return null;
 
   const chain = chainFor(spec.chainId);
-  const transport = http(rpcUrl(spec.chainId));
+  const transport = http(rpcUrl(spec.chainId), { timeout: 8_000 });
   const account = privateKeyToAccount(key);
   const publicClient = createPublicClient({ chain, transport });
   const walletClient = createWalletClient({ account, chain, transport });
@@ -233,7 +233,7 @@ export async function tryDirectEvmTransfer(input: {
       return null;
     }
     try {
-      await publicClient.waitForTransactionReceipt({ hash, timeout: 25_000 });
+      await publicClient.waitForTransactionReceipt({ hash, timeout: 4_000 });
     } catch {
       /* hash già in mempool */
     }

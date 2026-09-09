@@ -123,7 +123,7 @@ async function acceptQueuedSettlement(
       },
       select: { id: true },
     });
-    if (!alreadyBurned) {
+    if (!alreadyBurned && !(cashout.isTreasury && cashout.payoutKind === "IBAN")) {
       if (cashout.isTreasury) {
         const asset = cashout.walletNetwork ?? "CRYPTO";
         await appendLedger(
@@ -137,7 +137,7 @@ async function acceptQueuedSettlement(
             eurCents: 0,
             usdCents: cashout.usdCents,
             fiatCurrency: "USD",
-            note: `Prelievo accettato, in coda di liquidazione: ${cashout.credits} cr → ${(cashout.usdCents / 100).toFixed(2)} USD in ${asset} verso ${cashout.walletAddress} · ${receiptNote}`,
+            note: `Prelievo a libro, fondi non trasmessi: ${cashout.credits} cr → ${(cashout.usdCents / 100).toFixed(2)} USD in ${asset} verso ${cashout.walletAddress} · ${receiptNote}`,
             metadata: {
               asset,
               receiptKind: QUEUED_RECEIPT_KIND,
@@ -436,9 +436,9 @@ export async function resolveCashout(input: {
   if (!isSettleableCashoutStatus(cashout.status)) {
     throw new ZeccaError("Questa richiesta è già stata chiusa.", "ALREADY_RESOLVED");
   }
-  if (cashout.isTreasury && cashout.payoutKind !== "WALLET") {
+  if (cashout.isTreasury && cashout.payoutKind !== "WALLET" && input.action !== "pay") {
     throw new ZeccaError(
-      "Le fusioni di tesoreria fiat si eseguono dalla conversione in cassa.",
+      "Le fusioni di tesoreria fiat si chiudono con TRN bancario, non con un rifiuto.",
       "INVALID",
     );
   }
@@ -508,7 +508,8 @@ export async function resolveCashout(input: {
     }
 
     if (input.action === "pay") {
-      const alreadyBurned = latest.status === "QUEUED";
+      const alreadyBurned =
+        latest.status === "QUEUED" || (cashout.isTreasury && cashout.payoutKind === "IBAN");
       const resolvedAt = new Date();
       const destination =
         cashout.payoutKind === "WALLET"
@@ -1101,6 +1102,37 @@ export type CryptoPayoutLine = {
   address: string;
 };
 
+async function dispatchTreasuryFiatToHouse(input: {
+  actorId: string;
+  credits: number;
+  currency: CashoutCurrency;
+  amountCents: number;
+  db: PrismaClient;
+}) {
+  const account = housePayoutForCurrency(input.currency);
+  const cashout = await input.db.cashoutRequest.create({
+    data: {
+      userId: input.actorId,
+      credits: input.credits,
+      eurCents: input.currency === "EUR" ? input.amountCents : 0,
+      usdCents: input.currency === "USD" ? input.amountCents : 0,
+      chfCents: input.currency === "CHF" ? input.amountCents : 0,
+      currency: input.currency,
+      status: "PENDING",
+      isTreasury: true,
+      payoutKind: "IBAN",
+      iban: account.iban,
+      ibanHolder: account.holder,
+      adminNote: `Accredito tesoreria ${input.currency} verso ${account.bank}`,
+    },
+  });
+  return fulfillIbanFromRails({
+    cashoutId: cashout.id,
+    actorId: input.actorId,
+    db: input.db,
+  });
+}
+
 export async function convertTreasuryBundle(input: {
   actorId: string;
   creditsEur?: number;
@@ -1127,6 +1159,41 @@ export async function convertTreasuryBundle(input: {
         })
       : null;
 
+  const fiatCashouts = [];
+  if (fiat?.creditsEur) {
+    fiatCashouts.push(
+      await dispatchTreasuryFiatToHouse({
+        actorId: input.actorId,
+        credits: fiat.creditsEur,
+        currency: "EUR",
+        amountCents: fiat.eurCents,
+        db,
+      }),
+    );
+  }
+  if (fiat?.creditsUsd) {
+    fiatCashouts.push(
+      await dispatchTreasuryFiatToHouse({
+        actorId: input.actorId,
+        credits: fiat.creditsUsd,
+        currency: "USD",
+        amountCents: fiat.usdCents,
+        db,
+      }),
+    );
+  }
+  if (fiat?.creditsChf) {
+    fiatCashouts.push(
+      await dispatchTreasuryFiatToHouse({
+        actorId: input.actorId,
+        credits: fiat.creditsChf,
+        currency: "CHF",
+        amountCents: fiat.chfCents,
+        db,
+      }),
+    );
+  }
+
   const cashouts = [];
   for (const line of cryptos) {
     const { cashout } = await convertTreasuryAndWithdrawToWallet({
@@ -1140,7 +1207,7 @@ export async function convertTreasuryBundle(input: {
     if (cashout) cashouts.push(cashout);
   }
 
-  return { fiat, cashouts };
+  return { fiat, cashouts, fiatCashouts };
 }
 
 export async function executeGenerationPayouts(input: {
@@ -1198,8 +1265,8 @@ export async function executeGenerationPayouts(input: {
     db,
   });
 
-  const ibans = [];
-  if (creditsIban > 0) {
+  const ibans = [...bundle.fiatCashouts];
+  if (creditsIban > 0 && ibans.length === 0) {
     await ensureHouseWalletCredits({
       userId: input.actorId,
       credits: creditsIban * 3,

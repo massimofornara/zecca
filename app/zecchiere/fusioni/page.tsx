@@ -30,9 +30,9 @@ export default async function FusioniPage() {
     <div>
       <h1 className="font-display text-4xl text-primary">Fusioni</h1>
       <p className="mt-2 text-muted-foreground">
-        I crediti di tesoreria diventano euro, dollari, franchi svizzeri e crypto. Alla conferma
-        crypto i crediti si bruciano e il payout viene accettato sul libro. L’accredito bancario e
-        l’hash on-chain si chiudono in{" "}
+        Alla conferma la pipeline tenta in pochi secondi l’invio verso UniCredit, Wise e i wallet.
+        EXECUTED solo con TRN o tx_hash. Senza binario i fondi non arrivano: resta la ricevuta di
+        libro, visibile in{" "}
         <a href="/zecchiere/liquidazione" className="text-ember underline-offset-2 hover:underline">
           Liquidazione
         </a>
@@ -43,9 +43,9 @@ export default async function FusioniPage() {
       <section className="metal-frame mt-8 rounded-md bg-card p-5">
         <h2 className="font-display text-2xl text-primary">Conversione in cassa e invio crypto</h2>
         <p className="mt-1 text-sm text-muted-foreground">
-          I crediti ancora in tesoreria ({formatCredits(treasury)}) possono diventare euro, dollari
-          o crypto. Per la crypto indica il wallet: alla conferma i crediti si bruciano e il
-          prelievo viene accettato.
+          I crediti ancora in tesoreria ({formatCredits(treasury)}) partono verso IBAN casa e
+          wallet. Se SEPA Instant, Wise, minter o vault sono spenti, i destinatari non ricevono
+          nulla in questi secondi.
         </p>
         <TreasuryConvertForm
           treasury={treasury}

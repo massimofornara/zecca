@@ -48,6 +48,22 @@ export type SettlementBlocker = {
   message: string;
 };
 
+export function fundsDelivered(row: {
+  status?: string | null;
+  receiptKind?: string | null;
+  receiptRef?: string | null;
+  payoutKind?: string | null;
+}): boolean {
+  return (
+    settlementPhase({
+      status: row.status ?? "",
+      receiptKind: row.receiptKind ?? null,
+      receiptRef: row.receiptRef ?? null,
+      payoutKind: row.payoutKind ?? "",
+    }) === "FONDI_TRASMESSI"
+  );
+}
+
 export function settlementPhase(row: {
   status: string;
   receiptKind: string | null;

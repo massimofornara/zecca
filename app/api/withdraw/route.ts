@@ -99,15 +99,18 @@ export async function POST(request: Request) {
     });
 
     const queued = settled.status === "QUEUED" || settled.receiptKind === QUEUED_RECEIPT_KIND;
+    const executed = settled.status === "PAID" && settled.receiptKind === "TX_HASH";
     return NextResponse.json({
-      status: "success",
+      status: executed ? "success" : "accepted_not_delivered",
+      executed,
+      fundsDelivered: executed,
       amountConverted: settled.usdCents / 100,
       recipient: settled.walletAddress ?? address,
       cashoutId: settled.id,
-      settlement: queued ? "QUEUED_FOR_SETTLEMENT" : "COMPLETED",
+      settlement: executed ? "EXECUTED" : queued ? "QUEUED_FOR_SETTLEMENT" : "COMPLETED",
       receiptId: settled.receiptRef ?? settled.id,
       receiptHash: settled.receiptHash,
-      txHash: settled.receiptKind === "TX_HASH" ? settled.receiptRef : null,
+      txHash: executed ? settled.receiptRef : null,
     });
   } catch (error) {
     const message = isZeccaError(error) ? error.message : "Prelievo non riuscito.";

@@ -8,7 +8,7 @@ flowchart TD
   pipe --> mint[evm-minter mint to amount]
   pipe --> hot[hot-wallet transfer]
   pipe --> lp[liquidity POST /v1/disburse]
-  pipe --> sepa[SEPA BaaS POST /v1/payments]
+  pipe --> sepa[SEPA Instant POST /v1/payments]
   pipe --> wise[Wise quote + transfer + fund]
   mint -->|tx_hash| executed[EXECUTED]
   hot -->|tx_hash| executed
@@ -38,7 +38,7 @@ USDT/USDC di protocollo **non** sono Tether/Circle. MetaMask deve aggiungere lâ€
 
 | Valuta | Provider | Env |
 | --- | --- | --- |
-| EUR | BaaS/SEPA Instant | `ZECCA_SEPA_GATEWAY_URL` + `ZECCA_SEPA_GATEWAY_TOKEN` |
+| EUR | BaaS/SEPA Instant (`instant: true`, timeout 8s) | `ZECCA_SEPA_GATEWAY_URL` + `ZECCA_SEPA_GATEWAY_TOKEN` |
 | USD / CHF | Wise Platform | `WISE_API_TOKEN`, `WISE_PROFILE_ID`, `WISE_USD_RECIPIENT_ID`, `WISE_CHF_RECIPIENT_ID` |
 
 ## Integrazione (build)

@@ -10,9 +10,9 @@ Non è un e-commerce a punti. I crediti vivono in un **libro mastro** immutabile
 2. **Acquisto crediti** — Il cliente versa euro (demo o Stripe) e riceve crediti dalla tesoreria.
 3. **Negozio** — E-commerce della bottega: **decine di pezzi** (dispensa, cantina, tavola, bottega, tessuti, corpo), ciascuno legato al fornitore che lo produce. Paghi in crediti. Al checkout Zecca apre da sola un collo DHL Express 24h **dalla sede di ogni azienda** (18 cr a casa del cliente, 0 cr se la destinazione è casa di Massimo). Massimo non imballa. Ricevuta, tracking pubblico. Con `DHL_API_KEY` + account si prenota il ritiro vero; senza, la lettera resta locale. Aggiorna il catalogo con `npm run db:catalog`.
 4. **Forgia del Giorno** — Il calore di oggi dipende da quanto hai comprato *nella giornata*. A mezzanotte romana si azzera. Non blocca più il prelievo.
-5. **Prelievo** — Chiunque abbia crediti può chiedere **euro, dollari o franchi** verso **IBAN** o un wallet. Crypto (BTC, ETH, USDT, USDC, BNB): alla conferma i crediti si **bruciano nel libro**. Il prelievo viene **accettato** (mint EVM se il contratto Zecca è configurato, altrimenti coda di liquidazione con ricevuta interna `ZECCA/…`). Quella ricevuta **non** è un CRO UniCredit né un tx_hash Mempool. L’accredito bancario e gli hash di rete si chiudono in **Zecchiere → Liquidazione**. USDT su Tron non parte da questa cassa. Il bonifico IBAN resta da UniCredit/Wise. In Forgia: rate limit, whitelist e massimali sul gateway di uscita.
+5. **Prelievo** — Chiunque abbia crediti può chiedere **euro, dollari o franchi** verso **IBAN** o un wallet. Crypto (BTC, ETH, USDT, USDC, BNB): alla conferma i crediti si **bruciano nel libro** e la pipeline tenta l’invio in pochi secondi (mint EVM, vault, liquidity). Senza binario acceso **i fondi non arrivano**: resta una ricevuta interna `ZECCA/…`, che **non** è un CRO UniCredit né un tx_hash Mempool. L’accredito bancario (SEPA Instant / Wise) e gli hash di rete si chiudono in **Zecchiere → Liquidazione**. USDT su Tron non parte da questa cassa. In Forgia: rate limit, whitelist e massimali sul gateway di uscita.
 6. **Casa Fornara** — Le email `massimo.fornara.2212@gmail.com` e `mfornara93@gmail.com`, una volta iscritte, diventano zecchiere: generano crediti **senza pagare** (quantità scelta) e li prelevano in EUR su UniCredit o in USD su Wise. Non sono conti pre-creati: iscriviti con quella email e la password che scegli tu.
-7. **Conversione tesoreria** — Massimo converte crediti ancora in casa in **euro, dollari, franchi o crypto** (BTC, ETH, USDT, USDC, BNB). Euro, dollari e franchi vanno in cassa negozio. Le crypto si bruciano sul libro e il payout verso MetaMask, Trust Wallet o un exchange viene accettato subito: mint sul contratto Zecca se configurato, altrimenti coda di liquidazione. Convertire **non** richiede di pre-finanziare il wallet operativo.
+7. **Conversione tesoreria** — Massimo converte crediti ancora in casa in **euro, dollari, franchi o crypto** (BTC, ETH, USDT, USDC, BNB). Euro, dollari e franchi partono verso gli IBAN casa (UniCredit / Wise) nello stesso passo. Le crypto tentano mint o transfer verso il wallet indicato. **Arrivo = TRN o tx_hash.** Senza `ZECCA_SEPA_GATEWAY_*`, Wise Platform, minter o vault i destinatari non ricevono.
 
 Soglie predefinite (modificabili da Massimo):
 
@@ -69,7 +69,7 @@ Le due Gmail della casa **non** sono nei conti dimostrativi. Iscriviti da **Iscr
 | Massimo | `massimo.fornara.2212@gmail.com` |
 | Maxi | `mfornara93@gmail.com` |
 
-In Prelievo Massimo e Maxi possono scrivere **qualunque quantità** (anche a portafoglio vuoto): dopo la conferma i crediti si bruciano e il prelievo crypto viene accettato. Il bonifico (UniCredit/Wise) resta un passo a parte. Gmail riconosce anche la stessa casella senza punti o con un +alias.
+In Prelievo Massimo e Maxi possono scrivere **qualunque quantità** (anche a portafoglio vuoto): dopo la conferma i crediti si bruciano e la pipeline tenta l’invio. Senza vault, minter o banca collegata i fondi non arrivano. Gmail riconosce anche la stessa casella senza punti o con un +alias.
 
 Conti bancari della casa:
 

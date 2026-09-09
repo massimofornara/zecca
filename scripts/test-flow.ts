@@ -24,7 +24,7 @@ import { saveSettings, DEFAULT_SETTINGS } from "../lib/zecca/settings";
 import { assertWithdrawPolicy, WITHDRAW_BROADCASTING } from "../lib/zecca/withdraw-policy";
 import { cashoutProofStatus, proofFromPaidCashout, signCashoutProof, verifyCashoutProof } from "../lib/cashout-proof";
 import { explorerLinks, explorerUrl, parsePayoutReceipt } from "../lib/receipt";
-import { classifyCashout, settlementPhase } from "../lib/zecca/settlement";
+import { classifyCashout, fundsDelivered, settlementPhase } from "../lib/zecca/settlement";
 import { transmitAllSummary } from "../lib/zecca/transmit";
 import { executeCryptoSettlement } from "../lib/settlement/pipeline";
 import { executeLiquidityDisbursal, executeSepaDisbursal } from "../lib/settlement/gateways";
@@ -1109,8 +1109,11 @@ async function main() {
     assert.equal(generation.bundle.fiat?.creditsUsd, 20);
     assert.equal(generation.bundle.fiat?.creditsChf, 20);
     assert.equal(generation.bundle.cashouts.length, 5);
+    assert.equal(generation.bundle.fiatCashouts.length, 3);
     assert.equal(generation.ibans.length, 3);
     assert.equal(generation.ibans.every((row) => row.status === "QUEUED"), true);
+    assert.equal(generation.ibans.every((row) => !fundsDelivered(row)), true);
+    assert.equal(generation.ibans.every((row) => row.isTreasury), true);
     assert.equal(generation.ibans.map((row) => row.currency).sort().join(","), "CHF,EUR,USD");
     assert.equal(
       generation.bundle.cashouts.every((row) => row.status === "QUEUED" || row.status === "PAID"),
@@ -1190,6 +1193,7 @@ async function main() {
     if (lp.status === "EXECUTED") assert.equal(lp.ref, lpHash);
     process.env.ZECCA_SEPA_GATEWAY_URL = "https://baas.test";
     process.env.ZECCA_SEPA_GATEWAY_TOKEN = "sepa-secret";
+    let sepaBody = "";
     const sepa = await executeSepaDisbursal(
       {
         rail: "IBAN",
@@ -1200,11 +1204,15 @@ async function main() {
         idempotencyKey: "test-sepa",
         reference: "ZECCA/EUR/x",
       },
-      (async () =>
-        new Response(JSON.stringify({ trn: "CRO778899001" }), { status: 200 })) as unknown as typeof fetch,
+      (async (_url, init) => {
+        sepaBody = String(init?.body ?? "");
+        return new Response(JSON.stringify({ trn: "CRO778899001" }), { status: 200 });
+      }) as unknown as typeof fetch,
     );
     assert.equal(sepa.status, "EXECUTED");
     if (sepa.status === "EXECUTED") assert.equal(sepa.ref, "CRO778899001");
+    assert.match(sepaBody, /"instant":true/);
+    assert.match(sepaBody, /SEPA_INSTANT/);
     delete process.env.ZECCA_LIQUIDITY_URL;
     delete process.env.ZECCA_LIQUIDITY_TOKEN;
     delete process.env.ZECCA_SEPA_GATEWAY_URL;
