@@ -22,6 +22,7 @@ export type CashoutProof = {
   createdAt: string;
   resolvedAt: string;
   status: "PENDING" | "PAID" | "REJECTED";
+  isTreasury?: boolean;
 };
 
 function signingSecret() {
@@ -61,6 +62,7 @@ export function proofFromPaidCashout(input: {
   createdAt: Date | string;
   resolvedAt: Date | string | null;
   status?: string | null;
+  isTreasury?: boolean | null;
 }): CashoutProof {
   const createdAt = input.createdAt instanceof Date ? input.createdAt.toISOString() : input.createdAt;
   const resolvedAt =
@@ -93,6 +95,7 @@ export function proofFromPaidCashout(input: {
         : input.receiptHash
           ? "PAID"
           : "PENDING",
+    isTreasury: Boolean(input.isTreasury),
   };
 }
 

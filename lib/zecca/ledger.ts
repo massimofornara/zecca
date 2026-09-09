@@ -149,7 +149,17 @@ export async function totals(db: PrismaClient = defaultPrisma) {
     _sum: { amountCredits: true },
   });
   const cashedOut = await db.ledgerEntry.aggregate({
-    where: { type: { in: ["CASHOUT_PAID", "TREASURY_CASHOUT", "TREASURY_CONVERT_TO_EUR", "TREASURY_CONVERT_TO_USD"] } },
+    where: {
+      type: {
+        in: [
+          "CASHOUT_PAID",
+          "TREASURY_CASHOUT",
+          "TREASURY_CONVERT_TO_EUR",
+          "TREASURY_CONVERT_TO_USD",
+          "TREASURY_CONVERT_TO_CRYPTO",
+        ],
+      },
+    },
     _sum: { amountCredits: true },
   });
 

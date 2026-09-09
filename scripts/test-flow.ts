@@ -13,6 +13,7 @@ import {
   materializeCashoutFromProof,
   requestAndFulfillCashout,
   requestCustomerCashout,
+  requestInternalCryptoWithdraw,
   resolveCashout,
 } from "../lib/zecca/cashout";
 import { cashoutProofStatus, proofFromPaidCashout, signCashoutProof, verifyCashoutProof } from "../lib/cashout-proof";
@@ -20,7 +21,7 @@ import { explorerLinks, explorerUrl } from "../lib/receipt";
 import { encodeErc20Transfer, nativeWeiFromUsdCents, tokenAmountFromUsdCents } from "../lib/evm-send";
 import { isShopEvmConfigured, shopPayoutConfigError, shopWalletAddress } from "../lib/zecca/shop-payout";
 import { shopBtcAddress } from "../lib/zecca/btc-payout";
-import { convertTreasuryToShopFiat, shopFiatBalances } from "../lib/zecca/convert";
+import { convertTreasuryToShopCash, convertTreasuryToShopFiat, shopCryptoBalances, shopFiatBalances } from "../lib/zecca/convert";
 import { pocketBalance, treasuryBalance } from "../lib/zecca/ledger";
 import { getReserveReport } from "../lib/zecca/reserves";
 import { DEFAULT_SETTINGS } from "../lib/zecca/settings";
@@ -400,6 +401,70 @@ async function main() {
     assert.equal(convertRows[1].amountCredits, 2000);
     assert.equal(convertRows[1].usdCents, 216000);
 
+    const beforeCrypto = await treasuryBalance(db);
+    const cryptoConverted = await convertTreasuryToShopCash({
+      actorId: admin.id,
+      creditsCrypto: 1000,
+      cryptoAsset: "BTC",
+      db,
+    });
+    assert.equal(cryptoConverted.creditsCrypto, 1000);
+    assert.equal(cryptoConverted.cryptoAsset, "BTC");
+    assert.equal(cryptoConverted.cryptoUsdCents, 108000);
+    assert.equal(await treasuryBalance(db), beforeCrypto - 1000);
+    const btcBook = await shopCryptoBalances(db);
+    assert.equal(btcBook.BTC.credits, 1000);
+    assert.equal(btcBook.BTC.remainingCredits, 1000);
+    assert.equal(btcBook.BTC.usdCents, 108000);
+    assert.equal(btcBook.ETH.remainingCredits, 0);
+
+    const btcOut = await requestInternalCryptoWithdraw({
+      actorId: admin.id,
+      credits: 400,
+      asset: "BTC",
+      walletAddress: "bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4",
+      shopSend: false,
+      db,
+    });
+    assert.equal(btcOut.status, "PENDING");
+    assert.equal(btcOut.isTreasury, true);
+    assert.equal(btcOut.walletNetwork, "BTC");
+    assert.equal(btcOut.usdCents, 43200);
+    assert.equal((await shopCryptoBalances(db)).BTC.remainingCredits, 600);
+
+    await assert.rejects(
+      () =>
+        requestInternalCryptoWithdraw({
+          actorId: admin.id,
+          credits: 601,
+          asset: "BTC",
+          walletAddress: "bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4",
+          shopSend: false,
+          db,
+        }),
+      /wallet interno BTC ha 600/,
+    );
+
+    const ethConverted = await convertTreasuryToShopCash({
+      actorId: admin.id,
+      creditsCrypto: 200,
+      cryptoAsset: "ETH",
+      db,
+    });
+    assert.equal(ethConverted.cryptoUsdCents, 21600);
+    const booksAfterEth = await shopCryptoBalances(db);
+    assert.equal(booksAfterEth.ETH.remainingCredits, 200);
+    assert.equal(booksAfterEth.BTC.remainingCredits, 600);
+
+    const rejected = await resolveCashout({
+      cashoutId: btcOut.id,
+      actorId: admin.id,
+      action: "reject",
+      db,
+    });
+    assert.equal(rejected.status, "REJECTED");
+    assert.equal((await shopCryptoBalances(db)).BTC.remainingCredits, 1000);
+
     const payer = await db.user.create({
       data: {
         email: "payer@test.local",
@@ -721,6 +786,7 @@ async function main() {
 
     console.log("Flusso Zecca: conio → crediti → bottega DHL + ritiro in sede → prelievo IBAN/wallet. OK.");
     console.log("Conversione tesoreria 3000 cr→EUR e 2000 cr→USD in cassa negozio. OK.");
+    console.log("Conversione tesoreria 1000 cr→BTC e 200 cr→ETH in wallet interni. OK.");
     console.log("Bonifico SEPA in ingresso senza Stripe/webhook. OK.");
     console.log("Casa Fornara: generazione senza pagamento + prelievo IBAN EUR/USD. OK.");
   } finally {

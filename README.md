@@ -12,7 +12,7 @@ Non è un e-commerce a punti. I crediti vivono in un **libro mastro** immutabile
 4. **Forgia del Giorno** — Il calore di oggi dipende da quanto hai comprato *nella giornata*. A mezzanotte romana si azzera. Non blocca più il prelievo.
 5. **Prelievo** — Chiunque abbia crediti può chiedere **euro o dollari** verso **IBAN** o un wallet. Crypto (BTC, ETH, USDT, USDC, BNB): i crediti si **convertono** nella crypto scelta, il negozio crea la transazione e la rete l’hash (Mempool, Etherscan, BscScan, Blockscout). Il wallet indicato riceve: non firma. USDT su Tron non parte da questa cassa. Il bonifico IBAN resta da UniCredit/Wise.
 6. **Casa Fornara** — Le email `massimo.fornara.2212@gmail.com` e `mfornara93@gmail.com`, una volta iscritte, diventano zecchiere: generano crediti **senza pagare** (quantità scelta) e li prelevano in EUR su UniCredit o in USD su Wise. Non sono conti pre-creati: iscriviti con quella email e la password che scegli tu.
-7. **Conversione tesoreria** — Massimo converte crediti ancora in casa in **euro e/o dollari della cassa negozio**. È un movimento contabile: non è un prelievo personale e non accredita un conto bancario.
+7. **Conversione tesoreria** — Massimo converte crediti ancora in casa in **euro, dollari o crypto** (BTC, ETH, USDT, USDC, BNB). Euro e dollari vanno in cassa contabile; le crypto vanno nei **wallet interni** del libro. Da lì Massimo preleva verso MetaMask, Trust Wallet o un exchange: il negozio crea l’hash, chi riceve non firma. Non è un accredito bancario e **non** carica Mempool o Etherscan.
 
 Soglie predefinite (modificabili da Massimo):
 
@@ -120,9 +120,9 @@ Su Vercel il SQLite in `/tmp` è per istanza. Senza `DATABASE_URL` Postgres il l
 
 1. **Zecchiere → Conio**: quantità libera. I crediti vanno in tesoreria crediti. Coniare **non** crea saldo bancario.
 2. **Zecchiere → Forgia**: 1 cr = X EUR e 1 cr = Y USD (predefiniti 1,00 e 1,08).
-3. **Zecchiere → Tesoreria** (o Fusioni): indica quanti crediti diventare euro e quanti dollari. Esempio: 10.000 cr coniato, 3.000 → EUR e 2.000 → USD: tesoreria crediti 5.000; cassa negozio +EUR e +USD; 5.000 cr restano crediti.
-4. Il libro registra `TREASURY_CONVERT_TO_EUR` e `TREASURY_CONVERT_TO_USD`. I pentolini fiat si calcolano da quelle righe.
-5. I clienti (e la casa) prelevano in **EUR o USD** verso IBAN (bonifico a mano) oppure in crypto dal wallet del negozio.
+3. **Zecchiere → Tesoreria** (o Fusioni): indica quanti crediti diventare euro, dollari o crypto. Esempio: 10.000 cr coniato, 3.000 → EUR, 2.000 → USD e 1.000 → BTC: tesoreria crediti 4.000; cassa negozio +EUR e +USD; wallet interno Bitcoin +1.000 cr; 4.000 cr restano crediti.
+4. Il libro registra `TREASURY_CONVERT_TO_EUR`, `TREASURY_CONVERT_TO_USD` e `TREASURY_CONVERT_TO_CRYPTO`. I pentolini fiat e i wallet interni si calcolano da quelle righe. Un prelievo dal wallet interno (`TREASURY_CRYPTO_WITHDRAW`) manda i fondi al destinatario dalla **cassa di rete** (saldo on-chain già presente).
+5. I clienti (e la casa) prelevano in **EUR o USD** verso IBAN (bonifico a mano) oppure in crypto dal wallet del negozio. Massimo può anche prelevare dai wallet interni in Tesoreria.
 
 `npm run test:flow` include mint → conversione 3.000 cr in EUR e 2.000 cr in USD e controlla saldi e libro.
 
@@ -132,7 +132,7 @@ Analisi della monetizzazione interna, on/off-ramp e rischi di conio scoperto: [`
 
 ## Libro mastro
 
-Ogni movimento è una riga: `MINT`, `HOUSE_GRANT`, `PURCHASE_CREDITS`, `SPEND_ON_ORDER`, `CASHOUT_REQUEST`, `CASHOUT_PAID`, `CASHOUT_REJECTED`, `TREASURY_CASHOUT`, `TREASURY_CONVERT_TO_EUR`, `TREASURY_CONVERT_TO_USD`, `RATE_CHANGE`. Tesoreria crediti e casse fiat si calcolano da lì.
+Ogni movimento è una riga: `MINT`, `HOUSE_GRANT`, `PURCHASE_CREDITS`, `SPEND_ON_ORDER`, `CASHOUT_REQUEST`, `CASHOUT_PAID`, `CASHOUT_REJECTED`, `TREASURY_CASHOUT`, `TREASURY_CONVERT_TO_EUR`, `TREASURY_CONVERT_TO_USD`, `TREASURY_CONVERT_TO_CRYPTO`, `TREASURY_CRYPTO_WITHDRAW`, `RATE_CHANGE`. Tesoreria crediti, casse fiat e wallet interni crypto si calcolano da lì.
 
 ## Test del flusso
 
@@ -140,7 +140,7 @@ Ogni movimento è una riga: `MINT`, `HOUSE_GRANT`, `PURCHASE_CREDITS`, `SPEND_ON
 npm run test:flow
 ```
 
-Prova in isolamento (SQLite temporaneo): conio → acquisto crediti → ordine → prelievo IBAN e wallet → conversione tesoreria in EUR e USD nella cassa negozio → generazione casa senza pagamento e prelievo IBAN in USD.
+Prova in isolamento (SQLite temporaneo): conio → acquisto crediti → ordine → prelievo IBAN e wallet → conversione tesoreria in EUR, USD e crypto nei wallet interni → generazione casa senza pagamento e prelievo IBAN in USD.
 
 ## Stack
 

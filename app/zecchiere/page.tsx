@@ -7,12 +7,13 @@ import { getLiveReport } from "@/lib/live";
 import { formatReserveRatio, getReserveReport } from "@/lib/zecca/reserves";
 import { getSettings } from "@/lib/zecca/settings";
 import { getShopNetworkVault } from "@/lib/zecca/shop-vault";
-import { TreasuryConvertForm } from "@/components/zecchiere/FusioniForms";
+import { TreasuryConvertForm, InternalCryptoWithdrawForm } from "@/components/zecchiere/FusioniForms";
+import { shopInternalCryptoWallets } from "@/lib/zecca/convert";
 
 export const metadata = { title: "Tesoreria" };
 
 export default async function TesoreriaPage() {
-  const [flow, pending, loyal, reserve, settings, live, vault] = await Promise.all([
+  const [flow, pending, loyal, reserve, settings, live, vault, internalWallets] = await Promise.all([
     totals(),
     prisma.cashoutRequest.count({ where: { status: "PENDING" } }),
     loyalToday(),
@@ -20,6 +21,7 @@ export default async function TesoreriaPage() {
     getSettings(),
     getLiveReport(),
     getShopNetworkVault(),
+    shopInternalCryptoWallets(),
   ]);
 
   return (
@@ -27,17 +29,21 @@ export default async function TesoreriaPage() {
       <p className="text-xs uppercase tracking-[0.28em] text-primary/80">Casa della zecca</p>
       <h1 className="mt-1 font-display text-4xl text-primary">Tesoreria</h1>
       <p className="mt-2 text-muted-foreground">
-        Tesoreria crediti e cassa EUR/USD sono il libro. I bitcoin (e l’ETH) che Massimo invia al
-        wallet di destinazione sono solo quelli della <strong>cassa di rete</strong>, visibili su
-        Mempool e Etherscan. Il prelievo parte da lì: chi riceve non firma.
+        Tesoreria crediti, cassa EUR/USD e wallet interni crypto sono il libro. I bitcoin (e l’ETH)
+        che Massimo invia al wallet di destinazione sono solo quelli della{" "}
+        <strong>cassa di rete</strong>, visibili su Mempool e Etherscan. Il prelievo parte da lì:
+        chi riceve non firma.
       </p>
 
       <section className="metal-frame mt-6 rounded-md bg-card p-5">
         <p className="text-xs uppercase tracking-[0.2em] text-primary/80">Cassa di rete (prelievo crypto)</p>
         <p className="mt-2 text-sm text-muted-foreground">
-          Massimo usa questo saldo on-chain in <Link href="/fusione" className="underline hover:text-primary">Prelievo</Link>:
-          in pochi secondi parte verso il wallet indicato. Convertire crediti in tesoreria non
-          aumenta questi numeri.
+          Massimo usa questo saldo on-chain in{" "}
+          <Link href="/fusione" className="underline hover:text-primary">
+            Prelievo
+          </Link>{" "}
+          e dal wallet interno qui sotto: in pochi secondi parte verso MetaMask, Trust Wallet o un
+          exchange. Convertire crediti riempie i wallet interni del libro, non questi numeri.
         </p>
         <div className="mt-4 grid gap-3 sm:grid-cols-2">
           <div>
@@ -65,6 +71,28 @@ export default async function TesoreriaPage() {
             ) : null}
           </div>
         </div>
+      </section>
+
+      <section className="metal-frame mt-6 rounded-md bg-card p-5">
+        <p className="text-xs uppercase tracking-[0.2em] text-primary/80">Wallet interni (libro)</p>
+        <p className="mt-2 text-sm text-muted-foreground">
+          Qui arrivano i crediti convertiti in BTC, ETH, USDT, USDC e BNB. È la stessa cassa del
+          libro degli euro e dei dollari: non è Mempool né Etherscan. Massimo preleva quando vuole
+          verso qualsiasi wallet; l’invio vero usa la cassa di rete sopra.
+        </p>
+        <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+          {internalWallets.map((wallet) => (
+            <div key={wallet.asset}>
+              <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">{wallet.label}</p>
+              <p className="font-ledger text-lg text-ember">{wallet.amountLabel}</p>
+              <p className="mt-1 text-xs text-muted-foreground">{formatCredits(wallet.remainingCredits)}</p>
+            </div>
+          ))}
+        </div>
+        <InternalCryptoWithdrawForm
+          wallets={internalWallets}
+          usdCentsPerCredit={settings.usdCentsPerCredit}
+        />
       </section>
 
       <section className="metal-frame mt-6 rounded-md bg-card p-5">
@@ -150,12 +178,12 @@ export default async function TesoreriaPage() {
         <Coin label="Euro da vendite (stima)" value={formatEurFromCents(flow.eurNetCents)} />
       </div>
       <p className="mt-3 text-xs text-muted-foreground">
-        La cassa negozio EUR/USD cresce solo con la conversione dei crediti di tesoreria. La stima
-        da vendite è un flusso a parte (carte/demo meno fusioni clienti).
+        La cassa negozio EUR/USD e i wallet interni crypto crescono con la conversione dei crediti
+        di tesoreria. La stima da vendite è un flusso a parte (carte/demo meno fusioni clienti).
       </p>
 
       <section className="metal-frame mt-8 rounded-md bg-card p-5">
-        <h2 className="font-display text-2xl text-primary">Converti crediti in cassa</h2>
+        <h2 className="font-display text-2xl text-primary">Converti crediti in cassa e crypto</h2>
         <TreasuryConvertForm
           treasury={flow.treasury}
           eurCentsPerCredit={settings.eurCentsPerCredit}
@@ -166,7 +194,8 @@ export default async function TesoreriaPage() {
       <section className="paper mt-10 rounded-md p-6">
         <h2 className="font-display text-2xl">Flusso di denaro</h2>
         <p className="mt-1 text-sm opacity-75">
-          Cassa negozio (da conversione) e flusso vendite/fusioni clienti restano distinti.
+          Cassa negozio (da conversione) e flusso vendite/fusioni clienti restano distinti. I
+          wallet interni crypto stanno nel riquadro sopra, non in queste barre euro.
         </p>
         <div className="mt-6 grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
           <div>

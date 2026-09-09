@@ -42,6 +42,8 @@ export const LEDGER_LABELS: Record<string, string> = {
   TREASURY_CASHOUT: "Fusione tesoreria",
   TREASURY_CONVERT_TO_EUR: "Conversione tesoreria → EUR",
   TREASURY_CONVERT_TO_USD: "Conversione tesoreria → USD",
+  TREASURY_CONVERT_TO_CRYPTO: "Conversione tesoreria → crypto",
+  TREASURY_CRYPTO_WITHDRAW: "Prelievo wallet interno",
   RATE_CHANGE: "Cambio tasso",
 };
 

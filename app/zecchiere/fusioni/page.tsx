@@ -18,7 +18,7 @@ export default async function FusioniPage() {
       include: { user: true },
     }),
     prisma.cashoutRequest.findMany({
-      where: { status: { not: "PENDING" }, isTreasury: false },
+      where: { status: { not: "PENDING" } },
       orderBy: { createdAt: "desc" },
       take: 20,
       include: { user: true },
@@ -31,16 +31,16 @@ export default async function FusioniPage() {
     <div>
       <h1 className="font-display text-4xl text-primary">Fusioni</h1>
       <p className="mt-2 text-muted-foreground">
-        Per la crypto i crediti si convertono e il negozio crea l’hash (Mempool, Etherscan, BscScan,
-        Blockscout). Il wallet indicato riceve, senza firmare. Il bonifico IBAN lo disponi tu da
-        UniCredit o Wise, poi chiudi con il CRO.
+        Per la crypto i crediti si convertono in tesoreria nei wallet interni, poi il negozio
+        crea l’hash (Mempool, Etherscan, BscScan, Blockscout). Il wallet indicato riceve, senza
+        firmare. Il bonifico IBAN lo disponi tu da UniCredit o Wise, poi chiudi con il CRO.
       </p>
 
       <section className="metal-frame mt-8 rounded-md bg-card p-5">
-        <h2 className="font-display text-2xl text-primary">Conversione in cassa negozio</h2>
+        <h2 className="font-display text-2xl text-primary">Conversione in cassa e wallet interni</h2>
         <p className="mt-1 text-sm text-muted-foreground">
-          I crediti ancora in tesoreria ({formatCredits(treasury)}) possono diventare euro e/o
-          dollari della cassa contabile. Non è un prelievo personale e non è un bonifico.
+          I crediti ancora in tesoreria ({formatCredits(treasury)}) possono diventare euro, dollari
+          o crypto nei wallet interni. Non è un bonifico e non carica Mempool o Etherscan.
         </p>
         <TreasuryConvertForm
           treasury={treasury}
@@ -60,7 +60,7 @@ export default async function FusioniPage() {
             <PendingCashoutCard
               key={r.id}
               id={r.id}
-              name={r.user?.name ?? "Cliente"}
+              name={r.isTreasury ? `Wallet interno ${r.walletNetwork ?? "crypto"}` : (r.user?.name ?? "Cliente")}
               email={r.user?.email ?? ""}
               credits={r.credits}
               eurCents={r.eurCents}
@@ -84,7 +84,7 @@ export default async function FusioniPage() {
           <li key={r.id} className="px-4 py-3 text-sm">
             <div className="flex items-center justify-between gap-3">
               <span>
-                {r.isTreasury ? "Tesoreria" : r.user?.name} · {formatCredits(r.credits)}
+                {r.isTreasury ? `Wallet interno ${r.walletNetwork ?? ""}` : r.user?.name} · {formatCredits(r.credits)}
                 {r.status === "PAID"
                   ? r.currency === "USD"
                     ? ` → ${formatFiatFromCents(r.usdCents, "USD")}`

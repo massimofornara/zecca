@@ -7,13 +7,15 @@ import { mintCredits } from "@/lib/zecca/mint";
 import {
   fulfillWalletCashoutFromShop,
   materializeCashoutFromProof,
+  requestInternalCryptoWithdraw,
   resolveCashout,
 } from "@/lib/zecca/cashout";
 import { shopPayoutConfigError } from "@/lib/zecca/shop-payout";
 import { findIncomingCryptoTx } from "@/lib/chain-receipt";
 import { proofFromPaidCashout, verifyCashoutProof } from "@/lib/cashout-proof";
 import { findRememberedProof, rememberCashoutProof } from "@/lib/cashout-proof-store";
-import { convertTreasuryToShopFiat } from "@/lib/zecca/convert";
+import { convertTreasuryToShopCash } from "@/lib/zecca/convert";
+import { destinationInstruction } from "@/lib/payout";
 import { saveSettings, type ForgeTier } from "@/lib/zecca/settings";
 import { cancelBonificoPurchase, confirmBonificoPurchase, saveShopBank } from "@/lib/zecca/bank";
 import { prisma } from "@/lib/db";
@@ -48,11 +50,15 @@ export async function treasuryConvertAction(
   if (!admin) return { error: "Solo il zecchiere può convertire la tesoreria." };
   const creditsEur = Number(formData.get("creditsEur") ?? 0);
   const creditsUsd = Number(formData.get("creditsUsd") ?? 0);
+  const creditsCrypto = Number(formData.get("creditsCrypto") ?? 0);
+  const cryptoAsset = String(formData.get("cryptoAsset") ?? "");
   try {
-    const result = await convertTreasuryToShopFiat({
+    const result = await convertTreasuryToShopCash({
       actorId: admin.id,
       creditsEur,
       creditsUsd,
+      creditsCrypto,
+      cryptoAsset,
     });
     revalidatePath("/zecchiere");
     revalidatePath("/zecchiere/fusioni");
@@ -68,11 +74,123 @@ export async function treasuryConvertAction(
         `${result.creditsUsd.toLocaleString("it-IT")} cr → ${(result.usdCents / 100).toLocaleString("it-IT", { style: "currency", currency: "USD" })} in cassa negozio`,
       );
     }
+    if (result.creditsCrypto > 0 && result.cryptoAsset) {
+      parts.push(
+        `${result.creditsCrypto.toLocaleString("it-IT")} cr → ${(result.cryptoUsdCents / 100).toLocaleString("it-IT", { style: "currency", currency: "USD" })} in wallet interno ${result.cryptoAsset}`,
+      );
+    }
     return {
-      ok: `Conversione registrata: ${parts.join(" · ")}. Non è un accredito bancario.`,
+      ok: `Conversione registrata: ${parts.join(" · ")}. Euro/dollari restano libro; la crypto va nel wallet interno, non sulla rete.`,
     };
   } catch (error) {
     return { error: isZeccaError(error) ? error.message : "Conversione non riuscita." };
+  }
+}
+
+export type InternalWithdrawState = {
+  error?: string;
+  ok?: string;
+  receiptId?: string;
+  receiptRef?: string | null;
+  receiptHash?: string | null;
+  receiptUrl?: string | null;
+  receiptKind?: string | null;
+  walletNetwork?: string | null;
+  proofToken?: string;
+  pending?: boolean;
+  status?: string;
+  payoutKind?: string;
+  walletAddress?: string | null;
+  usdCents?: number;
+  instruction?: string;
+};
+
+export async function treasuryCryptoWithdrawAction(
+  _prev: InternalWithdrawState | null,
+  formData: FormData,
+): Promise<InternalWithdrawState> {
+  const admin = await requireAdmin();
+  if (!admin) return { error: "Solo il zecchiere può prelevare dai wallet interni." };
+  if (String(formData.get("confirmed") ?? "") !== "on") {
+    return { error: "Conferma la destinazione prima di prelevare dal wallet interno." };
+  }
+  const credits = Number(formData.get("credits") ?? 0);
+  const asset = String(formData.get("cryptoAsset") ?? formData.get("walletNetwork") ?? "");
+  const walletAddress = String(formData.get("walletAddress") ?? "");
+  const blocked = shopPayoutConfigError(asset);
+  if (blocked) return { error: blocked };
+  try {
+    const settled = await requestInternalCryptoWithdraw({
+      actorId: admin.id,
+      credits,
+      asset,
+      walletAddress,
+      shopSend: true,
+    });
+    revalidatePath("/zecchiere");
+    revalidatePath("/zecchiere/fusioni");
+    revalidatePath("/zecchiere/libro-mastro");
+    revalidatePath("/fusione");
+    revalidatePath(`/ricevuta/${settled.id}`);
+    const proofToken = await rememberCashoutProof(
+      proofFromPaidCashout({
+        ...settled,
+        userName: admin.name ?? "Casa",
+        status: settled.status,
+      }),
+    );
+    if (settled.status !== "PAID") {
+      const guide = destinationInstruction({
+        payoutKind: "WALLET",
+        holder: null,
+        iban: null,
+        walletAddress: settled.walletAddress,
+        walletNetwork: settled.walletNetwork,
+        currency: "USD",
+        eurCents: settled.eurCents,
+        usdCents: settled.usdCents,
+        cashoutId: settled.id,
+      });
+      return {
+        ok: "Prelievo aperto dal wallet interno. I crediti sono già convertiti: conferma di nuovo l’invio dal negozio quando la cassa di rete ha le monete.",
+        receiptId: settled.id,
+        pending: true,
+        status: settled.status,
+        payoutKind: "WALLET",
+        walletNetwork: settled.walletNetwork,
+        walletAddress: settled.walletAddress,
+        usdCents: settled.usdCents,
+        instruction: guide?.text,
+        proofToken,
+      };
+    }
+    return {
+      ok: "Il negozio ha inviato dal wallet interno. Hash reale sulla rete: chi riceve non firma.",
+      receiptId: settled.id,
+      receiptRef: settled.receiptRef,
+      receiptHash: settled.receiptHash,
+      receiptUrl: settled.receiptUrl,
+      receiptKind: settled.receiptKind,
+      walletNetwork: settled.walletNetwork,
+      walletAddress: settled.walletAddress,
+      usdCents: settled.usdCents,
+      proofToken,
+      status: settled.status,
+      payoutKind: "WALLET",
+    };
+  } catch (error) {
+    const message = publicErrorMessage(error, "Prelievo dal wallet interno non riuscito.");
+    const cashoutId = isZeccaError(error) ? error.cashoutId : undefined;
+    if (!cashoutId) return { error: message };
+    return {
+      error: message,
+      receiptId: cashoutId,
+      pending: true,
+      status: "PENDING",
+      payoutKind: "WALLET",
+      walletNetwork: asset,
+      walletAddress,
+    };
   }
 }
 
@@ -180,6 +298,7 @@ export async function resolveCashoutAction(
         status: settled.status,
       }),
     );
+    revalidatePath("/zecchiere");
     revalidatePath("/zecchiere/fusioni");
     revalidatePath("/zecchiere/libro-mastro");
     revalidatePath("/portafoglio");
@@ -195,7 +314,9 @@ export async function resolveCashoutAction(
                 ? "Hash trovato sulla rete e registrato. Aprilo su Etherscan, BscScan o Blockscout."
                 : "Prelievo chiuso. L’hash è visibile sull’explorer della rete."
             : "Prelievo chiuso. Il riferimento del bonifico è la ricevuta."
-          : "Fusione rifiutata, crediti restituiti.",
+          : settled.isTreasury
+            ? "Prelievo dal wallet interno annullato. I crediti restano nel wallet interno."
+            : "Fusione rifiutata, crediti restituiti.",
       receiptId: settled.id,
       receiptRef: settled.receiptRef,
       receiptHash: settled.receiptHash,

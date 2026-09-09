@@ -16,6 +16,8 @@ const TYPES: LedgerType[] = [
   "TREASURY_CASHOUT",
   "TREASURY_CONVERT_TO_EUR",
   "TREASURY_CONVERT_TO_USD",
+  "TREASURY_CONVERT_TO_CRYPTO",
+  "TREASURY_CRYPTO_WITHDRAW",
   "RATE_CHANGE",
 ];
 
@@ -103,7 +105,7 @@ export default async function LibroMastroPage({
                   {e.type === "HOUSE_GRANT"
                     ? `${formatEurFromCents(e.eurCents)} / ${formatFiatFromCents(e.usdCents, "USD")}`
                     : e.fiatCurrency === "USD" && e.usdCents
-                    ? `${e.type === "TREASURY_CASHOUT" || e.type === "CASHOUT_PAID" || e.type === "CASHOUT_REQUEST" ? "−" : "+"}${formatFiatFromCents(e.usdCents, "USD")}`
+                    ? `${e.type === "TREASURY_CASHOUT" || e.type === "CASHOUT_PAID" || e.type === "CASHOUT_REQUEST" || e.type === "TREASURY_CRYPTO_WITHDRAW" ? "−" : "+"}${formatFiatFromCents(e.usdCents, "USD")}`
                     : e.eurCents
                       ? `${e.eurDirection === "OUT" ? "−" : "+"}${formatEurFromCents(e.eurCents)}`
                       : "—"}
