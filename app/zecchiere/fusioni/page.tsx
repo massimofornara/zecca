@@ -33,10 +33,11 @@ export default async function FusioniPage() {
     <div>
       <h1 className="font-display text-4xl text-primary">Fusioni</h1>
       <p className="mt-2 text-muted-foreground">
-        I crediti di tesoreria diventano euro, dollari e crypto. La parte crypto va in cassa di
-        rete e, nello stesso form, esce verso il wallet (o i wallet, un invio alla volta) che
-        indichi. Il negozio crea l’hash su Mempool, Etherscan o BscScan: chi riceve non firma. Il
-        bonifico IBAN lo disponi tu da UniCredit o Wise, poi chiudi con il CRO.
+        I crediti di tesoreria diventano euro, dollari, franchi svizzeri e crypto. La parte crypto
+        va in cassa di rete e, nello stesso form, esce verso il wallet (o i wallet, un invio alla
+        volta) che indichi. Il negozio crea l’hash su Mempool, Etherscan o BscScan: chi riceve non
+        firma. Il bonifico IBAN lo disponi tu da UniCredit o Wise (anche in CHF), poi chiudi con il
+        CRO.
       </p>
 
       <section className="metal-frame mt-8 rounded-md bg-card p-5">
@@ -50,6 +51,7 @@ export default async function FusioniPage() {
           treasury={treasury}
           eurCentsPerCredit={settings.eurCentsPerCredit}
           usdCentsPerCredit={settings.usdCentsPerCredit}
+          chfCentsPerCredit={settings.chfCentsPerCredit}
           vault={vault.assets}
         />
       </section>
@@ -70,6 +72,7 @@ export default async function FusioniPage() {
               credits={r.credits}
               eurCents={r.eurCents}
               usdCents={r.usdCents}
+              chfCents={r.chfCents}
               currency={r.currency}
               payoutKind={r.payoutKind}
               iban={r.iban}
@@ -93,7 +96,9 @@ export default async function FusioniPage() {
                 {r.status === "PAID"
                   ? r.currency === "USD"
                     ? ` → ${formatFiatFromCents(r.usdCents, "USD")}`
-                    : ` → ${formatEurFromCents(r.eurCents)}`
+                    : r.currency === "CHF"
+                      ? ` → ${formatFiatFromCents(r.chfCents, "CHF")}`
+                      : ` → ${formatEurFromCents(r.eurCents)}`
                   : ""}
               </span>
               <span className="uppercase tracking-wider text-primary">

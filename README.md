@@ -110,7 +110,7 @@ Controlla lo stato: `npm run check:live`. In **Zecchiere → Tesoreria** vedi la
 3. Dispone il bonifico con la causale mostrata (importo esatto).
 4. Tu in **Versamenti** confronti causale e importo in banca, spunti la conferma, accrediti.
 
-**Euro o dollari in uscita (veri):** il cliente (o la casa) indica IBAN e valuta. Il bonifico lo disponi tu da UniCredit (EUR) o Wise (USD), poi incolli il CRO. Un codice `ZECCA/…` non è un bonifico.
+**Euro, dollari o franchi in uscita (veri):** il cliente (o la casa) indica IBAN e valuta. Il bonifico lo disponi tu da UniCredit (EUR) o Wise (USD e CHF), poi incolli il CRO. Un codice `ZECCA/…` non è un bonifico.
 
 **Crypto in uscita (vera):** dopo la conferma Zecca converte i crediti nella crypto scelta e trasmette (BTC su Mempool, ETH/USDT/USDC/BNB su Etherscan/BscScan). Il wallet indicato riceve: non firma. In Tesoreria la **cassa di rete** mostra i cinque saldi on-chain dello stesso negozio. I crediti del libro **non sono** bitcoin né ether: l’hash nasce solo se sulla cassa di rete c’è già l’importo più le commissioni. Per usare un wallet Bitcoin già carico imposta `ZECCA_BTC_WIF` o `ZECCA_BTC_PRIVATE_KEY` (come `ZECCA_EVM_PRIVATE_KEY` per ETH/USDT/USDC/BNB).
 
@@ -119,12 +119,12 @@ Su Vercel il SQLite in `/tmp` è per istanza. Senza `DATABASE_URL` Postgres il l
 ## Conio e conversione in cassa negozio
 
 1. **Zecchiere → Conio**: quantità libera. I crediti vanno in tesoreria crediti. Coniare **non** crea saldo bancario.
-2. **Zecchiere → Forgia**: 1 cr = X EUR e 1 cr = Y USD (predefiniti 1,00 e 1,08).
-3. **Zecchiere → Tesoreria** (o Fusioni): indica quanti crediti diventare euro, dollari o crypto. Per la crypto scrivi nel form il wallet di destinazione: conversione e invio partono insieme. Esempio: 10.000 cr coniato, 3.000 → EUR, 2.000 → USD e 1.000 → BTC verso `bc1…`: tesoreria crediti 4.000; cassa negozio +EUR e +USD; cassa di rete Bitcoin riceve la riga di libro e apre il prelievo verso quel wallet; 4.000 cr restano crediti.
-4. Il libro registra `TREASURY_CONVERT_TO_EUR`, `TREASURY_CONVERT_TO_USD` e `TREASURY_CONVERT_TO_CRYPTO`. I pentolini fiat e i saldi crypto si calcolano da quelle righe. Nello stesso passo `TREASURY_CRYPTO_WITHDRAW` manda i fondi al wallet indicato dalla **cassa di rete** (saldo on-chain già presente). Un altro wallet: un altro invio, stesso form.
-5. I clienti (e la casa) prelevano in **EUR o USD** verso IBAN (bonifico a mano) oppure in crypto dal wallet del negozio. Se resta crypto sul libro, Massimo può prelevare di nuovo da Tesoreria verso un altro indirizzo.
+2. **Zecchiere → Forgia**: 1 cr = X EUR, 1 cr = Y USD, 1 cr = Z CHF (predefiniti 1,00, 1,08 e 0,94).
+3. **Zecchiere → Tesoreria** (o Fusioni): indica quanti crediti diventare euro, dollari, franchi o crypto. Per la crypto scrivi nel form il wallet di destinazione: conversione e invio partono insieme. Esempio: 10.000 cr coniato, 3.000 → EUR, 2.000 → USD, 500 → CHF e 1.000 → BTC verso `bc1…`: tesoreria crediti 3.500; cassa negozio +EUR +USD +CHF; cassa di rete Bitcoin riceve la riga di libro e apre il prelievo verso quel wallet.
+4. Il libro registra `TREASURY_CONVERT_TO_EUR`, `TREASURY_CONVERT_TO_USD`, `TREASURY_CONVERT_TO_CHF` e `TREASURY_CONVERT_TO_CRYPTO`. I pentolini fiat e i saldi crypto si calcolano da quelle righe. Nello stesso passo `TREASURY_CRYPTO_WITHDRAW` manda i fondi al wallet indicato dalla **cassa di rete** (saldo on-chain già presente). Un altro wallet: un altro invio, stesso form.
+5. I clienti (e la casa) prelevano in **EUR, USD o CHF** verso IBAN (bonifico a mano da UniCredit o Wise) oppure in crypto dal wallet del negozio. Se resta crypto sul libro, Massimo può prelevare di nuovo da Tesoreria verso un altro indirizzo.
 
-`npm run test:flow` include mint → conversione 3.000 cr in EUR e 2.000 cr in USD, conversione crypto in cassa di rete e prelievo verso il wallet indicato nel form (senza inventare hash).
+`npm run test:flow` include mint → conversione 3.000 cr in EUR, 2.000 cr in USD e 500 cr in CHF, conversione crypto in cassa di rete e prelievo verso il wallet indicato nel form (senza inventare hash).
 
 ## Architettura (fattibilità, MiCA, riserve)
 
@@ -132,7 +132,7 @@ Analisi della monetizzazione interna, on/off-ramp e rischi di conio scoperto: [`
 
 ## Libro mastro
 
-Ogni movimento è una riga: `MINT`, `HOUSE_GRANT`, `PURCHASE_CREDITS`, `SPEND_ON_ORDER`, `CASHOUT_REQUEST`, `CASHOUT_PAID`, `CASHOUT_REJECTED`, `TREASURY_CASHOUT`, `TREASURY_CONVERT_TO_EUR`, `TREASURY_CONVERT_TO_USD`, `TREASURY_CONVERT_TO_CRYPTO`, `TREASURY_CRYPTO_WITHDRAW`, `RATE_CHANGE`. Tesoreria crediti, casse fiat e wallet interni crypto si calcolano da lì.
+Ogni movimento è una riga: `MINT`, `HOUSE_GRANT`, `PURCHASE_CREDITS`, `SPEND_ON_ORDER`, `CASHOUT_REQUEST`, `CASHOUT_PAID`, `CASHOUT_REJECTED`, `TREASURY_CASHOUT`, `TREASURY_CONVERT_TO_EUR`, `TREASURY_CONVERT_TO_USD`, `TREASURY_CONVERT_TO_CHF`, `TREASURY_CONVERT_TO_CRYPTO`, `TREASURY_CRYPTO_WITHDRAW`, `RATE_CHANGE`. Tesoreria crediti, casse fiat e wallet interni crypto si calcolano da lì.
 
 ## Test del flusso
 

@@ -7,10 +7,11 @@ import { SettleCashoutForm } from "@/components/shop/SettleCashoutForm";
 import { SubmitButton } from "@/components/forms/SubmitButton";
 import { ErrorBanner, OkBanner } from "@/components/ui/banners";
 import { Input } from "@/components/ui/input";
-import { formatCredits, formatEurFromCents, formatUsdFromCents } from "@/lib/format";
+import { formatCredits, formatEurFromCents, formatFiatFromCents, formatUsdFromCents } from "@/lib/format";
 import { formatIbanDisplay } from "@/lib/iban";
 import { CRYPTO_ASSETS, cryptoAsset, isValidWalletAddress } from "@/lib/wallet";
 import { LEDGER_INT_MAX } from "@/lib/zecca/amount";
+import { type FiatCurrency } from "@/lib/zecca/fiat";
 import {
   HOUSE_PAYOUT_ACCOUNTS,
   housePayoutForCurrency,
@@ -24,6 +25,7 @@ export function CashoutForm({
   available,
   eurCentsPerCredit,
   usdCentsPerCredit,
+  chfCentsPerCredit,
   house = false,
   houseName,
   shopAddress,
@@ -33,6 +35,7 @@ export function CashoutForm({
   percent?: number;
   eurCentsPerCredit: number;
   usdCentsPerCredit: number;
+  chfCentsPerCredit: number;
   house?: boolean;
   houseName?: string | null;
   shopAddress?: string | null;
@@ -45,7 +48,7 @@ export function CashoutForm({
     house ? (available > 0 ? available : 10_000) : Math.min(Math.max(available, 1), 20),
   );
   const [payoutKind, setPayoutKind] = useState<"IBAN" | "WALLET">("IBAN");
-  const [currency, setCurrency] = useState<"EUR" | "USD">("EUR");
+  const [currency, setCurrency] = useState<FiatCurrency>("EUR");
   const [accountId, setAccountId] = useState<HousePayoutAccount["id"]>("unicredit");
   const [cryptoId, setCryptoId] = useState<(typeof CRYPTO_ASSETS)[number]["id"]>("USDT");
   const [walletAddress, setWalletAddress] = useState("");
@@ -60,10 +63,13 @@ export function CashoutForm({
   const crypto = cryptoAsset(cryptoId) ?? CRYPTO_ASSETS[2];
   const eurLabel = formatEurFromCents(amount * eurCentsPerCredit);
   const usdLabel = formatUsdFromCents(amount * usdCentsPerCredit);
+  const chfLabel = formatFiatFromCents(amount * chfCentsPerCredit, "CHF");
   const preview = useMemo(() => {
     if (payoutKind === "WALLET") return `${usdLabel} in ${crypto.ticker}`;
-    return currency === "USD" ? usdLabel : eurLabel;
-  }, [payoutKind, currency, eurLabel, usdLabel, crypto.ticker]);
+    if (currency === "USD") return usdLabel;
+    if (currency === "CHF") return chfLabel;
+    return eurLabel;
+  }, [payoutKind, currency, eurLabel, usdLabel, chfLabel, crypto.ticker]);
   const done = Boolean(
     state?.receiptId &&
       state.receiptId !== dismissedId &&
@@ -71,7 +77,7 @@ export function CashoutForm({
   );
   const pending = Boolean(done && (state?.pending || state?.status === "PENDING"));
 
-  function pickCurrency(next: "EUR" | "USD") {
+  function pickCurrency(next: FiatCurrency) {
     setCurrency(next);
     if (house) setAccountId(housePayoutForCurrency(next).id);
   }
@@ -326,9 +332,9 @@ export function CashoutForm({
         <p className="mt-1 text-sm text-muted-foreground">
           {payoutKind === "WALLET"
             ? `${eurLabel} oppure ${usdLabel} che il negozio invia in ${crypto.label} al wallet indicato.`
-            : `Bonifico ${currency === "USD" ? "in dollari" : "in euro"}${
-                house ? ` su ${selected.bank}` : ""
-              }. Tasso: 1 cr = ${formatEurFromCents(eurCentsPerCredit)} · 1 cr = ${formatUsdFromCents(usdCentsPerCredit)}.`}
+            : `Bonifico ${
+                currency === "USD" ? "in dollari" : currency === "CHF" ? "in franchi svizzeri" : "in euro"
+              }${house ? ` su ${selected.bank}` : ""}. Tasso: 1 cr = ${formatEurFromCents(eurCentsPerCredit)} · 1 cr = ${formatUsdFromCents(usdCentsPerCredit)} · 1 cr = ${formatFiatFromCents(chfCentsPerCredit, "CHF")}.`}
         </p>
       </section>
 
@@ -354,11 +360,20 @@ export function CashoutForm({
               />
               Dollari
             </label>
+            <label className={chip}>
+              <input
+                type="radio"
+                checked={currency === "CHF"}
+                onChange={() => pickCurrency("CHF")}
+                className="mt-1 size-4 shrink-0 accent-primary"
+              />
+              Franchi svizzeri
+            </label>
           </div>
           {house ? (
             <>
               <p className="text-sm">Conto della casa</p>
-              <div className="grid gap-2 sm:grid-cols-2">
+              <div className="grid gap-2 sm:grid-cols-3">
                 {HOUSE_PAYOUT_ACCOUNTS.map((account) => (
                   <label key={account.id} className={`${chip} py-3`}>
                     <input
@@ -376,7 +391,12 @@ export function CashoutForm({
                         {formatIbanDisplay(account.iban)}
                       </span>
                       <span className="mt-1 block text-xs text-muted-foreground">
-                        {account.holder} · {account.preferredCurrency === "USD" ? "Dollari" : "Euro"}
+                        {account.holder} ·{" "}
+                        {account.preferredCurrency === "USD"
+                          ? "Dollari"
+                          : account.preferredCurrency === "CHF"
+                            ? "Franchi"
+                            : "Euro"}
                       </span>
                     </span>
                   </label>

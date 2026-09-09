@@ -2,19 +2,20 @@ import { formatCashoutValue, formatFiatFromCents } from "@/lib/format";
 import { formatIbanDisplay } from "@/lib/iban";
 import { cryptoTicker, walletNetworkLabel } from "@/lib/wallet";
 import { sepaInstruction } from "@/lib/sepa";
+import { parseFiatCurrency, type FiatCurrency } from "@/lib/zecca/fiat";
 
 export function walletInstruction(input: {
   network: string;
   address: string;
   amountCents: number;
-  currency?: "EUR" | "USD";
+  currency?: FiatCurrency | string;
   cashoutId: string;
   eurCents?: number;
 }) {
-  const currency = input.currency === "EUR" ? "EUR" : "USD";
+  const currency = parseFiatCurrency(input.currency);
   const amountCents = input.amountCents ?? input.eurCents ?? 0;
   const ticker = cryptoTicker(input.network);
-  const amountLabel = `${formatFiatFromCents(amountCents, currency)} in ${ticker}`;
+  const amountLabel = `${formatFiatFromCents(amountCents, currency === "CHF" ? "USD" : currency)} in ${ticker}`;
   const causal = `Zecca prelievo ${input.cashoutId.slice(0, 8)}`;
   const lines = [
     `Crypto: ${walletNetworkLabel(input.network)} (${ticker})`,
@@ -35,16 +36,19 @@ export function destinationInstruction(input: {
   currency?: string;
   eurCents: number;
   usdCents?: number;
+  chfCents?: number;
   cashoutId: string;
 }) {
-  const walletPreferred =
+  const currency: FiatCurrency =
     input.payoutKind === "WALLET" && (input.usdCents ?? 0) > 0
       ? "USD"
-      : input.currency === "USD"
-        ? "USD"
-        : "EUR";
-  const currency = walletPreferred;
-  const amountCents = currency === "USD" ? (input.usdCents ?? 0) : input.eurCents;
+      : parseFiatCurrency(input.currency);
+  const amountCents =
+    currency === "USD"
+      ? (input.usdCents ?? 0)
+      : currency === "CHF"
+        ? (input.chfCents ?? 0)
+        : input.eurCents;
   if (input.payoutKind === "WALLET" && input.walletAddress) {
     return {
       kind: "WALLET" as const,
@@ -52,7 +56,7 @@ export function destinationInstruction(input: {
         network: input.walletNetwork ?? "OTHER",
         address: input.walletAddress,
         amountCents,
-        currency,
+        currency: "USD",
         cashoutId: input.cashoutId,
       }),
     };
@@ -72,6 +76,7 @@ export function destinationInstruction(input: {
         currency,
         eurCents: input.eurCents,
         usdCents: input.usdCents ?? 0,
+        chfCents: input.chfCents ?? 0,
       }),
     };
   }

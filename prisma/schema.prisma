@@ -31,6 +31,7 @@ enum LedgerType {
   TREASURY_CASHOUT
   TREASURY_CONVERT_TO_EUR
   TREASURY_CONVERT_TO_USD
+  TREASURY_CONVERT_TO_CHF
   TREASURY_CONVERT_TO_CRYPTO
   TREASURY_CRYPTO_WITHDRAW
   RATE_CHANGE
@@ -173,6 +174,7 @@ model LedgerEntry {
   amountCredits  Int
   eurCents       Int        @default(0)
   usdCents       Int        @default(0)
+  chfCents       Int        @default(0)
   fiatCurrency   String?
   eurDirection   String?
   fromPocket     Pocket
@@ -207,6 +209,7 @@ model CashoutRequest {
   credits    Int
   eurCents   Int
   usdCents   Int           @default(0)
+  chfCents   Int           @default(0)
   currency   String        @default("EUR")
   status     CashoutStatus @default(PENDING)
   isTreasury Boolean       @default(false)

@@ -15,6 +15,7 @@ import { proofFromPaidCashout } from "@/lib/cashout-proof";
 import { rememberCashoutProof } from "@/lib/cashout-proof-store";
 import { ensureHouseWalletCredits, isHouseEmail } from "@/lib/zecca/house";
 import { housePayoutAccount, housePayoutForCurrency } from "@/lib/zecca/house-accounts";
+import { parseFiatCurrency } from "@/lib/zecca/fiat";
 import { isDemoPayEnabled } from "@/lib/stripe";
 import { requestBonificoPurchase } from "@/lib/zecca/bank";
 import { prisma } from "@/lib/db";
@@ -129,7 +130,7 @@ export async function requestCashoutAction(
   if (!user) return { error: "Devi entrare per chiedere una fusione." };
   const credits = Number(formData.get("credits"));
   const payoutKind = String(formData.get("payoutKind") ?? "IBAN") === "WALLET" ? "WALLET" : "IBAN";
-  const currency = String(formData.get("currency") ?? "EUR") === "USD" ? "USD" : "EUR";
+  const currency = parseFiatCurrency(formData.get("currency"));
   const requestedHouse = housePayoutAccount(String(formData.get("houseAccount") ?? ""));
   const houseActor = isHouseEmail(user.email) || user.role === "ADMIN";
   const houseAccount = houseActor
@@ -177,6 +178,7 @@ export async function requestCashoutAction(
           currency: settled.currency,
           eurCents: settled.eurCents,
           usdCents: settled.usdCents,
+          chfCents: settled.chfCents,
           cashoutId: settled.id,
         });
         const proofToken = await rememberCashoutProof(
@@ -190,7 +192,7 @@ export async function requestCashoutAction(
           ok:
             settled.payoutKind === "WALLET"
               ? "Prelievo aperto. I crediti sono convertiti nella crypto scelta: conferma di nuovo l’invio dal negozio per creare l’hash sulla rete."
-              : "Prelievo aperto. Copia i dati, invia da UniCredit o Wise, poi incolla il CRO qui sotto per chiudere.",
+              : "Prelievo aperto. Copia i dati, invia da UniCredit o Wise (anche in franchi), poi incolla il CRO qui sotto per chiudere.",
           receiptId: settled.id,
           pending: true,
           status: settled.status,
@@ -209,7 +211,7 @@ export async function requestCashoutAction(
         ok:
           settled.payoutKind === "WALLET"
             ? "Crediti convertiti e inviati. Hash reale sulla rete: il wallet indicato riceve, senza firmare né dare consensi."
-            : "CRO bancario registrato. Zecca non ha disposto il bonifico: gli euro arrivano solo se li hai inviati tu dalla banca.",
+            : "CRO bancario registrato. Zecca non ha disposto il bonifico: euro, dollari o franchi arrivano solo se li hai inviati tu dalla banca.",
         receiptId: settled.id,
         receiptRef: settled.receiptRef,
         receiptHash: settled.receiptHash,

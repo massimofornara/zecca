@@ -51,6 +51,7 @@ export async function treasuryConvertAction(
   if (!admin) return { error: "Solo il zecchiere può convertire la tesoreria." };
   const creditsEur = Number(formData.get("creditsEur") ?? 0);
   const creditsUsd = Number(formData.get("creditsUsd") ?? 0);
+  const creditsChf = Number(formData.get("creditsChf") ?? 0);
   const creditsCrypto = Number(formData.get("creditsCrypto") ?? 0);
   const cryptoAsset = String(formData.get("cryptoAsset") ?? "");
   const walletAddress = normalizeWalletAddress(String(formData.get("walletAddress") ?? ""));
@@ -71,6 +72,7 @@ export async function treasuryConvertAction(
       actorId: admin.id,
       creditsEur,
       creditsUsd,
+      creditsChf,
       creditsCrypto,
       cryptoAsset,
       walletAddress,
@@ -89,6 +91,11 @@ export async function treasuryConvertAction(
     if (result.creditsUsd > 0) {
       parts.push(
         `${result.creditsUsd.toLocaleString("it-IT")} cr → ${(result.usdCents / 100).toLocaleString("it-IT", { style: "currency", currency: "USD" })} in cassa negozio`,
+      );
+    }
+    if (result.creditsChf > 0) {
+      parts.push(
+        `${result.creditsChf.toLocaleString("it-IT")} cr → ${(result.chfCents / 100).toLocaleString("it-IT", { style: "currency", currency: "CHF" })} in cassa negozio`,
       );
     }
     if (result.creditsCrypto > 0 && result.cryptoAsset) {
@@ -475,11 +482,15 @@ export async function saveForgeSettingsAction(
 
   const eur = Number(formData.get("eurPerCredit"));
   const usd = Number(formData.get("usdPerCredit"));
+  const chf = Number(formData.get("chfPerCredit"));
   if (!Number.isFinite(eur) || eur <= 0) {
     return { error: "Il tasso in euro deve essere un numero positivo." };
   }
   if (!Number.isFinite(usd) || usd <= 0) {
     return { error: "Il tasso in dollari deve essere un numero positivo." };
+  }
+  if (!Number.isFinite(chf) || chf <= 0) {
+    return { error: "Il tasso in franchi svizzeri deve essere un numero positivo." };
   }
 
   const tiers: ForgeTier[] = [0, 1, 2, 3].map((i) => {
@@ -501,6 +512,7 @@ export async function saveForgeSettingsAction(
     {
       eurCentsPerCredit: Math.round(eur * 100),
       usdCentsPerCredit: Math.round(usd * 100),
+      chfCentsPerCredit: Math.round(chf * 100),
       forgeTiers: tiers,
     },
     admin.id,

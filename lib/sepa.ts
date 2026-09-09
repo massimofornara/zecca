@@ -1,19 +1,20 @@
 import { formatFiatFromCents } from "@/lib/format";
 import { formatIbanDisplay } from "@/lib/iban";
+import { fiatRailLabel, parseFiatCurrency, type FiatCurrency } from "@/lib/zecca/fiat";
 
 export function sepaInstruction(input: {
   holder: string;
   iban: string;
   amountCents: number;
-  currency?: "EUR" | "USD";
+  currency?: FiatCurrency | string;
   cashoutId: string;
   /** @deprecated usa amountCents */
   eurCents?: number;
 }) {
-  const currency = input.currency === "USD" ? "USD" : "EUR";
+  const currency = parseFiatCurrency(input.currency);
   const amountCents = input.amountCents ?? input.eurCents ?? 0;
   const causal = `Zecca fusione ${input.cashoutId.slice(0, 8)}`;
-  const rail = currency === "USD" ? "Bonifico in USD (SWIFT/estero)" : "Bonifico SEPA in EUR";
+  const rail = fiatRailLabel(currency);
   const lines = [
     `Beneficiario: ${input.holder}`,
     `IBAN: ${formatIbanDisplay(input.iban)}`,

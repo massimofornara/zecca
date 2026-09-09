@@ -1,4 +1,5 @@
 import { formatIbanDisplay, normalizeIban } from "@/lib/iban";
+import type { FiatCurrency } from "@/lib/zecca/fiat";
 
 export const HOUSE_PROFILES = [
   { email: "massimo.fornara.2212@gmail.com", name: "Massimo" },
@@ -52,14 +53,14 @@ export function houseEmailCandidates(email: string | null | undefined): string[]
 }
 
 export type HousePayoutAccount = {
-  id: "unicredit" | "wise";
+  id: "unicredit" | "wise" | "wise-chf";
   bank: string;
   iban: string;
   holder: string;
-  preferredCurrency: "EUR" | "USD";
+  preferredCurrency: FiatCurrency;
 };
 
-/** Conti su cui la casa preleva. Indicati da Massimo: UniCredit (EUR) e Wise (USD). */
+/** Conti su cui la casa preleva. Indicati da Massimo: UniCredit (EUR) e Wise (USD e CHF). */
 export const HOUSE_PAYOUT_ACCOUNTS: readonly HousePayoutAccount[] = [
   {
     id: "unicredit",
@@ -75,23 +76,38 @@ export const HOUSE_PAYOUT_ACCOUNTS: readonly HousePayoutAccount[] = [
     holder: "NeoNoble Company",
     preferredCurrency: "USD",
   },
+  {
+    id: "wise-chf",
+    bank: "Wise",
+    iban: "BE06967614820722",
+    holder: "NeoNoble Company",
+    preferredCurrency: "CHF",
+  },
 ];
 
 export function housePayoutAccount(id: string | null | undefined): HousePayoutAccount | null {
   return HOUSE_PAYOUT_ACCOUNTS.find((account) => account.id === id) ?? null;
 }
 
-export function housePayoutForCurrency(currency: "EUR" | "USD"): HousePayoutAccount {
+export function housePayoutForCurrency(currency: FiatCurrency): HousePayoutAccount {
   return (
     HOUSE_PAYOUT_ACCOUNTS.find((account) => account.preferredCurrency === currency) ??
     HOUSE_PAYOUT_ACCOUNTS[0]
   );
 }
 
-export function housePayoutByIban(iban: string | null | undefined): HousePayoutAccount | null {
+export function housePayoutByIban(
+  iban: string | null | undefined,
+  currency?: string,
+): HousePayoutAccount | null {
   if (!iban) return null;
   const normalized = normalizeIban(iban);
-  return HOUSE_PAYOUT_ACCOUNTS.find((account) => account.iban === normalized) ?? null;
+  const matches = HOUSE_PAYOUT_ACCOUNTS.filter((account) => account.iban === normalized);
+  if (currency) {
+    const preferred = matches.find((account) => account.preferredCurrency === currency);
+    if (preferred) return preferred;
+  }
+  return matches[0] ?? null;
 }
 
 export function housePayoutLabel(iban: string | null | undefined): string | null {

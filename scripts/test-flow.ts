@@ -67,6 +67,7 @@ async function main() {
       data: [
         { key: "eurCentsPerCredit", value: String(DEFAULT_SETTINGS.eurCentsPerCredit) },
         { key: "usdCentsPerCredit", value: String(DEFAULT_SETTINGS.usdCentsPerCredit) },
+        { key: "chfCentsPerCredit", value: String(DEFAULT_SETTINGS.chfCentsPerCredit) },
         { key: "forgeTiers", value: JSON.stringify(DEFAULT_SETTINGS.forgeTiers) },
       ],
     });
@@ -392,7 +393,7 @@ async function main() {
     assert.equal(shop.treasuryUsdCents, 216000);
 
     const convertRows = await db.ledgerEntry.findMany({
-      where: { type: { in: ["TREASURY_CONVERT_TO_EUR", "TREASURY_CONVERT_TO_USD"] } },
+      where: { type: { in: ["TREASURY_CONVERT_TO_EUR", "TREASURY_CONVERT_TO_USD", "TREASURY_CONVERT_TO_CHF"] } },
       orderBy: { createdAt: "asc" },
     });
     assert.equal(convertRows.length, 2);
@@ -402,6 +403,15 @@ async function main() {
     assert.equal(convertRows[1].type, "TREASURY_CONVERT_TO_USD");
     assert.equal(convertRows[1].amountCredits, 2000);
     assert.equal(convertRows[1].usdCents, 216000);
+
+    const chfConverted = await convertTreasuryToShopCash({
+      actorId: admin.id,
+      creditsChf: 500,
+      db,
+    });
+    assert.equal(chfConverted.creditsChf, 500);
+    assert.equal(chfConverted.chfCents, 47000);
+    assert.equal((await shopFiatBalances(db)).treasuryChfCents, 47000);
 
     const beforeCrypto = await treasuryBalance(db);
     const cryptoConverted = await convertTreasuryToShopCash({
@@ -554,6 +564,8 @@ async function main() {
     assert.equal(HOUSE_PAYOUT_ACCOUNTS[0].iban, "IT22B0200822800000103317304");
     assert.equal(HOUSE_PAYOUT_ACCOUNTS[1].iban, "BE06967614820722");
     assert.equal(HOUSE_PAYOUT_ACCOUNTS[1].holder, "NeoNoble Company");
+    assert.equal(HOUSE_PAYOUT_ACCOUNTS[2].id, "wise-chf");
+    assert.equal(HOUSE_PAYOUT_ACCOUNTS[2].preferredCurrency, "CHF");
 
     const houseA = await db.user.create({
       data: {
@@ -624,6 +636,32 @@ async function main() {
     assert.equal(eurCashout.currency, "EUR");
     assert.equal(eurCashout.eurCents, 5000);
     assert.equal(await pocketBalance("USER", houseA.id, db), 100);
+
+    const chfCashout = await requestCustomerCashout({
+      userId: houseA.id,
+      role: "ADMIN",
+      credits: 40,
+      currency: "CHF",
+      payoutKind: "IBAN",
+      iban: HOUSE_PAYOUT_ACCOUNTS[2].iban,
+      ibanHolder: HOUSE_PAYOUT_ACCOUNTS[2].holder,
+      db,
+    });
+    assert.equal(chfCashout.currency, "CHF");
+    assert.equal(chfCashout.chfCents, 3760);
+    assert.equal(chfCashout.eurCents, 0);
+    assert.equal(chfCashout.usdCents, 0);
+    assert.equal(chfCashout.iban, "BE06967614820722");
+    assert.equal(await pocketBalance("USER", houseA.id, db), 60);
+
+    await resolveCashout({
+      cashoutId: chfCashout.id,
+      actorId: houseA.id,
+      action: "pay",
+      receipt: "WISE-CHF-SIC-1",
+      db,
+    });
+    assert.equal((await db.cashoutRequest.findUniqueOrThrow({ where: { id: chfCashout.id } })).status, "PAID");
 
     await resolveCashout({
       cashoutId: usdCashout.id,
@@ -842,11 +880,11 @@ async function main() {
     assert.equal(await pocketBalance("USER", aliasUser.id, db), 0);
 
     console.log("Flusso Zecca: conio → crediti → bottega DHL + ritiro in sede → prelievo IBAN/wallet. OK.");
-    console.log("Conversione tesoreria 3000 cr→EUR e 2000 cr→USD in cassa negozio. OK.");
+    console.log("Conversione tesoreria 3000 cr→EUR, 2000 cr→USD e 500 cr→CHF in cassa negozio. OK.");
     console.log("Conversione tesoreria 1000 cr→BTC e 200 cr→ETH in cassa di rete. OK.");
     console.log("Conversione 150 cr→USDT e prelievo verso wallet del form. OK.");
     console.log("Bonifico SEPA in ingresso senza Stripe/webhook. OK.");
-    console.log("Casa Fornara: generazione senza pagamento + prelievo IBAN EUR/USD. OK.");
+    console.log("Casa Fornara: generazione senza pagamento + prelievo IBAN EUR/USD/CHF. OK.");
   } finally {
     await db.$disconnect();
   }

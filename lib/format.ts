@@ -1,3 +1,6 @@
+import type { FiatCurrency } from "@/lib/zecca/fiat";
+import { parseFiatCurrency } from "@/lib/zecca/fiat";
+
 export function formatCredits(amount: number): string {
   return `${amount.toLocaleString("it-IT")} cr`;
 }
@@ -10,7 +13,11 @@ export function formatUsdFromCents(cents: number): string {
   return formatFiatFromCents(cents, "USD");
 }
 
-export function formatFiatFromCents(cents: number, currency: "EUR" | "USD"): string {
+export function formatChfFromCents(cents: number): string {
+  return formatFiatFromCents(cents, "CHF");
+}
+
+export function formatFiatFromCents(cents: number, currency: FiatCurrency): string {
   return new Intl.NumberFormat("it-IT", {
     style: "currency",
     currency,
@@ -26,8 +33,11 @@ export function formatCashoutValue(input: {
   currency: string;
   eurCents: number;
   usdCents: number;
+  chfCents?: number;
 }): string {
-  if (input.currency === "USD") return formatUsdFromCents(input.usdCents);
+  const currency = parseFiatCurrency(input.currency);
+  if (currency === "USD") return formatUsdFromCents(input.usdCents);
+  if (currency === "CHF") return formatChfFromCents(input.chfCents ?? 0);
   return formatEurFromCents(input.eurCents);
 }
 
@@ -42,6 +52,7 @@ export const LEDGER_LABELS: Record<string, string> = {
   TREASURY_CASHOUT: "Fusione tesoreria",
   TREASURY_CONVERT_TO_EUR: "Conversione tesoreria → EUR",
   TREASURY_CONVERT_TO_USD: "Conversione tesoreria → USD",
+  TREASURY_CONVERT_TO_CHF: "Conversione tesoreria → CHF",
   TREASURY_CONVERT_TO_CRYPTO: "Conversione tesoreria → crypto",
   TREASURY_CRYPTO_WITHDRAW: "Prelievo wallet interno",
   RATE_CHANGE: "Cambio tasso",

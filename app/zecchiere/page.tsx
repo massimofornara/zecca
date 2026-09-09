@@ -172,6 +172,7 @@ export default async function TesoreriaPage() {
         <Coin label="Crediti in tesoreria" value={formatCredits(flow.treasury)} accent />
         <Coin label="Euro in tesoreria (negozio)" value={formatEurFromCents(flow.treasuryEurCents)} />
         <Coin label="Dollari in tesoreria (negozio)" value={formatFiatFromCents(flow.treasuryUsdCents, "USD")} />
+        <Coin label="Franchi in tesoreria (negozio)" value={formatFiatFromCents(flow.treasuryChfCents, "CHF")} />
         <Coin label="Coniati" value={formatCredits(flow.minted)} />
         <Coin label="Nei portafogli" value={formatCredits(flow.inWallets)} />
         <Coin label="Euro da vendite (stima)" value={formatEurFromCents(flow.eurNetCents)} />
@@ -184,13 +185,14 @@ export default async function TesoreriaPage() {
       <section className="metal-frame mt-8 rounded-md bg-card p-5">
         <h2 className="font-display text-2xl text-primary">Converti crediti in cassa e crypto</h2>
         <p className="mt-1 text-sm text-muted-foreground">
-          Euro e dollari restano in cassa negozio. Per BTC, ETH, USDT, USDC e BNB indica il wallet
-          nel form: i crediti vanno in cassa di rete e l’invio parte nello stesso passo.
+          Euro, dollari e franchi restano in cassa negozio. Per BTC, ETH, USDT, USDC e BNB indica
+          il wallet nel form: i crediti vanno in cassa di rete e l’invio parte nello stesso passo.
         </p>
         <TreasuryConvertForm
           treasury={flow.treasury}
           eurCentsPerCredit={settings.eurCentsPerCredit}
           usdCentsPerCredit={settings.usdCentsPerCredit}
+          chfCentsPerCredit={settings.chfCentsPerCredit}
           vault={vault.assets}
         />
       </section>
@@ -201,7 +203,7 @@ export default async function TesoreriaPage() {
           Cassa negozio (da conversione) e flusso vendite/fusioni clienti restano distinti. I
           wallet interni crypto stanno nel riquadro sopra, non in queste barre euro.
         </p>
-        <div className="mt-6 grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="mt-6 grid gap-6 sm:grid-cols-2 lg:grid-cols-5">
           <div>
             <p className="text-xs uppercase tracking-widest opacity-60">Cassa negozio EUR</p>
             <p className="font-ledger text-2xl">{formatEurFromCents(flow.treasuryEurCents)}</p>
@@ -209,6 +211,10 @@ export default async function TesoreriaPage() {
           <div>
             <p className="text-xs uppercase tracking-widest opacity-60">Cassa negozio USD</p>
             <p className="font-ledger text-2xl">{formatFiatFromCents(flow.treasuryUsdCents, "USD")}</p>
+          </div>
+          <div>
+            <p className="text-xs uppercase tracking-widest opacity-60">Cassa negozio CHF</p>
+            <p className="font-ledger text-2xl">{formatFiatFromCents(flow.treasuryChfCents, "CHF")}</p>
           </div>
           <div>
             <p className="text-xs uppercase tracking-widest opacity-60">Vendite EUR (stima)</p>

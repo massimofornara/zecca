@@ -10,12 +10,14 @@ export type ForgeTier = {
 export type ZeccaSettings = {
   eurCentsPerCredit: number;
   usdCentsPerCredit: number;
+  chfCentsPerCredit: number;
   forgeTiers: ForgeTier[];
 };
 
 export const DEFAULT_SETTINGS: ZeccaSettings = {
   eurCentsPerCredit: 100,
   usdCentsPerCredit: 108,
+  chfCentsPerCredit: 94,
   forgeTiers: [
     { minSpent: 0, maxSpent: 49, percent: 0 },
     { minSpent: 50, maxSpent: 149, percent: 20 },
@@ -36,6 +38,9 @@ export async function getSettings(
     usdCentsPerCredit: map.usdCentsPerCredit
       ? Number(map.usdCentsPerCredit)
       : DEFAULT_SETTINGS.usdCentsPerCredit,
+    chfCentsPerCredit: map.chfCentsPerCredit
+      ? Number(map.chfCentsPerCredit)
+      : DEFAULT_SETTINGS.chfCentsPerCredit,
     forgeTiers: map.forgeTiers
       ? (JSON.parse(map.forgeTiers) as ForgeTier[])
       : DEFAULT_SETTINGS.forgeTiers,
@@ -51,7 +56,7 @@ export async function saveSettings(
   const current = await getSettings(db);
 
   async function writeRate(
-    key: "eurCentsPerCredit" | "usdCentsPerCredit",
+    key: "eurCentsPerCredit" | "usdCentsPerCredit" | "chfCentsPerCredit",
     nextCents: number | undefined,
     label: string,
   ) {
@@ -78,6 +83,7 @@ export async function saveSettings(
 
   await writeRate("eurCentsPerCredit", next.eurCentsPerCredit, "EUR");
   await writeRate("usdCentsPerCredit", next.usdCentsPerCredit, "USD");
+  await writeRate("chfCentsPerCredit", next.chfCentsPerCredit, "CHF");
   if (next.forgeTiers) {
     await db.setting.upsert({
       where: { key: "forgeTiers" },
@@ -93,4 +99,8 @@ export function creditsToEurCents(credits: number, eurCentsPerCredit: number) {
 
 export function creditsToUsdCents(credits: number, usdCentsPerCredit: number) {
   return Math.round(credits * usdCentsPerCredit);
+}
+
+export function creditsToChfCents(credits: number, chfCentsPerCredit: number) {
+  return Math.round(credits * chfCentsPerCredit);
 }

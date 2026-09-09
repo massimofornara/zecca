@@ -9,6 +9,7 @@ export type CashoutProof = {
   credits: number;
   eurCents: number;
   usdCents: number;
+  chfCents?: number;
   currency: string;
   payoutKind: string;
   iban: string | null;
@@ -49,6 +50,7 @@ export function proofFromPaidCashout(input: {
   credits: number;
   eurCents: number;
   usdCents: number;
+  chfCents?: number;
   currency: string;
   payoutKind: string;
   iban: string | null;
@@ -77,6 +79,7 @@ export function proofFromPaidCashout(input: {
     credits: input.credits,
     eurCents: input.eurCents,
     usdCents: input.usdCents,
+    chfCents: input.chfCents ?? 0,
     currency: input.currency,
     payoutKind: input.payoutKind,
     iban: input.iban,

@@ -6,6 +6,7 @@ export function officialReceiptHash(payload: {
   currency: string;
   eurCents: number;
   usdCents: number;
+  chfCents?: number;
   payoutKind: string;
   destination: string;
   receiptRef: string;
@@ -17,6 +18,7 @@ export function officialReceiptHash(payload: {
     payload.currency,
     String(payload.eurCents),
     String(payload.usdCents),
+    ...(payload.currency === "CHF" ? [String(payload.chfCents ?? 0)] : []),
     payload.payoutKind,
     payload.destination,
     payload.receiptRef,

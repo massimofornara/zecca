@@ -95,7 +95,7 @@ export function formatBookCryptoAmount(
 }
 
 export async function shopFiatBalances(db: Db = defaultPrisma) {
-  const [eur, usd] = await Promise.all([
+  const [eur, usd, chf] = await Promise.all([
     db.ledgerEntry.aggregate({
       where: { type: "TREASURY_CONVERT_TO_EUR" },
       _sum: { eurCents: true },
@@ -104,10 +104,15 @@ export async function shopFiatBalances(db: Db = defaultPrisma) {
       where: { type: "TREASURY_CONVERT_TO_USD" },
       _sum: { usdCents: true },
     }),
+    db.ledgerEntry.aggregate({
+      where: { type: "TREASURY_CONVERT_TO_CHF" },
+      _sum: { chfCents: true },
+    }),
   ]);
   return {
     treasuryEurCents: eur._sum.eurCents ?? 0,
     treasuryUsdCents: usd._sum.usdCents ?? 0,
+    treasuryChfCents: chf._sum.chfCents ?? 0,
   };
 }
 
@@ -186,12 +191,14 @@ export async function convertTreasuryToShopFiat(input: {
   actorId: string;
   creditsEur?: number;
   creditsUsd?: number;
+  creditsChf?: number;
   db?: PrismaClient;
 }) {
   return convertTreasuryToShopCash({
     actorId: input.actorId,
     creditsEur: input.creditsEur,
     creditsUsd: input.creditsUsd,
+    creditsChf: input.creditsChf,
     db: input.db,
   });
 }
@@ -200,6 +207,7 @@ export async function convertTreasuryToShopCash(input: {
   actorId: string;
   creditsEur?: number;
   creditsUsd?: number;
+  creditsChf?: number;
   creditsCrypto?: number;
   cryptoAsset?: string;
   db?: PrismaClient;
@@ -207,6 +215,7 @@ export async function convertTreasuryToShopCash(input: {
   const db = input.db ?? defaultPrisma;
   const creditsEur = Math.max(0, Math.floor(Number(input.creditsEur ?? 0)));
   const creditsUsd = Math.max(0, Math.floor(Number(input.creditsUsd ?? 0)));
+  const creditsChf = Math.max(0, Math.floor(Number(input.creditsChf ?? 0)));
   const creditsCrypto = Math.max(0, Math.floor(Number(input.creditsCrypto ?? 0)));
   const cryptoAssetId = parseTreasuryCryptoAsset(input.cryptoAsset);
 
@@ -216,9 +225,9 @@ export async function convertTreasuryToShopCash(input: {
       "INVALID_ASSET",
     );
   }
-  if (creditsEur <= 0 && creditsUsd <= 0 && creditsCrypto <= 0) {
+  if (creditsEur <= 0 && creditsUsd <= 0 && creditsChf <= 0 && creditsCrypto <= 0) {
     throw new ZeccaError(
-      "Indica i crediti da convertire in euro, dollari o crypto.",
+      "Indica i crediti da convertire in euro, dollari, franchi o crypto.",
       "INVALID_AMOUNT",
     );
   }
@@ -226,8 +235,9 @@ export async function convertTreasuryToShopCash(input: {
   const settings = await getSettings(db);
   const eurCents = creditsToFiatCents(creditsEur, settings.eurCentsPerCredit);
   const usdCents = creditsToFiatCents(creditsUsd, settings.usdCentsPerCredit);
+  const chfCents = creditsToFiatCents(creditsChf, settings.chfCentsPerCredit);
   const cryptoUsdCents = creditsToFiatCents(creditsCrypto, settings.usdCentsPerCredit);
-  const totalCredits = creditsEur + creditsUsd + creditsCrypto;
+  const totalCredits = creditsEur + creditsUsd + creditsChf + creditsCrypto;
 
   return db.$transaction(async (tx) => {
     const treasury = await pocketBalance("TREASURY", null, tx);
@@ -280,6 +290,27 @@ export async function convertTreasuryToShopCash(input: {
       );
     }
 
+    if (creditsChf > 0) {
+      entries.push(
+        await appendLedger(
+          {
+            type: "TREASURY_CONVERT_TO_CHF",
+            amountCredits: creditsChf,
+            fromPocket: "TREASURY",
+            toPocket: "BURN",
+            actorId: input.actorId,
+            eurCents: 0,
+            usdCents: 0,
+            chfCents,
+            fiatCurrency: "CHF",
+            note: `Conversione tesoreria: ${creditsChf} cr → ${(chfCents / 100).toFixed(2)} CHF in cassa negozio`,
+            metadata: { credits: creditsChf, chfCents },
+          },
+          tx,
+        ),
+      );
+    }
+
     if (creditsCrypto > 0 && cryptoAssetId) {
       const ticker = cryptoAsset(cryptoAssetId)?.ticker ?? cryptoAssetId;
       entries.push(
@@ -309,10 +340,12 @@ export async function convertTreasuryToShopCash(input: {
     return {
       creditsEur,
       creditsUsd,
+      creditsChf,
       creditsCrypto,
       cryptoAsset: cryptoAssetId,
       eurCents,
       usdCents,
+      chfCents,
       cryptoUsdCents,
       entries,
     };

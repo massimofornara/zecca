@@ -14,7 +14,8 @@ export type LedgerWrite = {
   creditPurchaseId?: string | null;
   eurCents?: number;
   usdCents?: number;
-  fiatCurrency?: "EUR" | "USD" | null;
+  chfCents?: number;
+  fiatCurrency?: "EUR" | "USD" | "CHF" | null;
   eurDirection?: "IN" | "OUT" | null;
   note?: string | null;
   metadata?: Record<string, unknown> | null;
@@ -41,6 +42,7 @@ export async function appendLedger(
       creditPurchaseId: entry.creditPurchaseId ?? null,
       eurCents: entry.eurCents ?? 0,
       usdCents: entry.usdCents ?? 0,
+      chfCents: entry.chfCents ?? 0,
       fiatCurrency: entry.fiatCurrency ?? null,
       eurDirection: entry.eurDirection ?? null,
       note: entry.note ?? null,
@@ -95,7 +97,7 @@ export async function treasuryBalance(
 }
 
 export async function totals(db: PrismaClient = defaultPrisma) {
-  const [minted, burned, treasury, walletsIn, walletsOut, escrowIn, escrowOut, eurIn, eurOut, usdOut, shopEur, shopUsd] =
+  const [minted, burned, treasury, walletsIn, walletsOut, escrowIn, escrowOut, eurIn, eurOut, usdOut, shopEur, shopUsd, shopChf] =
     await Promise.all([
       db.ledgerEntry.aggregate({
         where: { type: "MINT" },
@@ -142,6 +144,10 @@ export async function totals(db: PrismaClient = defaultPrisma) {
         where: { type: "TREASURY_CONVERT_TO_USD" },
         _sum: { usdCents: true },
       }),
+      db.ledgerEntry.aggregate({
+        where: { type: "TREASURY_CONVERT_TO_CHF" },
+        _sum: { chfCents: true },
+      }),
     ]);
 
   const spentOnGoods = await db.ledgerEntry.aggregate({
@@ -156,6 +162,7 @@ export async function totals(db: PrismaClient = defaultPrisma) {
           "TREASURY_CASHOUT",
           "TREASURY_CONVERT_TO_EUR",
           "TREASURY_CONVERT_TO_USD",
+          "TREASURY_CONVERT_TO_CHF",
           "TREASURY_CONVERT_TO_CRYPTO",
         ],
       },
@@ -182,5 +189,6 @@ export async function totals(db: PrismaClient = defaultPrisma) {
     usdOutCents: usdOut._sum.usdCents ?? 0,
     treasuryEurCents: shopEur._sum.eurCents ?? 0,
     treasuryUsdCents: shopUsd._sum.usdCents ?? 0,
+    treasuryChfCents: shopChf._sum.chfCents ?? 0,
   };
 }

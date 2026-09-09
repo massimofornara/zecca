@@ -70,8 +70,8 @@ export default async function FusionePage() {
       <h1 className="mt-1 font-display text-4xl text-primary">Preleva i crediti</h1>
       <p className="mt-3 max-w-2xl text-muted-foreground">
         {house
-          ? `${who}, i crediti generati si convertono nella crypto scelta: il negozio crea l’hash. MetaMask, Trust Wallet o l’exchange ricevono senza firmare. Il bonifico IBAN resta da UniCredit o Wise.`
-          : "Chiedi euro, dollari o crypto. Per la crypto indichi solo il wallet che riceve: dopo la conferma del negozio i fondi arrivano, senza firme né consensi."}
+          ? `${who}, i crediti generati si convertono nella crypto scelta: il negozio crea l’hash. MetaMask, Trust Wallet o l’exchange ricevono senza firmare. Il bonifico IBAN resta da UniCredit o Wise, anche in franchi svizzeri.`
+          : "Chiedi euro, dollari, franchi svizzeri o crypto. Per la crypto indichi solo il wallet che riceve: dopo la conferma del negozio i fondi arrivano, senza firme né consensi."}
       </p>
       {house ? (
         <div className="mt-8">
@@ -86,6 +86,7 @@ export default async function FusionePage() {
           available={wallet.available}
           eurCentsPerCredit={settings.eurCentsPerCredit}
           usdCentsPerCredit={settings.usdCentsPerCredit}
+          chfCentsPerCredit={settings.chfCentsPerCredit}
           house={house}
           houseName={who}
           shopAddress={shopEvmAddress}

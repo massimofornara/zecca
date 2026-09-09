@@ -146,6 +146,11 @@ async function hydrateLiveDatabase() {
     update: {},
   });
   await prisma.setting.upsert({
+    where: { key: "chfCentsPerCredit" },
+    create: { key: "chfCentsPerCredit", value: String(DEFAULT_SETTINGS.chfCentsPerCredit) },
+    update: {},
+  });
+  await prisma.setting.upsert({
     where: { key: "forgeTiers" },
     create: { key: "forgeTiers", value: JSON.stringify(DEFAULT_SETTINGS.forgeTiers) },
     update: {},

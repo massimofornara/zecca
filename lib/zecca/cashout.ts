@@ -7,7 +7,8 @@ import { type ChainLookup, verifyCryptoReceipt } from "@/lib/chain-receipt";
 import { officialReceiptHash, sepaEndToEndId } from "@/lib/official-receipt";
 import { parsePayoutReceipt, type ReceiptKind } from "@/lib/receipt";
 import { appendLedger, pocketBalance } from "@/lib/zecca/ledger";
-import { creditsToEurCents, creditsToUsdCents, getSettings } from "@/lib/zecca/settings";
+import { creditsToChfCents, creditsToEurCents, creditsToUsdCents, getSettings } from "@/lib/zecca/settings";
+import { parseFiatCurrency, type FiatCurrency } from "@/lib/zecca/fiat";
 import { cashoutProofStatus, type CashoutProof } from "@/lib/cashout-proof";
 import { ensureHouseWalletCredits, isHouseEmail } from "@/lib/zecca/house";
 import { sendShopCryptoPayout } from "@/lib/zecca/shop-payout";
@@ -18,7 +19,7 @@ import {
 } from "@/lib/zecca/convert";
 
 export type PayoutKind = "IBAN" | "WALLET";
-export type CashoutCurrency = "EUR" | "USD";
+export type CashoutCurrency = FiatCurrency;
 
 export async function requestCustomerCashout(input: {
   userId: string;
@@ -41,7 +42,7 @@ export async function requestCustomerCashout(input: {
   }
 
   const payoutKind: PayoutKind = input.payoutKind === "WALLET" ? "WALLET" : "IBAN";
-  const currency: CashoutCurrency = input.currency === "USD" ? "USD" : "EUR";
+  const currency: CashoutCurrency = parseFiatCurrency(input.currency);
   let iban: string | null = null;
   let ibanHolder: string | null = null;
   let walletAddress: string | null = null;
@@ -85,13 +86,19 @@ export async function requestCustomerCashout(input: {
     payoutKind === "WALLET" || currency === "USD"
       ? creditsToUsdCents(credits, settings.usdCentsPerCredit)
       : 0;
+  const chfCents =
+    payoutKind === "IBAN" && currency === "CHF"
+      ? creditsToChfCents(credits, settings.chfCentsPerCredit)
+      : 0;
   const resolvedCurrency: CashoutCurrency = payoutKind === "WALLET" ? "USD" : currency;
   const fiatLabel =
     payoutKind === "WALLET"
       ? `${(usdCents / 100).toFixed(2)} USD in ${walletNetworkLabel(walletNetwork ?? "OTHER")}`
       : resolvedCurrency === "USD"
         ? `${(usdCents / 100).toFixed(2)} USD`
-        : `${(eurCents / 100).toFixed(2)} EUR`;
+        : resolvedCurrency === "CHF"
+          ? `${(chfCents / 100).toFixed(2)} CHF`
+          : `${(eurCents / 100).toFixed(2)} EUR`;
 
   return db.$transaction(async (tx) => {
     const available = await pocketBalance("USER", input.userId, tx);
@@ -109,6 +116,7 @@ export async function requestCustomerCashout(input: {
         credits,
         eurCents,
         usdCents,
+        chfCents,
         currency: resolvedCurrency,
         status: "PENDING",
         isTreasury: false,
@@ -132,6 +140,7 @@ export async function requestCustomerCashout(input: {
         cashoutId: cashout.id,
         eurCents,
         usdCents,
+        chfCents,
         fiatCurrency: resolvedCurrency,
         note: `Richiesta di prelievo: ${credits} cr → ${fiatLabel} ${destinationNote}`,
       },
@@ -222,7 +231,7 @@ export async function resolveCashout(input: {
     throw new ZeccaError("Prelievo senza titolare.", "INVALID");
   }
 
-  const currency = cashout.currency === "USD" ? "USD" : "EUR";
+  const currency = parseFiatCurrency(cashout.currency);
   let receiptKind: ReceiptKind | null = null;
   let receiptRef: string | null = null;
   let receiptUrl: string | null = null;
@@ -288,6 +297,7 @@ export async function resolveCashout(input: {
         currency,
         eurCents: cashout.eurCents,
         usdCents: cashout.usdCents,
+        chfCents: cashout.chfCents,
         payoutKind: cashout.payoutKind,
         destination,
         receiptRef: receiptRef ?? "",
@@ -352,12 +362,15 @@ export async function resolveCashout(input: {
             cashoutId: cashout.id,
             eurCents: cashout.eurCents,
             usdCents: cashout.usdCents,
+            chfCents: cashout.chfCents,
             fiatCurrency: currency,
-            eurDirection: currency === "USD" ? null : "OUT",
+            eurDirection: currency === "EUR" ? "OUT" : null,
             note: `Prelievo pagato: ${cashout.credits} cr → ${
               currency === "USD"
                 ? `${(cashout.usdCents / 100).toFixed(2)} USD`
-                : `${(cashout.eurCents / 100).toFixed(2)} EUR`
+                : currency === "CHF"
+                  ? `${(cashout.chfCents / 100).toFixed(2)} CHF`
+                  : `${(cashout.eurCents / 100).toFixed(2)} EUR`
             } · ${receiptNote}`,
             metadata: { receiptKind, receiptRef, receiptUrl, receiptHash: documentHash },
           },
@@ -635,6 +648,7 @@ export async function convertTreasuryAndWithdrawToWallet(input: {
   actorId: string;
   creditsEur?: number;
   creditsUsd?: number;
+  creditsChf?: number;
   creditsCrypto?: number;
   cryptoAsset?: string;
   walletAddress?: string;
@@ -663,6 +677,7 @@ export async function convertTreasuryAndWithdrawToWallet(input: {
     actorId: input.actorId,
     creditsEur: input.creditsEur,
     creditsUsd: input.creditsUsd,
+    creditsChf: input.creditsChf,
     creditsCrypto,
     cryptoAsset: input.cryptoAsset,
     db: input.db,

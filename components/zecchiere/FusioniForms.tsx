@@ -33,11 +33,13 @@ export function TreasuryConvertForm({
   treasury,
   eurCentsPerCredit,
   usdCentsPerCredit,
+  chfCentsPerCredit,
   vault = [],
 }: {
   treasury: number;
   eurCentsPerCredit: number;
   usdCentsPerCredit: number;
+  chfCentsPerCredit: number;
   vault?: ShopVaultAsset[];
 }) {
   const [state, action] = useActionState(
@@ -46,6 +48,7 @@ export function TreasuryConvertForm({
   );
   const [creditsEur, setCreditsEur] = useState(0);
   const [creditsUsd, setCreditsUsd] = useState(0);
+  const [creditsChf, setCreditsChf] = useState(0);
   const [creditsCrypto, setCreditsCrypto] = useState(0);
   const [cryptoAsset, setCryptoAsset] = useState<TreasuryCryptoAsset>("BTC");
   const [walletAddress, setWalletAddress] = useState("");
@@ -60,6 +63,11 @@ export function TreasuryConvertForm({
     const amount = creditsUsd > 0 ? Math.floor(creditsUsd) : 0;
     return formatFiatFromCents(amount * usdCentsPerCredit, "USD");
   }, [creditsUsd, usdCentsPerCredit]);
+
+  const previewChf = useMemo(() => {
+    const amount = creditsChf > 0 ? Math.floor(creditsChf) : 0;
+    return formatFiatFromCents(amount * chfCentsPerCredit, "CHF");
+  }, [creditsChf, chfCentsPerCredit]);
 
   const selectedCrypto =
     CRYPTO_CHOICES.find((asset) => asset.id === cryptoAsset) ?? CRYPTO_CHOICES[0];
@@ -135,11 +143,11 @@ export function TreasuryConvertForm({
       <ErrorBanner message={formError || state?.error} />
       <OkBanner message={state?.ok} />
       <p className="text-sm text-muted-foreground">
-        Euro e dollari restano nella <strong>cassa negozio</strong>. BTC, ETH, USDT, USDC e BNB
-        vanno in <strong>cassa di rete</strong> e, nello stesso invio, escono verso il wallet
-        indicato sotto (MetaMask, Trust Wallet o exchange). Chi riceve non firma.
+        Euro, dollari e franchi svizzeri restano nella <strong>cassa negozio</strong>. BTC, ETH,
+        USDT, USDC e BNB vanno in <strong>cassa di rete</strong> e, nello stesso invio, escono verso
+        il wallet indicato sotto (MetaMask, Trust Wallet o exchange). Chi riceve non firma.
       </p>
-      <div className="grid gap-4 sm:grid-cols-2">
+      <div className="grid gap-4 sm:grid-cols-3">
         <label className="text-sm">
           Crediti → euro (negozio)
           <Input
@@ -165,6 +173,19 @@ export function TreasuryConvertForm({
             placeholder="0"
           />
           <span className="mt-1 block font-ledger text-ember">{previewUsd}</span>
+        </label>
+        <label className="text-sm">
+          Crediti → franchi svizzeri (negozio)
+          <Input
+            name="creditsChf"
+            type="number"
+            min={0}
+            value={creditsChf || ""}
+            onChange={(e) => setCreditsChf(Number(e.target.value))}
+            className="mt-1 font-ledger"
+            placeholder="0"
+          />
+          <span className="mt-1 block font-ledger text-ember">{previewChf}</span>
         </label>
       </div>
       <div className="space-y-3 rounded-md bg-background/40 p-4 ring-1 ring-primary/15">
@@ -233,7 +254,8 @@ export function TreasuryConvertForm({
       </div>
       <p className="text-xs text-muted-foreground">
         Disponibili: {formatCredits(treasury)}. Tasso: 1 cr = {formatEurFromCents(eurCentsPerCredit)}{" "}
-        · 1 cr = {formatFiatFromCents(usdCentsPerCredit, "USD")}
+        · 1 cr = {formatFiatFromCents(usdCentsPerCredit, "USD")} · 1 cr ={" "}
+        {formatFiatFromCents(chfCentsPerCredit, "CHF")}
       </p>
       <SubmitButton
         pendingLabel={cryptoAmount > 0 ? "Conversione e invio…" : "Conversione in corso…"}
@@ -440,6 +462,7 @@ export function PendingCashoutCard({
   credits,
   eurCents,
   usdCents,
+  chfCents = 0,
   currency,
   payoutKind,
   iban,
@@ -455,6 +478,7 @@ export function PendingCashoutCard({
   credits: number;
   eurCents: number;
   usdCents: number;
+  chfCents?: number;
   currency: string;
   payoutKind: string;
   iban: string | null;
@@ -466,7 +490,7 @@ export function PendingCashoutCard({
 }) {
   const [payState, payAction] = useActionState(resolveCashoutAction, null);
   const [rejectState, rejectAction] = useActionState(resolveCashoutAction, null);
-  const amountLabel = formatCashoutValue({ currency, eurCents, usdCents });
+  const amountLabel = formatCashoutValue({ currency, eurCents, usdCents, chfCents });
 
   const dest = destinationInstruction({
     payoutKind,
@@ -477,11 +501,13 @@ export function PendingCashoutCard({
     currency,
     eurCents,
     usdCents,
+    chfCents,
     cashoutId: id,
   });
   const isWallet = dest?.kind === "WALLET";
   const isUsd = currency === "USD";
-  const houseBank = housePayoutByIban(iban);
+  const isChf = currency === "CHF";
+  const houseBank = housePayoutByIban(iban, currency);
 
   return (
     <li className="metal-frame rounded-md bg-card p-4">
@@ -493,10 +519,12 @@ export function PendingCashoutCard({
         {isWallet
           ? ` · ${walletNetworkLabel(walletNetwork)}`
           : houseBank
-            ? ` · ${houseBank.bank} · ${isUsd ? "USD" : "EUR"}`
+            ? ` · ${houseBank.bank} · ${houseBank.preferredCurrency}`
             : isUsd
               ? " · IBAN · USD"
-              : " · IBAN · EUR"}
+              : isChf
+                ? " · IBAN · CHF"
+                : " · IBAN · EUR"}
       </p>
       <p className="text-xs text-muted-foreground">{createdLabel}</p>
 
@@ -565,7 +593,9 @@ export function PendingCashoutCard({
               <input type="checkbox" name="sepaConfirm" value="on" className="mt-0.5" required />
               {isUsd
                 ? "Ho disposto il bonifico in dollari (SWIFT/estero) dal mio conto verso questo IBAN."
-                : "Ho disposto il bonifico SEPA dal mio conto verso questo IBAN."}
+                : isChf
+                  ? "Ho disposto il bonifico in franchi svizzeri (SIC/estero) dal mio conto verso questo IBAN."
+                  : "Ho disposto il bonifico SEPA dal mio conto verso questo IBAN."}
             </label>
           )}
           {isWallet ? <input type="hidden" name="payoutConfirm" value="on" /> : null}

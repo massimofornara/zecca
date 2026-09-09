@@ -69,6 +69,7 @@ async function main() {
     data: [
       { key: "eurCentsPerCredit", value: String(DEFAULT_SETTINGS.eurCentsPerCredit) },
       { key: "usdCentsPerCredit", value: String(DEFAULT_SETTINGS.usdCentsPerCredit) },
+      { key: "chfCentsPerCredit", value: String(DEFAULT_SETTINGS.chfCentsPerCredit) },
       { key: "forgeTiers", value: JSON.stringify(DEFAULT_SETTINGS.forgeTiers) },
       { key: "shopIban", value: unicredit.iban },
       { key: "shopIbanHolder", value: unicredit.holder },
