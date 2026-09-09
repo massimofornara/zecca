@@ -3,6 +3,7 @@ import { prisma as defaultPrisma } from "@/lib/db";
 import { ZeccaError } from "@/lib/errors";
 import { isValidIban, normalizeIban } from "@/lib/iban";
 import { isValidWalletAddress, normalizeWalletAddress, walletNetworkLabel } from "@/lib/wallet";
+import { type ChainLookup, verifyCryptoReceipt } from "@/lib/chain-receipt";
 import { parsePayoutReceipt, type ReceiptKind } from "@/lib/receipt";
 import { appendLedger, pocketBalance } from "@/lib/zecca/ledger";
 import { creditsToEurCents, creditsToUsdCents, getSettings } from "@/lib/zecca/settings";
@@ -132,42 +133,79 @@ export async function resolveCashout(input: {
   action: "pay" | "reject";
   adminNote?: string;
   receipt?: string;
+  chainLookup?: ChainLookup;
   db?: PrismaClient;
 }) {
   const db = input.db ?? defaultPrisma;
+  const cashout = await db.cashoutRequest.findUnique({ where: { id: input.cashoutId } });
+  if (!cashout) {
+    throw new ZeccaError("Richiesta di prelievo non trovata.", "NOT_FOUND");
+  }
+  if (cashout.status !== "PENDING") {
+    throw new ZeccaError("Questa richiesta è già stata chiusa.", "ALREADY_RESOLVED");
+  }
+  if (cashout.isTreasury) {
+    throw new ZeccaError("Le fusioni di tesoreria si eseguono direttamente.", "INVALID");
+  }
+  if (!cashout.userId) {
+    throw new ZeccaError("Prelievo senza titolare.", "INVALID");
+  }
+
+  const currency = cashout.currency === "USD" ? "USD" : "EUR";
+  let receiptKind: ReceiptKind | null = null;
+  let receiptRef: string | null = null;
+  let receiptUrl: string | null = null;
+
+  if (input.action === "pay") {
+    const parsed = parsePayoutReceipt({
+      payoutKind: cashout.payoutKind,
+      walletNetwork: cashout.walletNetwork,
+      receipt: input.receipt ?? "",
+    });
+    if ("error" in parsed) {
+      throw new ZeccaError(parsed.error, "INVALID_RECEIPT");
+    }
+    receiptKind = parsed.kind;
+    receiptRef = parsed.ref;
+    receiptUrl = parsed.url;
+    if (receiptKind === "TX_HASH") {
+      try {
+        await verifyCryptoReceipt({
+          network: cashout.walletNetwork ?? "ETH",
+          hash: receiptRef,
+          expectedAddress: cashout.walletAddress,
+          lookup: input.chainLookup,
+        });
+      } catch (error) {
+        throw new ZeccaError(
+          error instanceof Error ? error.message : "Hash non verificato sulla rete.",
+          "INVALID_RECEIPT",
+        );
+      }
+      const reused = await db.cashoutRequest.findFirst({
+        where: {
+          receiptKind: "TX_HASH",
+          receiptRef,
+          NOT: { id: cashout.id },
+        },
+        select: { id: true },
+      });
+      if (reused) {
+        throw new ZeccaError(
+          "Questo hash è già stato usato come ricevuta di un altro prelievo.",
+          "INVALID_RECEIPT",
+        );
+      }
+    }
+  }
 
   return db.$transaction(async (tx) => {
-    const cashout = await tx.cashoutRequest.findUnique({ where: { id: input.cashoutId } });
-    if (!cashout) {
-      throw new ZeccaError("Richiesta di prelievo non trovata.", "NOT_FOUND");
-    }
-    if (cashout.status !== "PENDING") {
+    const latest = await tx.cashoutRequest.findUnique({ where: { id: cashout.id } });
+    if (!latest || latest.status !== "PENDING") {
       throw new ZeccaError("Questa richiesta è già stata chiusa.", "ALREADY_RESOLVED");
     }
-    if (cashout.isTreasury) {
-      throw new ZeccaError("Le fusioni di tesoreria si eseguono direttamente.", "INVALID");
-    }
-    if (!cashout.userId) {
-      throw new ZeccaError("Prelievo senza titolare.", "INVALID");
-    }
-
-    const currency = cashout.currency === "USD" ? "USD" : "EUR";
-    let receiptKind: ReceiptKind | null = null;
-    let receiptRef: string | null = null;
-    let receiptUrl: string | null = null;
 
     if (input.action === "pay") {
-      const parsed = parsePayoutReceipt({
-        payoutKind: cashout.payoutKind,
-        walletNetwork: cashout.walletNetwork,
-        receipt: input.receipt ?? "",
-      });
-      if ("error" in parsed) {
-        throw new ZeccaError(parsed.error, "INVALID_RECEIPT");
-      }
-      receiptKind = parsed.kind;
-      receiptRef = parsed.ref;
-      receiptUrl = parsed.url;
       const receiptNote =
         receiptKind === "TX_HASH"
           ? `ricevuta hash ${receiptRef}`

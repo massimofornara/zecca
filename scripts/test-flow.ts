@@ -210,7 +210,7 @@ async function main() {
       credits: 20,
       payoutKind: "WALLET",
       walletNetwork: "ETH",
-      walletAddress: "0x742d35Cc6634C0532925a3b844Bc454e4438f44e",
+      walletAddress: "0x4166ca49529dff2014c2e085143e88fd0d624cf5",
       db,
     });
     assert.equal(walletOut.payoutKind, "WALLET");
@@ -241,7 +241,22 @@ async function main() {
     }
     assert.equal(missingReceipt, true, "senza CRO il bonifico non si chiude");
 
-    const ethHash = `0x${"ab".repeat(32)}`;
+    const fakeEthHash = `0x${"ab".repeat(32)}`;
+    const realEthHash = "0x6d481a746b116d17d56c80561957cfb1652189a01e3ae32166e5e2bc67463309";
+    let fakeHash = false;
+    try {
+      await resolveCashout({
+        cashoutId: walletOut.id,
+        actorId: admin.id,
+        action: "pay",
+        receipt: fakeEthHash,
+        db,
+      });
+    } catch (error) {
+      fakeHash = error instanceof Error && error.message.includes("non esiste");
+    }
+    assert.equal(fakeHash, true, "un hash inventato non chiude un prelievo crypto");
+
     await resolveCashout({
       cashoutId: cashout.id,
       actorId: admin.id,
@@ -253,7 +268,7 @@ async function main() {
       cashoutId: walletOut.id,
       actorId: admin.id,
       action: "pay",
-      receipt: ethHash,
+      receipt: realEthHash,
       db,
     });
     assert.equal(await pocketBalance("ESCROW", customer.id, db), 0);
@@ -263,8 +278,8 @@ async function main() {
     assert.equal(paid.receiptRef, "CRO-UNICREDIT-2212");
     const paidWallet = await db.cashoutRequest.findUniqueOrThrow({ where: { id: walletOut.id } });
     assert.equal(paidWallet.receiptKind, "TX_HASH");
-    assert.equal(paidWallet.receiptRef, ethHash);
-    assert.equal(paidWallet.receiptUrl, explorerUrl("ETH", ethHash));
+    assert.equal(paidWallet.receiptRef, realEthHash);
+    assert.equal(paidWallet.receiptUrl, explorerUrl("ETH", realEthHash));
 
     const types = await db.ledgerEntry.groupBy({ by: ["type"], _count: true });
     const typeSet = new Set(types.map((t) => t.type));

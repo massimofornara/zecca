@@ -25,15 +25,20 @@ export function SettleCashoutForm({
       <input type="hidden" name="payoutKind" value={isWallet ? "WALLET" : "IBAN"} />
       <input type="hidden" name={isWallet ? "payoutConfirm" : "sepaConfirm"} value="on" />
       <label className="block text-sm">
-        {isWallet ? "Hash della transazione (ricevuta)" : "CRO / riferimento bonifico (ricevuta)"}
+        {isWallet ? "Hash reale della transazione (ricevuta)" : "CRO / riferimento bonifico (ricevuta)"}
         <Input
           name="receipt"
           required
           autoComplete="off"
           className="mt-1 font-ledger"
-          placeholder={isWallet ? "0x… hash della rete" : "CRO o end-to-end ID"}
+          placeholder={isWallet ? "0x… hash già confermato sulla rete" : "CRO o end-to-end ID"}
         />
       </label>
+      {isWallet ? (
+        <p className="text-xs text-muted-foreground">
+          Deve esistere sulla rete e andare al wallet di questo prelievo. Un hash inventato viene rifiutato.
+        </p>
+      ) : null}
       <SubmitButton size="sm" formNoValidate>
         {isWallet ? "Registra hash e chiudi" : "Registra CRO e chiudi"}
       </SubmitButton>

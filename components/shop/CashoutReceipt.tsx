@@ -17,6 +17,9 @@ export function CashoutReceipt({
     <div className="mt-2 space-y-2 rounded-md bg-background/50 p-3 ring-1 ring-primary/20">
       <p className="text-[11px] uppercase tracking-[0.18em] text-primary/80">Ricevuta del prelievo</p>
       <CopyField label={receiptLabel(receiptKind, walletNetwork)} value={receiptRef} mono />
+      {receiptKind === "TX_HASH" ? (
+        <p className="text-xs text-ember">Hash verificato sulla rete. È la ricevuta dell’invio.</p>
+      ) : null}
       {receiptUrl ? (
         <a
           href={receiptUrl}

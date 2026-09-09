@@ -179,15 +179,20 @@ export function PendingCashoutCard({
           <input type="hidden" name="action" value="pay" />
           <input type="hidden" name="payoutKind" value={isWallet ? "WALLET" : "IBAN"} />
           <label className="block text-sm">
-            {isWallet ? "Hash della transazione (ricevuta)" : "CRO / riferimento bonifico (ricevuta)"}
+            {isWallet ? "Hash reale della transazione (ricevuta)" : "CRO / riferimento bonifico (ricevuta)"}
             <Input
               name="receipt"
               required
               autoComplete="off"
               className="mt-1 max-w-xl font-ledger"
-              placeholder={isWallet ? "0x… oppure l’id della rete" : "CRO o end-to-end ID"}
+              placeholder={isWallet ? "0x… hash già confermato sulla rete" : "CRO o end-to-end ID"}
             />
           </label>
+          {isWallet ? (
+            <p className="text-xs text-muted-foreground">
+              Zecca interroga la rete: l’hash deve esistere e andare a questo wallet. Senza transazione reale il prelievo resta aperto.
+            </p>
+          ) : null}
           <label className="flex items-start gap-2 text-xs text-muted-foreground">
             <input
               type="checkbox"

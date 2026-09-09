@@ -95,7 +95,7 @@ export async function resolveCashoutAction(
       return {
         error:
           paidVia === "WALLET"
-            ? "Incolla l’hash della transazione: è la ricevuta del prelievo crypto."
+            ? "Incolla l’hash reale della transazione già confermata sulla rete."
             : "Incolla il CRO o il riferimento del bonifico: è la ricevuta del prelievo.",
       };
     }
