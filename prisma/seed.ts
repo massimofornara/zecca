@@ -3,7 +3,7 @@ import { PrismaClient } from "@prisma/client";
 import { CATALOG_SEED, catalogProductFields } from "../lib/catalog";
 import { HOUSE_PAYOUT_ACCOUNTS } from "../lib/zecca/house-accounts";
 import { grantHouseCredits } from "../lib/zecca/house";
-import { DEFAULT_SETTINGS } from "../lib/zecca/settings";
+import { DEFAULT_SETTINGS, WITHDRAW_SETTING_ROWS } from "../lib/zecca/settings";
 import { attachCatalogSuppliers } from "../lib/suppliers";
 
 const prisma = new PrismaClient();
@@ -71,6 +71,7 @@ async function main() {
       { key: "usdCentsPerCredit", value: String(DEFAULT_SETTINGS.usdCentsPerCredit) },
       { key: "chfCentsPerCredit", value: String(DEFAULT_SETTINGS.chfCentsPerCredit) },
       { key: "forgeTiers", value: JSON.stringify(DEFAULT_SETTINGS.forgeTiers) },
+      ...WITHDRAW_SETTING_ROWS,
       { key: "shopIban", value: unicredit.iban },
       { key: "shopIbanHolder", value: unicredit.holder },
       { key: "shopBankName", value: unicredit.bank },

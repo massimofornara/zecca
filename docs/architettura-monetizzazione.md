@@ -123,6 +123,22 @@ Solo **dopo** regime EMT/ART + CASP. Esempi di categoria (sceglie il legale, non
 
 Non: nodi propri che “inviano ETH al cliente” in base al conio interno; mixer; chain opache per eludere KYC.
 
+### Punto 2 — cassa virtuale vs liquidità on-chain
+
+Il burn dei crediti **non** può originare un ingresso on-chain (nessun UTXO o ether coniato dal libro). Due registri restano separati:
+
+```
+[Crediti utente]
+       ↓ burn / scalo a DB
+[Cassa virtuale = passività di libro]
+       ↓ richiesta di payout (whitelist, rate limit, massimali)
+[Transazione on-chain di uscita] → MetaMask / Trust Wallet / CEX
+```
+
+L’unica tx che Mempool o Etherscan riconoscono è il **payout**, attinto dalla liquidità già presente sul wallet operativo. Convertire crediti non dipinge saldi sugli explorer e non salta il controllo di cassa a zero.
+
+Policy sul gateway (`lib/zecca/withdraw-policy.ts`, regolabili in Forgia): checksum EIP-55, whitelist opzionale, massimale per invio e giornaliero, tetto di uscite per ora, lock atomico `BROADCASTING` contro il doppio click.
+
 ## Rischi sistemici e sostenibilità
 
 ### Iperinflazione da coniazione illimitata

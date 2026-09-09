@@ -11,12 +11,15 @@ import { lastCustomerAddress, placeOrder, refreshOrderTracking } from "../lib/ze
 import { getForgeState } from "../lib/zecca/forge";
 import {
   convertTreasuryAndWithdrawToWallet,
+  fulfillWalletCashoutFromShop,
   materializeCashoutFromProof,
   requestAndFulfillCashout,
   requestCustomerCashout,
   requestInternalCryptoWithdraw,
   resolveCashout,
 } from "../lib/zecca/cashout";
+import { saveSettings, DEFAULT_SETTINGS } from "../lib/zecca/settings";
+import { assertWithdrawPolicy, WITHDRAW_BROADCASTING } from "../lib/zecca/withdraw-policy";
 import { cashoutProofStatus, proofFromPaidCashout, signCashoutProof, verifyCashoutProof } from "../lib/cashout-proof";
 import { explorerLinks, explorerUrl } from "../lib/receipt";
 import { encodeErc20Transfer, nativeWeiFromUsdCents, tokenAmountFromUsdCents } from "../lib/evm-send";
@@ -26,7 +29,6 @@ import { getShopNetworkVault } from "../lib/zecca/shop-vault";
 import { convertTreasuryToShopCash, convertTreasuryToShopFiat, shopCryptoBalances, shopFiatBalances } from "../lib/zecca/convert";
 import { pocketBalance, treasuryBalance } from "../lib/zecca/ledger";
 import { getReserveReport } from "../lib/zecca/reserves";
-import { DEFAULT_SETTINGS } from "../lib/zecca/settings";
 import { ensureHouseWalletCredits, grantHouseCredits, houseDisplayName, HOUSE_PAYOUT_ACCOUNTS, isHouseEmail } from "../lib/zecca/house";
 import { isValidIban } from "../lib/iban";
 import { CATALOG_SEED, catalogProductFields, SHOP_CATEGORIES } from "../lib/catalog";
@@ -523,6 +525,143 @@ async function main() {
     assert.equal(rejected.status, "REJECTED");
     assert.equal((await shopCryptoBalances(db)).BTC.remainingCredits, 1000);
 
+    await assert.rejects(
+      () =>
+        assertWithdrawPolicy({
+          address: "0x5aaeb6053F3E94C9b9A09f33669435E7Ef1BeAed",
+          network: "ETH",
+          usdCents: 108,
+          db,
+        }),
+      /Checksum EIP-55/,
+    );
+    await assertWithdrawPolicy({
+      address: "0x742d35cc6634c0532925a3b844bc454e4438f44e",
+      network: "ETH",
+      usdCents: 108,
+      db,
+    });
+
+    await saveSettings(
+      {
+        withdrawWhitelist: ["bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4"],
+        withdrawWhitelistEnforced: true,
+      },
+      admin.id,
+      db,
+    );
+    await assert.rejects(
+      () =>
+        requestInternalCryptoWithdraw({
+          actorId: admin.id,
+          credits: 1,
+          asset: "BTC",
+          walletAddress: "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq",
+          shopSend: false,
+          db,
+        }),
+      /whitelist/,
+    );
+    const allowedOut = await requestInternalCryptoWithdraw({
+      actorId: admin.id,
+      credits: 1,
+      asset: "BTC",
+      walletAddress: "bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4",
+      shopSend: false,
+      db,
+    });
+    assert.equal(allowedOut.status, "PENDING");
+    await resolveCashout({ cashoutId: allowedOut.id, actorId: admin.id, action: "reject", db });
+
+    await saveSettings(
+      { withdrawWhitelist: [], withdrawWhitelistEnforced: false, withdrawMaxCountPerHour: 1 },
+      admin.id,
+      db,
+    );
+    await assert.rejects(
+      () =>
+        requestInternalCryptoWithdraw({
+          actorId: admin.id,
+          credits: 1,
+          asset: "BTC",
+          walletAddress: "bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4",
+          shopSend: false,
+          db,
+        }),
+      /Troppi prelievi crypto/,
+    );
+
+    await saveSettings({ withdrawMaxCountPerHour: DEFAULT_SETTINGS.withdrawMaxCountPerHour, withdrawMaxUsdCentsPerDay: 1 }, admin.id, db);
+    await assert.rejects(
+      () =>
+        requestInternalCryptoWithdraw({
+          actorId: admin.id,
+          credits: 1,
+          asset: "BTC",
+          walletAddress: "bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4",
+          shopSend: false,
+          db,
+        }),
+      /massimale giornaliero/,
+    );
+
+    await saveSettings(
+      {
+        withdrawMaxUsdCentsPerDay: DEFAULT_SETTINGS.withdrawMaxUsdCentsPerDay,
+        withdrawMaxUsdCentsPerTx: 50,
+      },
+      admin.id,
+      db,
+    );
+    await assert.rejects(
+      () =>
+        requestInternalCryptoWithdraw({
+          actorId: admin.id,
+          credits: 1,
+          asset: "BTC",
+          walletAddress: "bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4",
+          shopSend: false,
+          db,
+        }),
+      /massimale per singola uscita/,
+    );
+
+    await saveSettings(
+      {
+        withdrawMaxUsdCentsPerTx: DEFAULT_SETTINGS.withdrawMaxUsdCentsPerTx,
+        withdrawMaxUsdCentsPerDay: DEFAULT_SETTINGS.withdrawMaxUsdCentsPerDay,
+        withdrawMaxCountPerHour: DEFAULT_SETTINGS.withdrawMaxCountPerHour,
+        withdrawMinUsdCents: DEFAULT_SETTINGS.withdrawMinUsdCents,
+        withdrawWhitelist: [],
+        withdrawWhitelistEnforced: false,
+      },
+      admin.id,
+      db,
+    );
+
+    const lockOut = await requestInternalCryptoWithdraw({
+      actorId: admin.id,
+      credits: 1,
+      asset: "BTC",
+      walletAddress: "bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4",
+      shopSend: false,
+      db,
+    });
+    await db.cashoutRequest.update({
+      where: { id: lockOut.id },
+      data: { receiptKind: WITHDRAW_BROADCASTING },
+    });
+    await assert.rejects(
+      () => fulfillWalletCashoutFromShop({ cashoutId: lockOut.id, actorId: admin.id, db }),
+      /già in corso/,
+    );
+    await db.cashoutRequest.update({
+      where: { id: lockOut.id },
+      data: { receiptKind: null },
+    });
+    await resolveCashout({ cashoutId: lockOut.id, actorId: admin.id, action: "reject", db });
+    assert.equal((await shopCryptoBalances(db)).BTC.remainingCredits, 1000);
+
     const payer = await db.user.create({
       data: {
         email: "payer@test.local",
@@ -881,7 +1020,8 @@ async function main() {
 
     console.log("Flusso Zecca: conio → crediti → bottega DHL + ritiro in sede → prelievo IBAN/wallet. OK.");
     console.log("Conversione tesoreria 3000 cr→EUR, 2000 cr→USD e 500 cr→CHF in cassa negozio. OK.");
-    console.log("Conversione tesoreria 1000 cr→BTC e 200 cr→ETH in cassa di rete. OK.");
+    console.log("Conversione tesoreria 1000 cr→BTC e 200 cr→ETH in cassa virtuale. OK.");
+    console.log("Policy prelievo: checksum EIP-55, whitelist, rate limit, massimali, lock broadcast. OK.");
     console.log("Conversione 150 cr→USDT e prelievo verso wallet del form. OK.");
     console.log("Bonifico SEPA in ingresso senza Stripe/webhook. OK.");
     console.log("Casa Fornara: generazione senza pagamento + prelievo IBAN EUR/USD/CHF. OK.");

@@ -2,6 +2,7 @@ import { saveForgeSettingsForm } from "@/actions/admin";
 import { SubmitButton } from "@/components/forms/SubmitButton";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { getSettings } from "@/lib/zecca/settings";
 
 export const metadata = { title: "Forgia" };
@@ -15,7 +16,8 @@ export default async function ForgiaSettingsPage() {
       <h1 className="font-display text-4xl text-primary">Regola la forgia</h1>
       <p className="mt-2 text-muted-foreground">
         Il tasso in euro, dollari e franchi svizzeri è indipendente (1 cr = X EUR, 1 cr = Y USD, 1
-        cr = Z CHF). Le soglie della forgia restano in crediti.
+        cr = Z CHF). Le soglie della forgia restano in crediti. Più in basso: policy del gateway di
+        prelievo crypto (whitelist, massimali, rate limit). Non creano transazioni on-chain.
       </p>
       <form action={saveForgeSettingsForm} className="mt-8 space-y-6">
         <div className="space-y-1.5">
@@ -81,6 +83,89 @@ export default async function ForgiaSettingsPage() {
               </label>
             </div>
           ))}
+        </div>
+
+        <div className="space-y-4 border-t border-primary/15 pt-6">
+          <p className="text-sm uppercase tracking-[0.2em] text-primary/80">Gateway di prelievo crypto</p>
+          <p className="text-sm text-muted-foreground">
+            Valgono sull’uscita on-chain (Punto 3). Il burn dei crediti resta un fatto di libro: non
+            conia satoshi né ether e non scrive hash su Mempool o Etherscan.
+          </p>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <label className="text-sm">
+              Massimale per singolo invio (USD)
+              <Input
+                name="withdrawMaxUsdPerTx"
+                type="number"
+                step="0.01"
+                min={0.01}
+                defaultValue={(settings.withdrawMaxUsdCentsPerTx / 100).toFixed(2)}
+                className="mt-1 font-ledger"
+                required
+              />
+            </label>
+            <label className="text-sm">
+              Massimale giornaliero (USD)
+              <Input
+                name="withdrawMaxUsdPerDay"
+                type="number"
+                step="0.01"
+                min={0.01}
+                defaultValue={(settings.withdrawMaxUsdCentsPerDay / 100).toFixed(2)}
+                className="mt-1 font-ledger"
+                required
+              />
+            </label>
+            <label className="text-sm">
+              Prelievi crypto massimi per ora
+              <Input
+                name="withdrawMaxCountPerHour"
+                type="number"
+                min={1}
+                step={1}
+                defaultValue={settings.withdrawMaxCountPerHour}
+                className="mt-1 font-ledger"
+                required
+              />
+            </label>
+            <label className="text-sm">
+              Soglia minima (USD, 0 = nessuna)
+              <Input
+                name="withdrawMinUsd"
+                type="number"
+                step="0.01"
+                min={0}
+                defaultValue={(settings.withdrawMinUsdCents / 100).toFixed(2)}
+                className="mt-1 font-ledger"
+                required
+              />
+            </label>
+          </div>
+          <label className="block text-sm">
+            Whitelist destinazioni (un indirizzo per riga)
+            <Textarea
+              name="withdrawWhitelist"
+              rows={5}
+              defaultValue={settings.withdrawWhitelist.join("\n")}
+              className="mt-1 font-ledger"
+              placeholder={"bc1q…\n0x…"}
+            />
+            <span className="mt-1 block text-xs text-muted-foreground">
+              MetaMask, Trust Wallet, IBAN crypto degli exchange. Vuota e senza blocco: restano
+              ammessi tutti gli indirizzi validi.
+            </span>
+          </label>
+          <label className="flex items-start gap-2 text-sm">
+            <input
+              type="checkbox"
+              name="withdrawWhitelistEnforced"
+              defaultChecked={settings.withdrawWhitelistEnforced}
+              className="mt-1"
+            />
+            <span>
+              Blocca le destinazioni fuori whitelist. Senza spunta la lista è solo un promemoria.
+            </span>
+          </label>
         </div>
         <SubmitButton>Salva regole</SubmitButton>
       </form>

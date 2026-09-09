@@ -34,18 +34,18 @@ export default async function FusioniPage() {
       <h1 className="font-display text-4xl text-primary">Fusioni</h1>
       <p className="mt-2 text-muted-foreground">
         I crediti di tesoreria diventano euro, dollari, franchi svizzeri e crypto. La parte crypto
-        va in cassa di rete e, nello stesso form, esce verso il wallet (o i wallet, un invio alla
-        volta) che indichi. Il negozio crea l’hash su Mempool, Etherscan o BscScan: chi riceve non
-        firma. Il bonifico IBAN lo disponi tu da UniCredit o Wise (anche in CHF), poi chiudi con il
-        CRO.
+        è un burn sul libro (cassa virtuale). L’unica transazione on-chain è l’uscita verso il
+        wallet che indichi, se il wallet operativo ha già quelle monete. Il negozio crea l’hash su
+        Mempool, Etherscan o BscScan: chi riceve non firma. Il bonifico IBAN lo disponi tu da
+        UniCredit o Wise (anche in CHF), poi chiudi con il CRO.
       </p>
 
       <section className="metal-frame mt-8 rounded-md bg-card p-5">
         <h2 className="font-display text-2xl text-primary">Conversione in cassa e invio crypto</h2>
         <p className="mt-1 text-sm text-muted-foreground">
           I crediti ancora in tesoreria ({formatCredits(treasury)}) possono diventare euro, dollari
-          o crypto. Per la crypto indica il wallet nel form: conversione e prelievo partono insieme
-          dalla cassa di rete.
+          o crypto. Per la crypto indica il wallet nel form: il libro registra il burn, l’hash nasce
+          solo all’uscita dalla liquidità on-chain.
         </p>
         <TreasuryConvertForm
           treasury={treasury}

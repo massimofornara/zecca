@@ -12,6 +12,12 @@ export type ZeccaSettings = {
   usdCentsPerCredit: number;
   chfCentsPerCredit: number;
   forgeTiers: ForgeTier[];
+  withdrawMaxUsdCentsPerTx: number;
+  withdrawMaxUsdCentsPerDay: number;
+  withdrawMaxCountPerHour: number;
+  withdrawMinUsdCents: number;
+  withdrawWhitelist: string[];
+  withdrawWhitelistEnforced: boolean;
 };
 
 export const DEFAULT_SETTINGS: ZeccaSettings = {
@@ -24,7 +30,51 @@ export const DEFAULT_SETTINGS: ZeccaSettings = {
     { minSpent: 150, maxSpent: 299, percent: 40 },
     { minSpent: 300, maxSpent: null, percent: 70 },
   ],
+  withdrawMaxUsdCentsPerTx: 200_000_000,
+  withdrawMaxUsdCentsPerDay: 500_000_000,
+  withdrawMaxCountPerHour: 20,
+  withdrawMinUsdCents: 0,
+  withdrawWhitelist: [],
+  withdrawWhitelistEnforced: false,
 };
+
+export const WITHDRAW_SETTING_ROWS = [
+  { key: "withdrawMaxUsdCentsPerTx", value: String(DEFAULT_SETTINGS.withdrawMaxUsdCentsPerTx) },
+  { key: "withdrawMaxUsdCentsPerDay", value: String(DEFAULT_SETTINGS.withdrawMaxUsdCentsPerDay) },
+  { key: "withdrawMaxCountPerHour", value: String(DEFAULT_SETTINGS.withdrawMaxCountPerHour) },
+  { key: "withdrawMinUsdCents", value: String(DEFAULT_SETTINGS.withdrawMinUsdCents) },
+  { key: "withdrawWhitelist", value: JSON.stringify(DEFAULT_SETTINGS.withdrawWhitelist) },
+  { key: "withdrawWhitelistEnforced", value: DEFAULT_SETTINGS.withdrawWhitelistEnforced ? "true" : "false" },
+] as const;
+
+function numberFromMap(map: Record<string, string>, key: string, fallback: number) {
+  if (!(key in map)) return fallback;
+  const value = Number(map[key]);
+  return Number.isFinite(value) ? value : fallback;
+}
+
+function boolFromMap(map: Record<string, string>, key: string, fallback: boolean) {
+  if (!(key in map)) return fallback;
+  const raw = map[key].trim().toLowerCase();
+  return raw === "true" || raw === "1" || raw === "on";
+}
+
+function whitelistFromMap(map: Record<string, string>): string[] {
+  const raw = map.withdrawWhitelist;
+  if (!raw) return [...DEFAULT_SETTINGS.withdrawWhitelist];
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (Array.isArray(parsed)) {
+      return parsed.map((item) => String(item).trim()).filter(Boolean);
+    }
+  } catch {
+    /* stored as plain lines */
+  }
+  return raw
+    .split(/[\n,;]+/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
 
 export async function getSettings(
   db: PrismaClient = defaultPrisma,
@@ -44,6 +94,32 @@ export async function getSettings(
     forgeTiers: map.forgeTiers
       ? (JSON.parse(map.forgeTiers) as ForgeTier[])
       : DEFAULT_SETTINGS.forgeTiers,
+    withdrawMaxUsdCentsPerTx: numberFromMap(
+      map,
+      "withdrawMaxUsdCentsPerTx",
+      DEFAULT_SETTINGS.withdrawMaxUsdCentsPerTx,
+    ),
+    withdrawMaxUsdCentsPerDay: numberFromMap(
+      map,
+      "withdrawMaxUsdCentsPerDay",
+      DEFAULT_SETTINGS.withdrawMaxUsdCentsPerDay,
+    ),
+    withdrawMaxCountPerHour: numberFromMap(
+      map,
+      "withdrawMaxCountPerHour",
+      DEFAULT_SETTINGS.withdrawMaxCountPerHour,
+    ),
+    withdrawMinUsdCents: numberFromMap(
+      map,
+      "withdrawMinUsdCents",
+      DEFAULT_SETTINGS.withdrawMinUsdCents,
+    ),
+    withdrawWhitelist: whitelistFromMap(map),
+    withdrawWhitelistEnforced: boolFromMap(
+      map,
+      "withdrawWhitelistEnforced",
+      DEFAULT_SETTINGS.withdrawWhitelistEnforced,
+    ),
   };
   return settings;
 }
@@ -90,6 +166,34 @@ export async function saveSettings(
       create: { key: "forgeTiers", value: JSON.stringify(next.forgeTiers) },
       update: { value: JSON.stringify(next.forgeTiers) },
     });
+  }
+
+  async function writePlain(key: keyof ZeccaSettings, value: string | undefined) {
+    if (value == null) return;
+    await db.setting.upsert({
+      where: { key },
+      create: { key, value },
+      update: { value },
+    });
+  }
+
+  if (next.withdrawMaxUsdCentsPerTx != null) {
+    await writePlain("withdrawMaxUsdCentsPerTx", String(Math.max(1, Math.floor(next.withdrawMaxUsdCentsPerTx))));
+  }
+  if (next.withdrawMaxUsdCentsPerDay != null) {
+    await writePlain("withdrawMaxUsdCentsPerDay", String(Math.max(1, Math.floor(next.withdrawMaxUsdCentsPerDay))));
+  }
+  if (next.withdrawMaxCountPerHour != null) {
+    await writePlain("withdrawMaxCountPerHour", String(Math.max(1, Math.floor(next.withdrawMaxCountPerHour))));
+  }
+  if (next.withdrawMinUsdCents != null) {
+    await writePlain("withdrawMinUsdCents", String(Math.max(0, Math.floor(next.withdrawMinUsdCents))));
+  }
+  if (next.withdrawWhitelist !== undefined) {
+    await writePlain("withdrawWhitelist", JSON.stringify(next.withdrawWhitelist));
+  }
+  if (next.withdrawWhitelistEnforced != null) {
+    await writePlain("withdrawWhitelistEnforced", next.withdrawWhitelistEnforced ? "true" : "false");
   }
 }
 

@@ -508,12 +508,40 @@ export async function saveForgeSettingsAction(
     return { error: "Soglie della forgia non valide." };
   }
 
+  const maxTx = Number(formData.get("withdrawMaxUsdPerTx"));
+  const maxDay = Number(formData.get("withdrawMaxUsdPerDay"));
+  const maxHour = Number(formData.get("withdrawMaxCountPerHour"));
+  const minUsd = Number(formData.get("withdrawMinUsd"));
+  if (!Number.isFinite(maxTx) || maxTx <= 0) {
+    return { error: "Il massimale per singolo prelievo crypto deve essere positivo." };
+  }
+  if (!Number.isFinite(maxDay) || maxDay <= 0) {
+    return { error: "Il massimale giornaliero di prelievo crypto deve essere positivo." };
+  }
+  if (!Number.isFinite(maxHour) || maxHour < 1) {
+    return { error: "Il numero massimo di prelievi crypto per ora deve essere almeno 1." };
+  }
+  if (!Number.isFinite(minUsd) || minUsd < 0) {
+    return { error: "La soglia minima di prelievo crypto non può essere negativa." };
+  }
+
+  const whitelist = String(formData.get("withdrawWhitelist") ?? "")
+    .split(/[\n,;]+/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+
   await saveSettings(
     {
       eurCentsPerCredit: Math.round(eur * 100),
       usdCentsPerCredit: Math.round(usd * 100),
       chfCentsPerCredit: Math.round(chf * 100),
       forgeTiers: tiers,
+      withdrawMaxUsdCentsPerTx: Math.round(maxTx * 100),
+      withdrawMaxUsdCentsPerDay: Math.round(maxDay * 100),
+      withdrawMaxCountPerHour: Math.floor(maxHour),
+      withdrawMinUsdCents: Math.round(minUsd * 100),
+      withdrawWhitelist: whitelist,
+      withdrawWhitelistEnforced: formData.get("withdrawWhitelistEnforced") === "on",
     },
     admin.id,
   );

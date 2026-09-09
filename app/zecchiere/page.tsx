@@ -29,18 +29,19 @@ export default async function TesoreriaPage() {
       <p className="text-xs uppercase tracking-[0.28em] text-primary/80">Casa della zecca</p>
       <h1 className="mt-1 font-display text-4xl text-primary">Tesoreria</h1>
       <p className="mt-2 text-muted-foreground">
-        I crediti convertiti stanno nel libro. BTC, ETH, USDT, USDC e BNB che partono verso
-        MetaMask, Trust Wallet o un exchange escono dalla <strong>cassa di rete</strong> qui
-        sotto, lo stesso wallet per tutte le crypto EVM. In conversione indichi il destinatario
-        nello stesso form.
+        Due registri distinti: la <strong>cassa virtuale</strong> è il libro delle passività nate
+        dal burn dei crediti; la <strong>liquidità on-chain</strong> è il saldo vero del wallet
+        operativo. L’unica transazione che la rete riconosce è l’uscita (payout) verso MetaMask,
+        Trust Wallet o un exchange, se su quel wallet c’è già la crypto.
       </p>
 
       <section className="metal-frame mt-6 rounded-md bg-card p-5">
-        <p className="text-xs uppercase tracking-[0.2em] text-primary/80">Cassa di rete (prelievo crypto)</p>
+        <p className="text-xs uppercase tracking-[0.2em] text-primary/80">
+          Liquidità on-chain (wallet operativo)
+        </p>
         <p className="mt-2 text-sm text-muted-foreground">
-          Questo è il saldo vero su Mempool, Etherscan e BscScan. Il negozio invia da qui: chi
-          riceve non firma. Convertire crediti non crea satoshi né ether; per prelevare carica
-          questi indirizzi, poi conferma l’invio.
+          Saldo letto da Mempool, Etherscan e BscScan. Non è la cassa contabile: convertire crediti
+          non muove questi numeri. Il negozio firma il prelievo da qui; chi riceve non firma.
         </p>
         <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {vault.assets.map((asset) => (
@@ -69,10 +70,13 @@ export default async function TesoreriaPage() {
       </section>
 
       <section className="metal-frame mt-6 rounded-md bg-card p-5">
-        <p className="text-xs uppercase tracking-[0.2em] text-primary/80">Wallet interni (libro)</p>
+        <p className="text-xs uppercase tracking-[0.2em] text-primary/80">
+          Cassa virtuale (libro / passività da burn)
+        </p>
         <p className="mt-2 text-sm text-muted-foreground">
-          Crediti già convertiti in BTC, ETH, USDT, USDC e BNB che non sono ancora usciti. Il
-          prelievo verso qualsiasi altro wallet usa la riga Rete, non il libro.
+          Crediti già convertiti in BTC, ETH, USDT, USDC e BNB e non ancora usciti. È la
+          riconciliazione interna del Punto 2: nessuna micro-transazione on-chain, nessuna fee di
+          ingresso. Il payout verso un wallet esterno attinge alla riga Rete, non a questo libro.
         </p>
         <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
           {internalWallets.map((wallet) => {
@@ -185,8 +189,9 @@ export default async function TesoreriaPage() {
       <section className="metal-frame mt-8 rounded-md bg-card p-5">
         <h2 className="font-display text-2xl text-primary">Converti crediti in cassa e crypto</h2>
         <p className="mt-1 text-sm text-muted-foreground">
-          Euro, dollari e franchi restano in cassa negozio. Per BTC, ETH, USDT, USDC e BNB indica
-          il wallet nel form: i crediti vanno in cassa di rete e l’invio parte nello stesso passo.
+          Euro, dollari e franchi restano in cassa negozio. Per BTC, ETH, USDT, USDC e BNB i crediti
+          si bruciano nel libro (cassa virtuale) e, se la liquidità on-chain c’è, l’invio parte
+          verso il wallet indicato. Rate limit, whitelist e massimali stanno in Forgia.
         </p>
         <TreasuryConvertForm
           treasury={flow.treasury}

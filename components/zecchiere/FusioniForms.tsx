@@ -105,8 +105,8 @@ export function TreasuryConvertForm({
         <OkBanner message={state.ok} />
         <p className="text-sm text-muted-foreground">
           Destinazione <span className="font-ledger">{state.walletAddress}</span>. Conversione
-          registrata in cassa di rete: il negozio invia da lì. MetaMask, Trust Wallet o l’exchange
-          ricevono senza firmare.
+          sul libro (cassa virtuale): il negozio invia dalla liquidità on-chain se c’è. MetaMask,
+          Trust Wallet o l’exchange ricevono senza firmare.
         </p>
         {state.instruction ? (
           <pre className="overflow-x-auto whitespace-pre-wrap rounded-md bg-background/50 p-3 font-ledger text-xs ring-1 ring-primary/20">
@@ -144,8 +144,8 @@ export function TreasuryConvertForm({
       <OkBanner message={state?.ok} />
       <p className="text-sm text-muted-foreground">
         Euro, dollari e franchi svizzeri restano nella <strong>cassa negozio</strong>. BTC, ETH,
-        USDT, USDC e BNB vanno in <strong>cassa di rete</strong> e, nello stesso invio, escono verso
-        il wallet indicato sotto (MetaMask, Trust Wallet o exchange). Chi riceve non firma.
+        USDT, USDC e BNB bruciano i crediti nel libro (<strong>cassa virtuale</strong>). L’hash
+        nasce solo all’uscita, se il wallet operativo ha già quelle monete. Chi riceve non firma.
       </p>
       <div className="grid gap-4 sm:grid-cols-3">
         <label className="text-sm">
@@ -189,7 +189,7 @@ export function TreasuryConvertForm({
         </label>
       </div>
       <div className="space-y-3 rounded-md bg-background/40 p-4 ring-1 ring-primary/15">
-        <p className="text-sm font-medium">Crediti → crypto (cassa di rete, poi il tuo wallet)</p>
+        <p className="text-sm font-medium">Crediti → crypto (cassa virtuale, poi payout on-chain)</p>
         <input type="hidden" name="cryptoAsset" value={cryptoAsset} />
         <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
           {CRYPTO_CHOICES.map((asset) => (
@@ -244,7 +244,7 @@ export function TreasuryConvertForm({
               </span>
             ) : (
               <span className="mt-1 block text-xs text-muted-foreground">
-                Conversione e invio partono insieme dalla cassa di rete
+                Il burn va in cassa virtuale; l’hash nasce all’uscita dalla liquidità on-chain
                 {selectedVault?.address ? ` (${selectedVault.address})` : ""}. Un altro wallet? Un
                 altro invio, stesso form.
               </span>
@@ -320,7 +320,8 @@ export function InternalCryptoWithdrawForm({
       <div className="mt-4 space-y-3">
         <p className="text-sm text-muted-foreground">
           Destinazione <span className="font-ledger">{state.walletAddress}</span>. Il negozio
-          invia dalla cassa di rete: MetaMask, Trust Wallet o l’exchange ricevono senza firmare.
+          invia dalla liquidità on-chain: MetaMask, Trust Wallet o l’exchange ricevono senza
+          firmare.
         </p>
         {state.instruction ? (
           <pre className="overflow-x-auto whitespace-pre-wrap rounded-md bg-background/50 p-3 font-ledger text-xs ring-1 ring-primary/20">
@@ -393,7 +394,7 @@ export function InternalCryptoWithdrawForm({
       </div>
       {selectedVault?.address ? (
         <div className="rounded-md bg-background/50 p-3 ring-1 ring-primary/20">
-          <CopyField label={`Cassa di rete ${selectedVault.ticker} da caricare`} value={selectedVault.address} mono />
+          <CopyField label={`Wallet operativo ${selectedVault.ticker} (on-chain)`} value={selectedVault.address} mono />
           {selectedVault.explorer ? (
             <a
               href={selectedVault.explorer}
@@ -444,9 +445,9 @@ export function InternalCryptoWithdrawForm({
         </label>
       </div>
       <p className="text-xs text-muted-foreground">
-        Massimo preleva dal wallet interno. Il negozio invia {selected?.ticker} dalla cassa di rete
-        ({selectedVault?.amountLabel ?? "saldo in lettura"}): MetaMask, Trust Wallet o l’exchange
-        ricevono senza firmare.
+        Massimo preleva dalla cassa virtuale. Il negozio invia {selected?.ticker} dalla liquidità
+        on-chain ({selectedVault?.amountLabel ?? "saldo in lettura"}): MetaMask, Trust Wallet o
+        l’exchange ricevono senza firmare. Rate limit, whitelist e massimali sono in Forgia.
       </p>
       <SubmitButton pendingLabel="Invio sulla rete…">
         Preleva: il negozio invia e genera l’hash

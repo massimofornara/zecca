@@ -17,6 +17,7 @@ import {
   parseTreasuryCryptoAsset,
   shopCryptoBalances,
 } from "@/lib/zecca/convert";
+import { assertWithdrawPolicy, WITHDRAW_BROADCASTING } from "@/lib/zecca/withdraw-policy";
 
 export type PayoutKind = "IBAN" | "WALLET";
 export type CashoutCurrency = FiatCurrency;
@@ -91,6 +92,14 @@ export async function requestCustomerCashout(input: {
       ? creditsToChfCents(credits, settings.chfCentsPerCredit)
       : 0;
   const resolvedCurrency: CashoutCurrency = payoutKind === "WALLET" ? "USD" : currency;
+  if (payoutKind === "WALLET" && walletAddress && walletNetwork) {
+    await assertWithdrawPolicy({
+      address: walletAddress,
+      network: walletNetwork,
+      usdCents,
+      db,
+    });
+  }
   const fiatLabel =
     payoutKind === "WALLET"
       ? `${(usdCents / 100).toFixed(2)} USD in ${walletNetworkLabel(walletNetwork ?? "OTHER")}`
@@ -415,6 +424,7 @@ export function houseBankReceiptRef(cashoutId: string, currency: string) {
 /**
  * Il negozio trasmette sulla rete dal proprio wallet e chiude il prelievo
  * con l’hash reale. Chi riceve (MetaMask, Trust Wallet, exchange) non firma.
+ * Policy (whitelist, massimali, rate limit) e lock atomico prima della firma.
  */
 export async function fulfillWalletCashoutFromShop(input: {
   cashoutId: string;
@@ -433,34 +443,77 @@ export async function fulfillWalletCashoutFromShop(input: {
   if (cashout.payoutKind !== "WALLET" || !cashout.walletAddress || !cashout.walletNetwork) {
     throw new ZeccaError("Questo prelievo non è un invio crypto dal negozio.", "INVALID");
   }
-
-  const sent = await sendShopCryptoPayout({
-    walletAddress: cashout.walletAddress,
-    walletNetwork: cashout.walletNetwork,
-    usdCents: cashout.usdCents,
-  });
-
-  try {
-    return await resolveCashout({
-      cashoutId: cashout.id,
-      actorId: input.actorId,
-      action: "pay",
-      receipt: sent.hash,
-      adminNote: `Crediti convertiti in ${cashout.walletNetwork} e inviati dal negozio ${sent.shopAddress}`,
-      chainLookup: async ({ hash }) => ({
-        hash,
-        recipients: [cashout.walletAddress as string],
-      }),
-      db,
-    });
-  } catch (error) {
+  if (cashout.receiptKind === WITHDRAW_BROADCASTING) {
     throw new ZeccaError(
-      `Il negozio ha già trasmesso (hash ${sent.hash}). Incolla questo hash per chiudere il libro. ${
-        error instanceof Error ? error.message : ""
-      }`.trim(),
-      "SHOP_SENT_UNSETTLED",
+      "Invio già in corso su questa richiesta. Attendi l’hash di rete.",
+      "BROADCAST_IN_PROGRESS",
       cashout.id,
     );
+  }
+
+  await assertWithdrawPolicy({
+    address: cashout.walletAddress,
+    network: cashout.walletNetwork,
+    usdCents: cashout.usdCents,
+    db,
+    excludeCashoutId: cashout.id,
+  });
+
+  const claimed = await db.cashoutRequest.updateMany({
+    where: {
+      id: cashout.id,
+      status: "PENDING",
+      receiptKind: null,
+    },
+    data: { receiptKind: WITHDRAW_BROADCASTING },
+  });
+  if (claimed.count === 0) {
+    const latest = await db.cashoutRequest.findUnique({ where: { id: cashout.id } });
+    if (latest?.status === "PAID") return latest;
+    throw new ZeccaError(
+      "Invio già in corso su questa richiesta. Attendi l’hash di rete.",
+      "BROADCAST_IN_PROGRESS",
+      cashout.id,
+    );
+  }
+
+  try {
+    const sent = await sendShopCryptoPayout({
+      walletAddress: cashout.walletAddress,
+      walletNetwork: cashout.walletNetwork,
+      usdCents: cashout.usdCents,
+    });
+
+    try {
+      return await resolveCashout({
+        cashoutId: cashout.id,
+        actorId: input.actorId,
+        action: "pay",
+        receipt: sent.hash,
+        adminNote: `Crediti convertiti in ${cashout.walletNetwork} e inviati dal negozio ${sent.shopAddress}`,
+        chainLookup: async ({ hash }) => ({
+          hash,
+          recipients: [cashout.walletAddress as string],
+        }),
+        db,
+      });
+    } catch (error) {
+      throw new ZeccaError(
+        `Il negozio ha già trasmesso (hash ${sent.hash}). Incolla questo hash per chiudere il libro. ${
+          error instanceof Error ? error.message : ""
+        }`.trim(),
+        "SHOP_SENT_UNSETTLED",
+        cashout.id,
+      );
+    }
+  } catch (error) {
+    if (!(error instanceof ZeccaError) || error.code !== "SHOP_SENT_UNSETTLED") {
+      await db.cashoutRequest.updateMany({
+        where: { id: cashout.id, status: "PENDING", receiptKind: WITHDRAW_BROADCASTING },
+        data: { receiptKind: null },
+      });
+    }
+    throw error;
   }
 }
 
@@ -592,6 +645,12 @@ export async function requestInternalCryptoWithdraw(input: {
 
   const settings = await getSettings(db);
   const usdCents = creditsToUsdCents(credits, settings.usdCentsPerCredit);
+  await assertWithdrawPolicy({
+    address,
+    network: asset,
+    usdCents,
+    db,
+  });
 
   const cashout = await db.$transaction(async (tx) => {
     const books = await shopCryptoBalances(tx);
@@ -655,6 +714,7 @@ export async function convertTreasuryAndWithdrawToWallet(input: {
   shopSend?: boolean;
   db?: PrismaClient;
 }) {
+  const db = input.db ?? defaultPrisma;
   const creditsCrypto = Math.max(0, Math.floor(Number(input.creditsCrypto ?? 0)));
   const address = normalizeWalletAddress(input.walletAddress ?? "");
   if (creditsCrypto > 0) {
@@ -671,6 +731,14 @@ export async function convertTreasuryAndWithdrawToWallet(input: {
         "INVALID_WALLET",
       );
     }
+    const settings = await getSettings(db);
+    const usdCents = creditsToUsdCents(creditsCrypto, settings.usdCentsPerCredit);
+    await assertWithdrawPolicy({
+      address,
+      network: asset,
+      usdCents,
+      db,
+    });
   }
 
   const converted = await convertTreasuryToShopCash({

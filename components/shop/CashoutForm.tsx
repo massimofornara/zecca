@@ -108,7 +108,7 @@ export function CashoutForm({
         <p className="text-sm text-muted-foreground">
           {pending
             ? payoutKind === "WALLET"
-              ? "I crediti sono convertiti nel libro. L’hash su Mempool o Etherscan nasce quando la cassa di rete ha già quelle monete e il negozio le invia: chi riceve non firma."
+              ? "I crediti sono convertiti nel libro (cassa virtuale). L’hash su Mempool o Etherscan nasce solo all’uscita, se il wallet operativo ha già quelle monete: chi riceve non firma."
               : "La richiesta è attiva. Copia i dati, invia da banca, poi incolla il CRO qui sotto per chiuderla."
             : "CRO o hash sotto chiudono il prelievo nel libro. L’hash crypto lo crea la rete dopo l’invio del negozio."}
         </p>
