@@ -2,9 +2,10 @@ import { createHash, createHmac, randomBytes } from "node:crypto";
 import type { PrismaClient } from "@prisma/client";
 import { prisma as defaultPrisma } from "@/lib/db";
 import { publicOrigin } from "@/lib/public-url";
+import { GATEWAY_RECEIVED_KIND, gatewayReceiptPath, isGatewayReceiptRef } from "@/lib/settlement/gateway-ref";
 import type { SettlementResult } from "@/lib/settlement/types";
 
-export const GATEWAY_RECEIVED_KIND = "GATEWAY_RECEIVED";
+export { GATEWAY_RECEIVED_KIND, gatewayReceiptPath, isGatewayReceiptRef } from "@/lib/settlement/gateway-ref";
 export const GATEWAY_SIGNER = "zecca-liquidation-gateway";
 
 export type GatewayRail = "BTC" | "SEPA" | "USD" | "CHF";
@@ -47,15 +48,6 @@ function signingSecret() {
   const secret = process.env.AUTH_SECRET?.trim();
   if (secret && secret.length >= 16) return secret;
   return "zecca-demo-secret-cambia-in-produzione-32ch";
-}
-
-export function isGatewayReceiptRef(raw: string | null | undefined) {
-  const ref = (raw ?? "").trim();
-  return /^(GW-(BTC|SEPA|USD|CHF|EUR)-[a-f0-9]{8,}|SEPA-[a-f0-9]{8,})$/i.test(ref);
-}
-
-export function gatewayReceiptPath(id: string) {
-  return `/ricevuta-gateway/${encodeURIComponent(id)}`;
 }
 
 export function gatewayReceiptUrl(id: string) {

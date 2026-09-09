@@ -1,6 +1,6 @@
 import { CopyField } from "@/components/copy/CopyField";
 import { explorerLinks, receiptLabel } from "@/lib/receipt";
-import { isGatewayReceiptRef } from "@/lib/settlement/liquidation-gateway";
+import { isGatewayReceiptRef } from "@/lib/settlement/gateway-ref";
 
 export function CashoutReceipt({
   cashoutId,

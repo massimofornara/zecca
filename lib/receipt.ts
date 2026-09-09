@@ -1,5 +1,5 @@
 import { publicOrigin } from "@/lib/public-url";
-import { isGatewayReceiptRef } from "@/lib/settlement/liquidation-gateway";
+import { isGatewayReceiptRef } from "@/lib/settlement/gateway-ref";
 import { walletNetworkLabel } from "@/lib/wallet";
 
 export function catenaTxUrl(hash: string) {

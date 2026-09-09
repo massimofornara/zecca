@@ -14,7 +14,7 @@ import { wiseDispatchBlocker, wiseApiConfig } from "@/lib/zecca/wise-dispatch";
 import { gaslessEnabled } from "@/lib/zecca/gasless-chain";
 import { settlementProviderHealth } from "@/lib/settlement/pipeline";
 import { sepaGatewayConfig } from "@/lib/settlement/gateways";
-import { GATEWAY_RECEIVED_KIND, isGatewayReceiptRef } from "@/lib/settlement/liquidation-gateway";
+import { GATEWAY_RECEIVED_KIND, isGatewayReceiptRef } from "@/lib/settlement/gateway-ref";
 import {
   AUTHORIZED_RECEIPT_KIND,
   READY_FOR_SIGNATURE_KIND,
