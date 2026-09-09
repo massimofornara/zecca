@@ -15,9 +15,6 @@
     "test:flow": "tsx scripts/test-flow.ts",
     "check:live": "tsx scripts/check-live.ts"
   },
-  "prisma": {
-    "seed": "tsx prisma/seed.ts"
-  },
   "dependencies": {
     "@base-ui/react": "^1.7.0",
     "@noble/hashes": "^2.4.0",

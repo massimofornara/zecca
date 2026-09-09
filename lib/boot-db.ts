@@ -89,10 +89,14 @@ function pushLiveSchema() {
 
 async function hydrateLiveDatabase() {
   installBundledDatabase();
+  // Always align /tmp SQLite with the current Prisma schema (e.g. chfCents).
+  // Do not force-reset: this file can already hold live rows on a warm lambda.
+  pushLiveSchema();
   try {
     await prisma.$queryRaw`SELECT 1`;
   } catch {
     installBundledDatabase();
+    pushLiveSchema();
   }
 
   let userCount = 0;

@@ -174,7 +174,7 @@ model LedgerEntry {
   amountCredits  Int
   eurCents       Int        @default(0)
   usdCents       Int        @default(0)
-  chfCents       Int        @default(0)
+  chfCents       Int        @default(0) // franchi svizzeri; allineato a CashoutRequest.chfCents
   fiatCurrency   String?
   eurDirection   String?
   fromPocket     Pocket
