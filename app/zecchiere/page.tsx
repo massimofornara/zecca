@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { formatCredits, formatEurFromCents, formatFiatFromCents } from "@/lib/format";
 import { totals } from "@/lib/zecca/ledger";
 import { prisma } from "@/lib/db";
@@ -5,18 +6,20 @@ import { loyalToday } from "@/lib/zecca/forge";
 import { getLiveReport } from "@/lib/live";
 import { formatReserveRatio, getReserveReport } from "@/lib/zecca/reserves";
 import { getSettings } from "@/lib/zecca/settings";
+import { getShopNetworkVault } from "@/lib/zecca/shop-vault";
 import { TreasuryConvertForm } from "@/components/zecchiere/FusioniForms";
 
 export const metadata = { title: "Tesoreria" };
 
 export default async function TesoreriaPage() {
-  const [flow, pending, loyal, reserve, settings, live] = await Promise.all([
+  const [flow, pending, loyal, reserve, settings, live, vault] = await Promise.all([
     totals(),
     prisma.cashoutRequest.count({ where: { status: "PENDING" } }),
     loyalToday(),
     getReserveReport(),
     getSettings(),
     getLiveReport(),
+    getShopNetworkVault(),
   ]);
 
   return (
@@ -24,10 +27,45 @@ export default async function TesoreriaPage() {
       <p className="text-xs uppercase tracking-[0.28em] text-primary/80">Casa della zecca</p>
       <h1 className="mt-1 font-display text-4xl text-primary">Tesoreria</h1>
       <p className="mt-2 text-muted-foreground">
-        Tre pentolini: crediti ancora da vendere, euro della cassa negozio, dollari della cassa
-        negozio. Coniare e convertire aggiornano il libro mastro: <strong>non</strong> accreditano un
-        conto in banca. I bonifici SEPA li fai tu, in ingresso e in uscita.
+        Tesoreria crediti e cassa EUR/USD sono il libro. I bitcoin (e l’ETH) che Massimo invia al
+        wallet di destinazione sono solo quelli della <strong>cassa di rete</strong>, visibili su
+        Mempool e Etherscan. Il prelievo parte da lì: chi riceve non firma.
       </p>
+
+      <section className="metal-frame mt-6 rounded-md bg-card p-5">
+        <p className="text-xs uppercase tracking-[0.2em] text-primary/80">Cassa di rete (prelievo crypto)</p>
+        <p className="mt-2 text-sm text-muted-foreground">
+          Massimo usa questo saldo on-chain in <Link href="/fusione" className="underline hover:text-primary">Prelievo</Link>:
+          in pochi secondi parte verso il wallet indicato. Convertire crediti in tesoreria non
+          aumenta questi numeri.
+        </p>
+        <div className="mt-4 grid gap-3 sm:grid-cols-2">
+          <div>
+            <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">Bitcoin</p>
+            <p className="font-ledger text-xl text-ember">{vault.btcLabel}</p>
+            {vault.btcAddress ? (
+              <p className="mt-1 break-all font-ledger text-xs text-muted-foreground">{vault.btcAddress}</p>
+            ) : null}
+            {vault.btcExplorer ? (
+              <a href={vault.btcExplorer} className="mt-1 inline-block text-xs underline hover:text-primary" target="_blank" rel="noreferrer">
+                Mempool / Blockstream
+              </a>
+            ) : null}
+          </div>
+          <div>
+            <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">Ethereum</p>
+            <p className="font-ledger text-xl">{vault.ethLabel}</p>
+            {vault.evmAddress ? (
+              <p className="mt-1 break-all font-ledger text-xs text-muted-foreground">{vault.evmAddress}</p>
+            ) : null}
+            {vault.ethExplorer ? (
+              <a href={vault.ethExplorer} className="mt-1 inline-block text-xs underline hover:text-primary" target="_blank" rel="noreferrer">
+                Etherscan
+              </a>
+            ) : null}
+          </div>
+        </div>
+      </section>
 
       <section className="metal-frame mt-6 rounded-md bg-card p-5">
         <p className="text-xs uppercase tracking-[0.2em] text-primary/80">Stato fondi</p>
