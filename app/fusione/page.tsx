@@ -55,8 +55,8 @@ export default async function FusionePage() {
       <h1 className="mt-1 font-display text-4xl text-primary">Preleva i crediti</h1>
       <p className="mt-3 max-w-2xl text-muted-foreground">
         {house
-          ? `${who}, il prelievo si chiude ora. Bonifico: ricevuta Zecca sul tuo UniCredit o Wise. Crypto: incolla l’hash reale, i crediti escono subito.`
-          : "Chiedi euro, dollari o crypto verso IBAN o wallet. Massimo chiude con CRO o hash: quella è la ricevuta."}
+          ? `${who}, prima controlli ricevuta e hash, poi confermi. La pagina resta aperta con la prova del prelievo.`
+          : "Chiedi euro, dollari o crypto. Confermi destinazione e prova, la pagina non si chiude."}
       </p>
       {house ? (
         <div className="mt-8">

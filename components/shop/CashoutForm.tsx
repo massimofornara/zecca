@@ -1,7 +1,8 @@
 "use client";
 
 import { useActionState, useMemo, useState } from "react";
-import { requestCashoutAction } from "@/actions/shop";
+import { requestCashoutAction, type CashoutActionState } from "@/actions/shop";
+import { CashoutReceipt } from "@/components/shop/CashoutReceipt";
 import { SubmitButton } from "@/components/forms/SubmitButton";
 import { ErrorBanner, OkBanner } from "@/components/ui/banners";
 import { Input } from "@/components/ui/input";
@@ -32,7 +33,9 @@ export function CashoutForm({
   house?: boolean;
   houseName?: string | null;
 }) {
-  const [state, action] = useActionState(requestCashoutAction, null);
+  const [state, action] = useActionState(requestCashoutAction, null as CashoutActionState | null);
+  const [phase, setPhase] = useState<"edit" | "confirm">("edit");
+  const [dismissedId, setDismissedId] = useState<string | null>(null);
   const [credits, setCredits] = useState(
     house ? (available > 0 ? available : 10_000) : Math.min(Math.max(available, 1), 20),
   );
@@ -40,6 +43,10 @@ export function CashoutForm({
   const [currency, setCurrency] = useState<"EUR" | "USD">("EUR");
   const [accountId, setAccountId] = useState<HousePayoutAccount["id"]>("unicredit");
   const [cryptoId, setCryptoId] = useState<(typeof CRYPTO_ASSETS)[number]["id"]>("USDT");
+  const [walletAddress, setWalletAddress] = useState("");
+  const [txHash, setTxHash] = useState("");
+  const [ibanHolder, setIbanHolder] = useState("");
+  const [iban, setIban] = useState("");
   const amount = Number.isFinite(credits) && credits > 0 ? Math.floor(credits) : 0;
   const needsGrant = house && (available <= 0 || amount > available);
   const selected = HOUSE_PAYOUT_ACCOUNTS.find((account) => account.id === accountId) ?? HOUSE_PAYOUT_ACCOUNTS[0];
@@ -50,40 +57,126 @@ export function CashoutForm({
     if (payoutKind === "WALLET") return `${usdLabel} in ${crypto.ticker}`;
     return currency === "USD" ? usdLabel : eurLabel;
   }, [payoutKind, currency, eurLabel, usdLabel, crypto.ticker]);
+  const done = Boolean(state?.receiptId && !state.error && state.receiptId !== dismissedId);
 
   function pickCurrency(next: "EUR" | "USD") {
     setCurrency(next);
     if (house) setAccountId(housePayoutForCurrency(next).id);
   }
 
-  const submitLabel = house
-    ? needsGrant
-      ? payoutKind === "WALLET"
-        ? `Genera e preleva ${crypto.ticker}`
-        : `Genera e preleva su ${selected.bank}`
-      : payoutKind === "WALLET"
-        ? `Preleva in ${crypto.ticker}`
-        : `Preleva su ${selected.bank}`
-    : available <= 0 || amount > available
-      ? "Compra crediti, poi preleva"
-      : payoutKind === "WALLET"
-        ? `Preleva in ${crypto.ticker}`
-        : "Preleva sull’IBAN indicato";
+  function openConfirm() {
+    if (amount <= 0) return;
+    if (payoutKind === "WALLET" && house && txHash.trim().length < 16) return;
+    setPhase("confirm");
+  }
+
+  if (done && state?.receiptId) {
+    return (
+      <div className="metal-frame relative z-20 space-y-4 rounded-md bg-card p-5 md:p-7">
+        <OkBanner message={state.ok} />
+        <h2 className="font-display text-2xl text-primary">Prelievo confermato</h2>
+        <p className="text-sm text-muted-foreground">
+          La schermata resta qui. Ricevuta e hash sono sotto: puoi copiarli o stamparli.
+        </p>
+        <p className="font-ledger text-xl text-ember">
+          {formatCredits(amount)} → {preview}
+        </p>
+        <CashoutReceipt
+          cashoutId={state.receiptId}
+          receiptKind={state.receiptKind ?? null}
+          receiptRef={state.receiptRef ?? null}
+          receiptUrl={state.receiptUrl ?? null}
+          receiptHash={state.receiptHash ?? null}
+          walletNetwork={state.walletNetwork}
+        />
+        <button
+          type="button"
+          className="relative z-30 cursor-pointer text-sm text-ember underline-offset-2 hover:underline"
+          onClick={() => {
+            setDismissedId(state.receiptId ?? null);
+            setPhase("edit");
+            setTxHash("");
+          }}
+        >
+          Preleva ancora
+        </button>
+      </div>
+    );
+  }
+
+  if (phase === "confirm") {
+    return (
+      <form action={action} noValidate className="metal-frame relative z-20 space-y-4 rounded-md bg-card p-5 md:p-7">
+        <ErrorBanner message={state?.error} />
+        <h2 className="font-display text-2xl text-primary">Conferma ricevuta e hash</h2>
+        <p className="text-sm text-muted-foreground">
+          Controlla destinazione e prova. Il prelievo parte solo dopo questa conferma. Non si chiude la pagina.
+        </p>
+        <section className="space-y-2 rounded-md bg-background/50 p-4 ring-1 ring-primary/20">
+          <p className="font-ledger text-xl text-ember">
+            {formatCredits(amount)} → {preview}
+          </p>
+          <p className="text-sm">
+            {payoutKind === "WALLET"
+              ? `${crypto.label} · ${walletAddress || "wallet da indicare"}`
+              : house
+                ? `${selected.bank} · ${formatIbanDisplay(selected.iban)} · ${selected.holder}`
+                : `${ibanHolder || "intestatario"} · ${iban || "IBAN"}`}
+          </p>
+          {payoutKind === "WALLET" ? (
+            <p className="break-all font-ledger text-sm text-ember">{txHash || "Manca l’hash di rete"}</p>
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              Dopo la conferma ricevi il riferimento bancario ZECCA/… e l’hash SHA-256 della ricevuta.
+            </p>
+          )}
+        </section>
+        <input type="hidden" name="credits" value={amount} />
+        <input type="hidden" name="payoutKind" value={payoutKind} />
+        <input type="hidden" name="currency" value={payoutKind === "WALLET" ? "USD" : currency} />
+        <input type="hidden" name="houseAccount" value={accountId} />
+        <input type="hidden" name="iban" value={house ? selected.iban : iban} />
+        <input type="hidden" name="ibanHolder" value={house ? selected.holder : ibanHolder} />
+        <input type="hidden" name="walletNetwork" value={cryptoId} />
+        <input type="hidden" name="walletAddress" value={walletAddress} />
+        <input type="hidden" name="receipt" value={txHash} />
+        <label className="flex items-start gap-2 text-sm">
+          <input type="checkbox" name="confirmed" value="on" required className="mt-1 size-4 accent-primary" />
+          Confermo destinazione, ricevuta e hash. Esegui il prelievo.
+        </label>
+        <div className="flex flex-wrap gap-3">
+          <SubmitButton formNoValidate className="relative z-30 cursor-pointer">
+            {house
+              ? needsGrant
+                ? "Confermo: genera e preleva"
+                : "Confermo e preleva"
+              : "Confermo la richiesta"}
+          </SubmitButton>
+          <button
+            type="button"
+            className="relative z-30 cursor-pointer text-sm text-muted-foreground underline-offset-2 hover:underline"
+            onClick={() => setPhase("edit")}
+          >
+            Indietro
+          </button>
+        </div>
+      </form>
+    );
+  }
 
   return (
-    <form action={action} noValidate className="metal-frame relative z-20 space-y-4 rounded-md bg-card p-5 md:p-7">
+    <div className="metal-frame relative z-20 space-y-4 rounded-md bg-card p-5 md:p-7">
       <ErrorBanner message={state?.error} />
-      <OkBanner message={state?.ok} />
       <p className="text-sm text-muted-foreground">
         {house
-          ? `${houseName ?? "La casa"} preleva ora: bonifico sul conto della casa, oppure crypto con l’hash reale come ricevuta. I crediti escono subito.`
-          : "Scegli bonifico o crypto, indica i crediti e la destinazione. Massimo chiude con CRO o hash: quella è la ricevuta."}
+          ? `${houseName ?? "La casa"} prepara il prelievo. Alla conferma successiva escono i crediti, con ricevuta e hash.`
+          : "Scegli bonifico o crypto. Alla schermata dopo confermi, poi parte la richiesta."}
       </p>
       {available <= 0 ? (
         <p className="text-sm text-ember">
           {house
-            ? "Portafoglio a zero: il pulsante arancione genera i crediti e apre subito la richiesta di prelievo."
-            : `Non hai crediti da prelevare (disponibili: ${formatCredits(available)}). Premi il pulsante per andare a comprarli.`}
+            ? "Portafoglio a zero: dopo la conferma i crediti vengono generati e prelevati."
+            : `Non hai crediti da prelevare (disponibili: ${formatCredits(available)}).`}
         </p>
       ) : (
         <p className="text-xs text-muted-foreground">Disponibili: {formatCredits(available)}</p>
@@ -121,7 +214,6 @@ export function CashoutForm({
       <label className="block text-sm">
         Crediti da prelevare
         <Input
-          name="credits"
           type="number"
           inputMode="numeric"
           min={1}
@@ -154,8 +246,6 @@ export function CashoutForm({
             <label className={chip}>
               <input
                 type="radio"
-                name="currency"
-                value="EUR"
                 checked={currency === "EUR"}
                 onChange={() => pickCurrency("EUR")}
                 className="mt-1 size-4 shrink-0 accent-primary"
@@ -165,8 +255,6 @@ export function CashoutForm({
             <label className={chip}>
               <input
                 type="radio"
-                name="currency"
-                value="USD"
                 checked={currency === "USD"}
                 onChange={() => pickCurrency("USD")}
                 className="mt-1 size-4 shrink-0 accent-primary"
@@ -182,8 +270,6 @@ export function CashoutForm({
                   <label key={account.id} className={`${chip} py-3`}>
                     <input
                       type="radio"
-                      name="houseAccount"
-                      value={account.id}
                       checked={accountId === account.id}
                       onChange={() => {
                         setAccountId(account.id);
@@ -208,12 +294,18 @@ export function CashoutForm({
             <>
               <label className="block text-sm">
                 Intestatario del conto
-                <Input name="ibanHolder" className="mt-1 max-w-md" placeholder="Nome e cognome" />
+                <Input
+                  value={ibanHolder}
+                  onChange={(e) => setIbanHolder(e.target.value)}
+                  className="mt-1 max-w-md"
+                  placeholder="Nome e cognome"
+                />
               </label>
               <label className="block text-sm">
                 IBAN
                 <Input
-                  name="iban"
+                  value={iban}
+                  onChange={(e) => setIban(e.target.value)}
                   className="mt-1 max-w-md font-ledger"
                   placeholder="IT00 X000 0000 0000 0000 0000 000"
                   autoComplete="off"
@@ -225,14 +317,11 @@ export function CashoutForm({
       ) : (
         <fieldset className="space-y-3">
           <legend className="text-sm">Crypto da inviare</legend>
-          <input type="hidden" name="currency" value="USD" />
           <div className="grid gap-2 sm:grid-cols-2 md:grid-cols-3">
             {CRYPTO_ASSETS.filter((asset) => asset.id !== "OTHER").map((asset) => (
               <label key={asset.id} className={`${chip} py-3`}>
                 <input
                   type="radio"
-                  name="walletNetwork"
-                  value={asset.id}
                   checked={cryptoId === asset.id}
                   onChange={() => setCryptoId(asset.id)}
                   className="mt-1 size-4 shrink-0 accent-primary"
@@ -248,34 +337,33 @@ export function CashoutForm({
           <label className="block text-sm">
             Wallet che riceve {crypto.ticker}
             <Input
-              name="walletAddress"
+              value={walletAddress}
+              onChange={(e) => setWalletAddress(e.target.value)}
               className="mt-1 max-w-xl font-ledger"
               placeholder={crypto.hint}
               autoComplete="off"
             />
           </label>
-          <p className="text-xs text-muted-foreground">{crypto.hint}. Indirizzo esatto, senza spazi.</p>
           <label className="block text-sm">
             Hash reale della transazione (ricevuta)
             <Input
-              name="receipt"
-              required={house}
-              autoComplete="off"
+              value={txHash}
+              onChange={(e) => setTxHash(e.target.value)}
               className="mt-1 max-w-xl font-ledger"
               placeholder="0x… hash già confermato sulla rete"
+              autoComplete="off"
             />
           </label>
-          <p className="text-xs text-ember">
-            {house
-              ? "Senza questo hash il prelievo crypto non si chiude. Deve esistere sulla rete e andare a questo wallet."
-              : "Massimo incolla l’hash dopo l’invio: è la ricevuta."}
-          </p>
         </fieldset>
       )}
 
-      <SubmitButton formNoValidate className="relative z-30 cursor-pointer">
-        {submitLabel}
-      </SubmitButton>
-    </form>
+      <button
+        type="button"
+        onClick={openConfirm}
+        className="relative z-30 inline-flex h-9 cursor-pointer items-center rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/80"
+      >
+        {payoutKind === "WALLET" ? "Controlla hash e conferma" : "Controlla ricevuta e conferma"}
+      </button>
+    </div>
   );
 }

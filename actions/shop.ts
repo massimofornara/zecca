@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireUser } from "@/auth";
 import { addToCart, clearCart, getCart, updateCartQuantity } from "@/lib/cart";
-import { isZeccaError } from "@/lib/errors";
+import { isZeccaError, publicErrorMessage } from "@/lib/errors";
 import { purchaseCredits } from "@/lib/zecca/credits";
 import { placeOrder } from "@/lib/zecca/shop";
 import { parseShipping } from "@/lib/shipping";
@@ -100,10 +100,21 @@ export async function checkoutCartAction(
   redirect(`/ordini/${orderId}`);
 }
 
+export type CashoutActionState = {
+  error?: string;
+  ok?: string;
+  receiptId?: string;
+  receiptRef?: string | null;
+  receiptHash?: string | null;
+  receiptUrl?: string | null;
+  receiptKind?: string | null;
+  walletNetwork?: string | null;
+};
+
 export async function requestCashoutAction(
-  _prev: { error?: string; ok?: string } | null,
+  _prev: CashoutActionState | null,
   formData: FormData,
-): Promise<{ error?: string; ok?: string }> {
+): Promise<CashoutActionState> {
   const user = await requireUser();
   if (!user) return { error: "Devi entrare per chiedere una fusione." };
   const credits = Number(formData.get("credits"));
@@ -119,6 +130,9 @@ export async function requestCashoutAction(
   const walletAddress = String(formData.get("walletAddress") ?? "");
   const walletNetwork = String(formData.get("walletNetwork") ?? formData.get("cryptoChoice") ?? "");
   const receipt = String(formData.get("receipt") ?? "");
+  if (formData.get("confirmed") !== "on") {
+    return { error: "Conferma ricevuta e hash prima di prelevare. La schermata resta qui." };
+  }
   try {
     if (houseActor) {
       await ensureHouseWalletCredits({ userId: user.id, credits });
@@ -134,17 +148,19 @@ export async function requestCashoutAction(
         walletNetwork,
         receipt,
       });
-      revalidatePath("/fusione");
       revalidatePath("/portafoglio");
       revalidatePath("/zecchiere/fusioni");
       return {
-        ok:
-          settled.payoutKind === "WALLET"
-            ? `Prelievo crypto chiuso. Hash rete: ${settled.receiptRef}. Hash ricevuta: ${settled.receiptHash}. I crediti sono accreditati in uscita.`
-            : `Prelievo sul conto chiuso. Ricevuta bancaria: ${settled.receiptRef}. Hash ricevuta: ${settled.receiptHash}. I crediti sono accreditati in uscita.`,
+        ok: "Prelievo eseguito. Resta su questa pagina: qui sotto hai ricevuta e hash.",
+        receiptId: settled.id,
+        receiptRef: settled.receiptRef,
+        receiptHash: settled.receiptHash,
+        receiptUrl: settled.receiptUrl,
+        receiptKind: settled.receiptKind,
+        walletNetwork: settled.walletNetwork,
       };
     }
-    await requestCustomerCashout({
+    const asked = await requestCustomerCashout({
       userId: user.id,
       role: user.role,
       credits,
@@ -155,19 +171,16 @@ export async function requestCashoutAction(
       walletAddress,
       walletNetwork,
     });
-    revalidatePath("/fusione");
     revalidatePath("/portafoglio");
     revalidatePath("/zecchiere/fusioni");
     return {
-      ok:
-        payoutKind === "WALLET"
-          ? "Richiesta pronta. Massimo invia dal wallet, poi registra l’hash: quella è la ricevuta."
-          : "Richiesta pronta. Massimo dispone il bonifico, poi registra il CRO: quella è la ricevuta.",
+      ok: "Richiesta registrata. Resta su Prelievo: Massimo chiude con CRO o hash.",
+      receiptId: asked.id,
     };
   } catch (error) {
     if (!houseActor && isZeccaError(error) && error.code === "INSUFFICIENT_CREDITS") {
       redirect("/crediti");
     }
-    return { error: isZeccaError(error) ? error.message : "Richiesta non riuscita." };
+    return { error: publicErrorMessage(error, "Richiesta non riuscita.") };
   }
 }
