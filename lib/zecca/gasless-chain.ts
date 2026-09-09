@@ -26,6 +26,7 @@ export const zeccaGaslessChain = defineChain({
 });
 
 const MINT_ABI = parseAbi([
+  "constructor(string tokenName, string tokenSymbol, uint8 tokenDecimals, address admin)",
   "function mint(address to, uint256 amount)",
   "function balanceOf(address) view returns (uint256)",
   "function hasRole(bytes32 role, address account) view returns (bool)",
@@ -272,7 +273,7 @@ async function ensureToken(): Promise<Address> {
     const { publicClient, transport } = await clients();
     const walletClient = createWalletClient({ account, chain: zeccaGaslessChain, transport });
     const data = encodeDeployData({
-      abi: artifact.abi as never,
+      abi: MINT_ABI,
       bytecode: artifact.bytecode,
       args: ["Zecca USD", "zUSD", 6, account.address],
     });

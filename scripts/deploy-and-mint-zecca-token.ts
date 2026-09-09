@@ -23,6 +23,7 @@ const METAMASK = (process.env.ZECCA_MINT_TO?.trim() ||
 const MINT_UNITS = BigInt(process.env.ZECCA_MINT_UNITS ?? "50000000000"); // 50_000 * 1e6
 
 const MINT_ABI = parseAbi([
+  "constructor(string tokenName, string tokenSymbol, uint8 tokenDecimals, address admin)",
   "function mint(address to, uint256 amount)",
   "function hasRole(bytes32 role, address account) view returns (bool)",
   "function MINTER_ROLE() view returns (bytes32)",
@@ -104,7 +105,7 @@ async function main() {
   }
 
   const deployData = encodeDeployData({
-    abi: abi as never,
+    abi: MINT_ABI,
     bytecode,
     args: ["Zecca USD", "zUSD", 6, admin],
   });
