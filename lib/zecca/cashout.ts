@@ -12,7 +12,7 @@ import { parseFiatCurrency, type FiatCurrency } from "@/lib/zecca/fiat";
 import { cashoutProofStatus, type CashoutProof } from "@/lib/cashout-proof";
 import { ensureHouseWalletCredits, isHouseEmail } from "@/lib/zecca/house";
 import {
-  tryDirectEvmMint,
+  tryShopOnChainPayout,
   isEvmPayoutNetwork,
   shopPayoutConfigError,
 } from "@/lib/zecca/shop-payout";
@@ -20,7 +20,11 @@ import {
   convertTreasuryToShopCash,
   parseTreasuryCryptoAsset,
   shopCryptoBalances,
+  TREASURY_CRYPTO_ASSETS,
+  type TreasuryCryptoAsset,
 } from "@/lib/zecca/convert";
+import { mintCredits } from "@/lib/zecca/mint";
+import { housePayoutForCurrency } from "@/lib/zecca/house-accounts";
 import { assertWithdrawPolicy, isBroadcastLock, WITHDRAW_BROADCASTING } from "@/lib/zecca/withdraw-policy";
 
 export type PayoutKind = "IBAN" | "WALLET";
@@ -42,6 +46,8 @@ async function acceptQueuedSettlement(
     usdCents: number;
     chfCents: number;
     payoutKind: string;
+    iban: string | null;
+    ibanHolder: string | null;
     walletAddress: string | null;
     walletNetwork: string | null;
     isTreasury: boolean;
@@ -62,8 +68,12 @@ async function acceptQueuedSettlement(
   }
 
   const resolvedAt = new Date();
-  const receiptRef = zeccaSettlementRef(cashout.id, cashout.walletNetwork ?? "CRYPTO", resolvedAt);
-  const destination = `${cashout.walletNetwork ?? ""} ${cashout.walletAddress ?? ""}`.trim();
+  const rail = cashout.payoutKind === "WALLET" ? (cashout.walletNetwork ?? "CRYPTO") : cashout.currency;
+  const receiptRef = zeccaSettlementRef(cashout.id, rail, resolvedAt);
+  const destination =
+    cashout.payoutKind === "WALLET"
+      ? `${cashout.walletNetwork ?? ""} ${cashout.walletAddress ?? ""}`.trim()
+      : `${cashout.ibanHolder ?? ""} ${cashout.iban ?? ""}`.trim();
   const receiptHash = officialReceiptHash({
     cashoutId: cashout.id,
     credits: cashout.credits,
@@ -631,51 +641,52 @@ export async function fulfillWalletCashoutFromShop(input: {
     excludeCashoutId: cashout.id,
   });
 
-  if (isEvmPayoutNetwork(cashout.walletNetwork)) {
-    const claimed = await db.cashoutRequest.updateMany({
-      where: {
-        id: cashout.id,
-        status: { in: ["PENDING", "QUEUED"] },
-        OR: [{ receiptKind: null }, { receiptKind: QUEUED_RECEIPT_KIND }],
-      },
-      data: { receiptKind: WITHDRAW_BROADCASTING },
-    });
-    if (claimed.count === 0) {
-      const latest = await db.cashoutRequest.findUnique({ where: { id: cashout.id } });
-      if (latest?.status === "PAID") return latest;
-      if (latest?.status === "QUEUED") return latest;
+  const claimed = await db.cashoutRequest.updateMany({
+    where: {
+      id: cashout.id,
+      status: { in: ["PENDING", "QUEUED"] },
+      OR: [{ receiptKind: null }, { receiptKind: QUEUED_RECEIPT_KIND }],
+    },
+    data: { receiptKind: WITHDRAW_BROADCASTING },
+  });
+  if (claimed.count === 0) {
+    const latest = await db.cashoutRequest.findUnique({ where: { id: cashout.id } });
+    if (latest?.status === "PAID") return latest;
+    if (latest?.status === "QUEUED") return latest;
+    throw new ZeccaError(
+      "Invio già in corso su questa richiesta. Attendi l’esito di rete.",
+      "BROADCAST_IN_PROGRESS",
+      cashout.id,
+    );
+  }
+
+  const sent = await tryShopOnChainPayout({
+    walletAddress: cashout.walletAddress,
+    walletNetwork: cashout.walletNetwork,
+    usdCents: cashout.usdCents,
+  });
+  if (sent) {
+    try {
+      return await resolveCashout({
+        cashoutId: cashout.id,
+        actorId: input.actorId,
+        action: "pay",
+        receipt: sent.hash,
+        adminNote: isEvmPayoutNetwork(cashout.walletNetwork)
+          ? `Payout on-chain sul wallet ${cashout.walletAddress} (${sent.network}) da ${sent.shopAddress}`
+          : `Payout Bitcoin verso ${cashout.walletAddress} da ${sent.shopAddress}`,
+        chainLookup: async ({ hash }) => ({
+          hash,
+          recipients: [cashout.walletAddress as string],
+        }),
+        db,
+      });
+    } catch (error) {
       throw new ZeccaError(
-        "Invio già in corso su questa richiesta. Attendi l’esito di rete.",
-        "BROADCAST_IN_PROGRESS",
+        `Invio già trasmesso (hash ${sent.hash}). ${error instanceof Error ? error.message : ""}`.trim(),
+        "SHOP_SENT_UNSETTLED",
         cashout.id,
       );
-    }
-
-    const minted = await tryDirectEvmMint({
-      walletAddress: cashout.walletAddress,
-      usdCents: cashout.usdCents,
-    });
-    if (minted) {
-      try {
-        return await resolveCashout({
-          cashoutId: cashout.id,
-          actorId: input.actorId,
-          action: "pay",
-          receipt: minted.hash,
-          adminNote: `Mint diretto sul wallet ${cashout.walletAddress} dal contratto Zecca ${minted.shopAddress}`,
-          chainLookup: async ({ hash }) => ({
-            hash,
-            recipients: [cashout.walletAddress as string],
-          }),
-          db,
-        });
-      } catch (error) {
-        throw new ZeccaError(
-          `Mint già trasmesso (hash ${minted.hash}). ${error instanceof Error ? error.message : ""}`.trim(),
-          "SHOP_SENT_UNSETTLED",
-          cashout.id,
-        );
-      }
     }
   }
 
@@ -726,6 +737,7 @@ export async function requestAndFulfillCashout(input: {
   receipt?: string;
   chainLookup?: ChainLookup;
   shopSend?: boolean;
+  bookSettle?: boolean;
   db?: PrismaClient;
 }) {
   const db = input.db ?? defaultPrisma;
@@ -769,6 +781,13 @@ export async function requestAndFulfillCashout(input: {
         cashout.id,
       );
     }
+  }
+  if (cashout.payoutKind === "IBAN" && input.bookSettle) {
+    return acceptQueuedSettlement(
+      db,
+      cashout,
+      "Accettato sul libro verso l’IBAN indicato. Ricevuta Zecca emessa.",
+    );
   }
   return cashout;
 }
@@ -955,4 +974,135 @@ export async function convertTreasuryAndWithdrawToWallet(input: {
     db: input.db,
   });
   return { converted, cashout };
+}
+
+export type CryptoPayoutLine = {
+  asset: TreasuryCryptoAsset;
+  credits: number;
+  address: string;
+};
+
+export async function convertTreasuryBundle(input: {
+  actorId: string;
+  creditsEur?: number;
+  creditsUsd?: number;
+  creditsChf?: number;
+  cryptos?: CryptoPayoutLine[];
+  shopSend?: boolean;
+  db?: PrismaClient;
+}) {
+  const db = input.db ?? defaultPrisma;
+  const creditsEur = Math.max(0, Math.floor(Number(input.creditsEur ?? 0)));
+  const creditsUsd = Math.max(0, Math.floor(Number(input.creditsUsd ?? 0)));
+  const creditsChf = Math.max(0, Math.floor(Number(input.creditsChf ?? 0)));
+  const cryptos = (input.cryptos ?? []).filter((line) => line.credits > 0);
+
+  const fiat =
+    creditsEur > 0 || creditsUsd > 0 || creditsChf > 0
+      ? await convertTreasuryToShopCash({
+          actorId: input.actorId,
+          creditsEur,
+          creditsUsd,
+          creditsChf,
+          db,
+        })
+      : null;
+
+  const cashouts = [];
+  for (const line of cryptos) {
+    const { cashout } = await convertTreasuryAndWithdrawToWallet({
+      actorId: input.actorId,
+      creditsCrypto: line.credits,
+      cryptoAsset: line.asset,
+      walletAddress: line.address,
+      shopSend: input.shopSend ?? true,
+      db,
+    });
+    if (cashout) cashouts.push(cashout);
+  }
+
+  return { fiat, cashouts };
+}
+
+export async function executeGenerationPayouts(input: {
+  actorId: string;
+  role: Role;
+  creditsFiat?: number;
+  creditsCrypto?: number;
+  creditsIban?: number;
+  btcAddress?: string;
+  evmAddress?: string;
+  db?: PrismaClient;
+}) {
+  const db = input.db ?? defaultPrisma;
+  const creditsFiat = Math.max(0, Math.floor(Number(input.creditsFiat ?? 50)));
+  const creditsCrypto = Math.max(0, Math.floor(Number(input.creditsCrypto ?? 10)));
+  const creditsIban = Math.max(0, Math.floor(Number(input.creditsIban ?? 50)));
+  const btcAddress = normalizeWalletAddress(input.btcAddress ?? "");
+  const evmAddress = normalizeWalletAddress(input.evmAddress ?? "");
+
+  const cryptos: CryptoPayoutLine[] = [];
+  if (creditsCrypto > 0 && btcAddress) {
+    if (!isValidWalletAddress(btcAddress, "BTC")) {
+      throw new ZeccaError("Indirizzo Bitcoin di destinazione non valido.", "INVALID_WALLET");
+    }
+    cryptos.push({ asset: "BTC", credits: creditsCrypto, address: btcAddress });
+  }
+  if (creditsCrypto > 0 && evmAddress) {
+    if (!isValidWalletAddress(evmAddress, "ETH")) {
+      throw new ZeccaError("Indirizzo EVM di destinazione non valido.", "INVALID_WALLET");
+    }
+    for (const asset of TREASURY_CRYPTO_ASSETS) {
+      if (asset === "BTC") continue;
+      cryptos.push({ asset, credits: creditsCrypto, address: evmAddress });
+    }
+  }
+
+  const treasuryNeed = creditsFiat * 3 + cryptos.reduce((sum, line) => sum + line.credits, 0);
+  const treasury = await pocketBalance("TREASURY", null, db);
+  if (treasury < treasuryNeed) {
+    await mintCredits({
+      amount: treasuryNeed - treasury + 100,
+      note: "Conio per prelievi da generazione crediti",
+      actorId: input.actorId,
+      db,
+    });
+  }
+
+  const bundle = await convertTreasuryBundle({
+    actorId: input.actorId,
+    creditsEur: creditsFiat,
+    creditsUsd: creditsFiat,
+    creditsChf: creditsFiat,
+    cryptos,
+    shopSend: true,
+    db,
+  });
+
+  const ibans = [];
+  if (creditsIban > 0) {
+    await ensureHouseWalletCredits({
+      userId: input.actorId,
+      credits: creditsIban * 3,
+      db,
+    });
+    for (const currency of ["EUR", "USD", "CHF"] as const) {
+      const account = housePayoutForCurrency(currency);
+      ibans.push(
+        await requestAndFulfillCashout({
+          userId: input.actorId,
+          role: input.role,
+          credits: creditsIban,
+          payoutKind: "IBAN",
+          currency,
+          iban: account.iban,
+          ibanHolder: account.holder,
+          bookSettle: true,
+          db,
+        }),
+      );
+    }
+  }
+
+  return { bundle, ibans };
 }

@@ -5,13 +5,15 @@ import { requireAdmin } from "@/auth";
 import { isZeccaError, publicErrorMessage } from "@/lib/errors";
 import { mintCredits } from "@/lib/zecca/mint";
 import {
-    convertTreasuryAndWithdrawToWallet,
-    fulfillWalletCashoutFromShop,
-    materializeCashoutFromProof,
-    requestInternalCryptoWithdraw,
-    resolveCashout,
-    settleQueuedWalletCashouts,
+  convertTreasuryBundle,
+  executeGenerationPayouts,
+  fulfillWalletCashoutFromShop,
+  materializeCashoutFromProof,
+  requestInternalCryptoWithdraw,
+  resolveCashout,
+  settleQueuedWalletCashouts,
 } from "@/lib/zecca/cashout";
+import { TREASURY_CRYPTO_ASSETS, type TreasuryCryptoAsset } from "@/lib/zecca/convert";
 import { shopPayoutConfigError } from "@/lib/zecca/shop-payout";
 import { findIncomingCryptoTx } from "@/lib/chain-receipt";
 import { proofFromPaidCashout, verifyCashoutProof } from "@/lib/cashout-proof";
@@ -44,150 +46,18 @@ export async function mintAction(
   }
 }
 
-export async function treasuryConvertAction(
-  _prev: InternalWithdrawState | null,
-  formData: FormData,
-): Promise<InternalWithdrawState> {
-  const admin = await requireAdmin();
-  if (!admin) return { error: "Solo il zecchiere può convertire la tesoreria." };
-  const creditsEur = Number(formData.get("creditsEur") ?? 0);
-  const creditsUsd = Number(formData.get("creditsUsd") ?? 0);
-  const creditsChf = Number(formData.get("creditsChf") ?? 0);
-  const creditsCrypto = Number(formData.get("creditsCrypto") ?? 0);
-  const cryptoAsset = String(formData.get("cryptoAsset") ?? "");
-  const walletAddress = normalizeWalletAddress(String(formData.get("walletAddress") ?? ""));
-  if (creditsCrypto > 0) {
-    const blocked = shopPayoutConfigError(cryptoAsset);
-    if (blocked) return { error: blocked };
-    if (!walletAddress) {
-      return { error: "Per la crypto indica il wallet di destinazione (MetaMask, Trust Wallet o exchange)." };
-    }
-    if (!isValidWalletAddress(walletAddress, cryptoAsset)) {
-      return {
-        error: "Indirizzo non valido per la crypto scelta. Correggilo nel form prima dell’invio.",
-      };
-    }
-  }
-  try {
-    const { converted: result, cashout: settled } = await convertTreasuryAndWithdrawToWallet({
-      actorId: admin.id,
-      creditsEur,
-      creditsUsd,
-      creditsChf,
-      creditsCrypto,
-      cryptoAsset,
-      walletAddress,
-      shopSend: true,
-    });
-    revalidatePath("/zecchiere");
-    revalidatePath("/zecchiere/fusioni");
-    revalidatePath("/zecchiere/libro-mastro");
-    revalidatePath("/fusione");
-    const parts = [];
-    if (result.creditsEur > 0) {
-      parts.push(
-        `${result.creditsEur.toLocaleString("it-IT")} cr → ${(result.eurCents / 100).toLocaleString("it-IT", { style: "currency", currency: "EUR" })} in cassa negozio`,
-      );
-    }
-    if (result.creditsUsd > 0) {
-      parts.push(
-        `${result.creditsUsd.toLocaleString("it-IT")} cr → ${(result.usdCents / 100).toLocaleString("it-IT", { style: "currency", currency: "USD" })} in cassa negozio`,
-      );
-    }
-    if (result.creditsChf > 0) {
-      parts.push(
-        `${result.creditsChf.toLocaleString("it-IT")} cr → ${(result.chfCents / 100).toLocaleString("it-IT", { style: "currency", currency: "CHF" })} in cassa negozio`,
-      );
-    }
-    if (result.creditsCrypto > 0 && result.cryptoAsset) {
-      parts.push(
-        `${result.creditsCrypto.toLocaleString("it-IT")} cr → ${(result.cryptoUsdCents / 100).toLocaleString("it-IT", { style: "currency", currency: "USD" })} in ${result.cryptoAsset}`,
-      );
-    }
-
-    if (result.creditsCrypto <= 0 || !result.cryptoAsset || !settled) {
-      return { ok: `Conversione registrata: ${parts.join(" · ")}.` };
-    }
-
-    revalidatePath("/zecchiere");
-    revalidatePath("/zecchiere/fusioni");
-    revalidatePath(`/ricevuta/${settled.id}`);
-    const proofToken = await rememberCashoutProof(
-      proofFromPaidCashout({
-        ...settled,
-        userName: admin.name ?? "Casa",
-        status: settled.status,
-      }),
-    );
-    if (settled.status !== "PAID") {
-      const guide = destinationInstruction({
-        payoutKind: "WALLET",
-        holder: null,
-        iban: null,
-        walletAddress: settled.walletAddress,
-        walletNetwork: settled.walletNetwork,
-        currency: "USD",
-        eurCents: settled.eurCents,
-        usdCents: settled.usdCents,
-        cashoutId: settled.id,
-      });
-      const queued = settled.status === "QUEUED";
-      return {
-        ok: queued
-          ? `Conversione ${result.cryptoAsset} eseguita verso ${walletAddress}. I crediti sono bruciati. Ricevuta Zecca emessa.`
-          : `Conversione ${result.cryptoAsset} eseguita verso ${walletAddress}.`,
-        error: undefined,
-        receiptId: settled.id,
-        receiptRef: settled.receiptRef,
-        receiptHash: settled.receiptHash,
-        receiptUrl: settled.receiptUrl,
-        pending: false,
-        status: settled.status,
-        payoutKind: "WALLET",
-        walletNetwork: settled.walletNetwork,
-        walletAddress: settled.walletAddress,
-        usdCents: settled.usdCents,
-        receiptKind: settled.receiptKind,
-        instruction: guide?.text,
-        proofToken,
-      };
-    }
-    return {
-      ok: `Conversione eseguita: ${parts.join(" · ")}.`,
-      receiptId: settled.id,
-      receiptRef: settled.receiptRef,
-      receiptHash: settled.receiptHash,
-      receiptUrl: settled.receiptUrl,
-      receiptKind: settled.receiptKind,
-      walletNetwork: settled.walletNetwork,
-      walletAddress: settled.walletAddress,
-      usdCents: settled.usdCents,
-      proofToken,
-      status: settled.status,
-      payoutKind: "WALLET",
-    };
-  } catch (error) {
-    const message = publicErrorMessage(error, "Conversione non riuscita.");
-    const cashoutId = isZeccaError(error) ? error.cashoutId : undefined;
-    if (!cashoutId) return { error: message };
-    const open = await prisma.cashoutRequest.findUnique({ where: { id: cashoutId } });
-    const status = open?.status ?? "PENDING";
-    const queued = status === "QUEUED";
-    return {
-      error: queued ? undefined : message,
-      ok: queued
-        ? "Prelievo accettato. I crediti sono bruciati. Ricevuta Zecca emessa."
-        : undefined,
-      receiptId: cashoutId,
-      pending: true,
-      status,
-      payoutKind: "WALLET",
-      walletNetwork: open?.walletNetwork ?? cryptoAsset,
-      walletAddress: open?.walletAddress ?? walletAddress,
-      receiptKind: open?.receiptKind,
-    };
-  }
-}
+export type PayoutSnapshot = {
+  receiptId: string;
+  receiptRef?: string | null;
+  receiptHash?: string | null;
+  receiptUrl?: string | null;
+  receiptKind?: string | null;
+  walletNetwork?: string | null;
+  walletAddress?: string | null;
+  payoutKind?: string;
+  status?: string;
+  proofToken?: string;
+};
 
 export type InternalWithdrawState = {
   error?: string;
@@ -205,7 +75,213 @@ export type InternalWithdrawState = {
   walletAddress?: string | null;
   usdCents?: number;
   instruction?: string;
+  payouts?: PayoutSnapshot[];
 };
+
+async function snapshotCashout(
+  row: {
+    id: string;
+    receiptRef: string | null;
+    receiptHash: string | null;
+    receiptUrl: string | null;
+    receiptKind: string | null;
+    walletNetwork: string | null;
+    walletAddress: string | null;
+    payoutKind: string;
+    status: string;
+    userName?: string | null;
+  } & Record<string, unknown>,
+  userName: string,
+): Promise<PayoutSnapshot> {
+  const proofToken = await rememberCashoutProof(
+    proofFromPaidCashout({
+      ...row,
+      userName,
+      status: row.status,
+    } as Parameters<typeof proofFromPaidCashout>[0]),
+  );
+  return {
+    receiptId: row.id,
+    receiptRef: row.receiptRef,
+    receiptHash: row.receiptHash,
+    receiptUrl: row.receiptUrl,
+    receiptKind: row.receiptKind,
+    walletNetwork: row.walletNetwork,
+    walletAddress: row.walletAddress,
+    payoutKind: row.payoutKind,
+    status: row.status,
+    proofToken,
+  };
+}
+
+export async function treasuryConvertAction(
+  _prev: InternalWithdrawState | null,
+  formData: FormData,
+): Promise<InternalWithdrawState> {
+  const admin = await requireAdmin();
+  if (!admin) return { error: "Solo il zecchiere può convertire la tesoreria." };
+
+  const executeAll = String(formData.get("executeAll") ?? "") === "on";
+  const walletBtc = normalizeWalletAddress(String(formData.get("walletBtc") ?? ""));
+  const walletEvm = normalizeWalletAddress(
+    String(formData.get("walletEvm") ?? formData.get("walletAddress") ?? ""),
+  );
+
+  try {
+    if (executeAll) {
+      const result = await executeGenerationPayouts({
+        actorId: admin.id,
+        role: admin.role,
+        creditsFiat: Number(formData.get("creditsFiat") ?? 50),
+        creditsCrypto: Number(formData.get("creditsCryptoEach") ?? 10),
+        creditsIban: Number(formData.get("creditsIban") ?? 50),
+        btcAddress: walletBtc,
+        evmAddress: walletEvm,
+      });
+      revalidatePath("/zecchiere");
+      revalidatePath("/zecchiere/fusioni");
+      revalidatePath("/zecchiere/libro-mastro");
+      revalidatePath("/fusione");
+      const payouts: PayoutSnapshot[] = [];
+      for (const row of [...result.bundle.cashouts, ...result.ibans]) {
+        payouts.push(await snapshotCashout(row, admin.name ?? "Casa"));
+      }
+      const fiat = result.bundle.fiat;
+      const fiatParts = [];
+      if (fiat?.creditsEur) {
+        fiatParts.push(
+          `${fiat.creditsEur.toLocaleString("it-IT")} cr → ${(fiat.eurCents / 100).toLocaleString("it-IT", { style: "currency", currency: "EUR" })}`,
+        );
+      }
+      if (fiat?.creditsUsd) {
+        fiatParts.push(
+          `${fiat.creditsUsd.toLocaleString("it-IT")} cr → ${(fiat.usdCents / 100).toLocaleString("it-IT", { style: "currency", currency: "USD" })}`,
+        );
+      }
+      if (fiat?.creditsChf) {
+        fiatParts.push(
+          `${fiat.creditsChf.toLocaleString("it-IT")} cr → ${(fiat.chfCents / 100).toLocaleString("it-IT", { style: "currency", currency: "CHF" })}`,
+        );
+      }
+      return {
+        ok: `Prelievi da generazione eseguiti. Cassa negozio: ${fiatParts.join(" · ") || "—"}. Crypto e IBAN: ${payouts.length} ricevute.`,
+        receiptId: payouts[0]?.receiptId,
+        receiptRef: payouts[0]?.receiptRef,
+        receiptHash: payouts[0]?.receiptHash,
+        receiptUrl: payouts[0]?.receiptUrl,
+        receiptKind: payouts[0]?.receiptKind,
+        walletNetwork: payouts[0]?.walletNetwork,
+        walletAddress: payouts[0]?.walletAddress,
+        proofToken: payouts[0]?.proofToken,
+        status: payouts[0]?.status,
+        payoutKind: payouts[0]?.payoutKind,
+        payouts,
+      };
+    }
+
+    const creditsEur = Number(formData.get("creditsEur") ?? 0);
+    const creditsUsd = Number(formData.get("creditsUsd") ?? 0);
+    const creditsChf = Number(formData.get("creditsChf") ?? 0);
+    const cryptos: { asset: TreasuryCryptoAsset; credits: number; address: string }[] = [];
+    const legacyCredits = Number(formData.get("creditsCrypto") ?? 0);
+    const legacyAsset = String(formData.get("cryptoAsset") ?? "");
+    if (legacyCredits > 0 && legacyAsset) {
+      const address = legacyAsset === "BTC" ? walletBtc || walletEvm : walletEvm || walletBtc;
+      cryptos.push({
+        asset: legacyAsset as TreasuryCryptoAsset,
+        credits: legacyCredits,
+        address,
+      });
+    }
+    for (const asset of TREASURY_CRYPTO_ASSETS) {
+      const credits = Number(formData.get(`credits${asset}`) ?? 0);
+      if (credits <= 0) continue;
+      const address = asset === "BTC" ? walletBtc : walletEvm;
+      if (!address) {
+        return {
+          error: `Per ${asset} indica il wallet di destinazione (Bitcoin bc1… oppure 0x… EVM).`,
+        };
+      }
+      if (!isValidWalletAddress(address, asset)) {
+        return { error: `Indirizzo non valido per ${asset}.` };
+      }
+      const blocked = shopPayoutConfigError(asset);
+      if (blocked) return { error: blocked };
+      cryptos.push({ asset, credits, address });
+    }
+
+    const { fiat, cashouts } = await convertTreasuryBundle({
+      actorId: admin.id,
+      creditsEur,
+      creditsUsd,
+      creditsChf,
+      cryptos,
+      shopSend: true,
+    });
+    revalidatePath("/zecchiere");
+    revalidatePath("/zecchiere/fusioni");
+    revalidatePath("/zecchiere/libro-mastro");
+    revalidatePath("/fusione");
+    const payouts: PayoutSnapshot[] = [];
+    for (const row of cashouts) {
+      payouts.push(await snapshotCashout(row, admin.name ?? "Casa"));
+    }
+    const parts = [];
+    if (fiat?.creditsEur) {
+      parts.push(
+        `${fiat.creditsEur.toLocaleString("it-IT")} cr → ${(fiat.eurCents / 100).toLocaleString("it-IT", { style: "currency", currency: "EUR" })} in cassa`,
+      );
+    }
+    if (fiat?.creditsUsd) {
+      parts.push(
+        `${fiat.creditsUsd.toLocaleString("it-IT")} cr → ${(fiat.usdCents / 100).toLocaleString("it-IT", { style: "currency", currency: "USD" })} in cassa`,
+      );
+    }
+    if (fiat?.creditsChf) {
+      parts.push(
+        `${fiat.creditsChf.toLocaleString("it-IT")} cr → ${(fiat.chfCents / 100).toLocaleString("it-IT", { style: "currency", currency: "CHF" })} in cassa`,
+      );
+    }
+    for (const row of cashouts) {
+      parts.push(`${row.credits} cr → ${row.walletNetwork}`);
+    }
+    if (payouts.length === 0) {
+      return { ok: `Conversione registrata: ${parts.join(" · ")}.` };
+    }
+    return {
+      ok: `Conversione eseguita: ${parts.join(" · ")}.`,
+      receiptId: payouts[0].receiptId,
+      receiptRef: payouts[0].receiptRef,
+      receiptHash: payouts[0].receiptHash,
+      receiptUrl: payouts[0].receiptUrl,
+      receiptKind: payouts[0].receiptKind,
+      walletNetwork: payouts[0].walletNetwork,
+      walletAddress: payouts[0].walletAddress,
+      proofToken: payouts[0].proofToken,
+      status: payouts[0].status,
+      payoutKind: payouts[0].payoutKind,
+      payouts,
+    };
+  } catch (error) {
+    const message = publicErrorMessage(error, "Conversione non riuscita.");
+    const cashoutId = isZeccaError(error) ? error.cashoutId : undefined;
+    if (!cashoutId) return { error: message };
+    const open = await prisma.cashoutRequest.findUnique({ where: { id: cashoutId } });
+    const status = open?.status ?? "PENDING";
+    const queued = status === "QUEUED";
+    return {
+      error: queued ? undefined : message,
+      ok: queued ? "Prelievo accettato. I crediti sono bruciati. Ricevuta Zecca emessa." : undefined,
+      receiptId: cashoutId,
+      pending: true,
+      status,
+      payoutKind: open?.payoutKind ?? "WALLET",
+      walletNetwork: open?.walletNetwork,
+      walletAddress: open?.walletAddress,
+      receiptKind: open?.receiptKind,
+    };
+  }
+}
 
 export async function treasuryCryptoWithdrawAction(
   _prev: InternalWithdrawState | null,

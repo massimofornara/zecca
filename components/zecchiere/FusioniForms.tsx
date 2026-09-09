@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useMemo, useState } from "react";
+import { useActionState, useState } from "react";
 import {
   resolveCashoutAction,
   treasuryConvertAction,
@@ -41,59 +41,61 @@ export function TreasuryConvertForm({
     treasuryConvertAction,
     null as InternalWithdrawState | null,
   );
-  const [creditsEur, setCreditsEur] = useState(0);
-  const [creditsUsd, setCreditsUsd] = useState(0);
-  const [creditsChf, setCreditsChf] = useState(0);
-  const [creditsCrypto, setCreditsCrypto] = useState(0);
-  const [cryptoAsset, setCryptoAsset] = useState<TreasuryCryptoAsset>("BTC");
-  const [walletAddress, setWalletAddress] = useState("");
+  const [creditsEur, setCreditsEur] = useState(50);
+  const [creditsUsd, setCreditsUsd] = useState(50);
+  const [creditsChf, setCreditsChf] = useState(50);
+  const [creditsBtc, setCreditsBtc] = useState(10);
+  const [creditsEth, setCreditsEth] = useState(10);
+  const [creditsUsdt, setCreditsUsdt] = useState(10);
+  const [creditsUsdc, setCreditsUsdc] = useState(10);
+  const [creditsBnb, setCreditsBnb] = useState(10);
+  const [walletBtc, setWalletBtc] = useState("");
+  const [walletEvm, setWalletEvm] = useState("");
   const [formError, setFormError] = useState<string | null>(null);
 
-  const previewEur = useMemo(() => {
-    const amount = creditsEur > 0 ? Math.floor(creditsEur) : 0;
-    return formatFiatFromCents(amount * eurCentsPerCredit, "EUR");
-  }, [creditsEur, eurCentsPerCredit]);
+  const previewEur = formatFiatFromCents((creditsEur > 0 ? creditsEur : 0) * eurCentsPerCredit, "EUR");
+  const previewUsd = formatFiatFromCents((creditsUsd > 0 ? creditsUsd : 0) * usdCentsPerCredit, "USD");
+  const previewChf = formatFiatFromCents((creditsChf > 0 ? creditsChf : 0) * chfCentsPerCredit, "CHF");
+  const payouts = state?.payouts?.length ? state.payouts : state?.receiptId
+    ? [
+        {
+          receiptId: state.receiptId,
+          receiptKind: state.receiptKind,
+          receiptRef: state.receiptRef,
+          receiptUrl: state.receiptUrl,
+          receiptHash: state.receiptHash,
+          walletNetwork: state.walletNetwork,
+          walletAddress: state.walletAddress,
+          proofToken: state.proofToken,
+          status: state.status,
+          payoutKind: state.payoutKind,
+        },
+      ]
+    : [];
+  const accepted = Boolean(state?.ok && !state.error);
 
-  const previewUsd = useMemo(() => {
-    const amount = creditsUsd > 0 ? Math.floor(creditsUsd) : 0;
-    return formatFiatFromCents(amount * usdCentsPerCredit, "USD");
-  }, [creditsUsd, usdCentsPerCredit]);
-
-  const previewChf = useMemo(() => {
-    const amount = creditsChf > 0 ? Math.floor(creditsChf) : 0;
-    return formatFiatFromCents(amount * chfCentsPerCredit, "CHF");
-  }, [creditsChf, chfCentsPerCredit]);
-
-  const selectedCrypto =
-    CRYPTO_CHOICES.find((asset) => asset.id === cryptoAsset) ?? CRYPTO_CHOICES[0];
-  const previewCrypto = useMemo(() => {
-    const amount = creditsCrypto > 0 ? Math.floor(creditsCrypto) : 0;
-    return `${formatUsdFromCents(amount * usdCentsPerCredit)} in ${selectedCrypto.ticker}`;
-  }, [creditsCrypto, usdCentsPerCredit, selectedCrypto.ticker]);
-
-  const cryptoAmount = creditsCrypto > 0 ? Math.floor(creditsCrypto) : 0;
-  const destOk = cryptoAmount <= 0 || isValidWalletAddress(walletAddress, cryptoAsset);
-  const accepted = Boolean(
-    state?.receiptId && (state.status === "PAID" || state.status === "QUEUED"),
-  );
-
-  if (accepted && state?.receiptId) {
+  if (accepted) {
     return (
       <div className="mt-4 space-y-3">
-        <OkBanner message={state.ok} />
-        <p className="text-sm text-muted-foreground">
-          Destinazione <span className="font-ledger">{state.walletAddress}</span>. Conversione
-          eseguita: i crediti sono bruciati. Ricevuta Zecca emessa.
-        </p>
-        <CashoutReceipt
-          cashoutId={state.receiptId}
-          receiptKind={state.receiptKind ?? null}
-          receiptRef={state.receiptRef ?? null}
-          receiptUrl={state.receiptUrl ?? null}
-          receiptHash={state.receiptHash ?? null}
-          walletNetwork={state.walletNetwork}
-          proofToken={state.proofToken}
-        />
+        <OkBanner message={state?.ok} />
+        {payouts.map((payout) => (
+          <div key={payout.receiptId}>
+            <p className="text-sm text-muted-foreground">
+              {payout.payoutKind === "IBAN" ? "IBAN" : payout.walletNetwork} ·{" "}
+              <span className="font-ledger">{payout.walletAddress}</span>
+              {payout.status === "PAID" ? " · hash di rete" : " · ricevuta Zecca"}
+            </p>
+            <CashoutReceipt
+              cashoutId={payout.receiptId}
+              receiptKind={payout.receiptKind ?? null}
+              receiptRef={payout.receiptRef ?? null}
+              receiptUrl={payout.receiptUrl ?? null}
+              receiptHash={payout.receiptHash ?? null}
+              walletNetwork={payout.walletNetwork}
+              proofToken={payout.proofToken}
+            />
+          </div>
+        ))}
       </div>
     );
   }
@@ -103,23 +105,29 @@ export function TreasuryConvertForm({
       action={action}
       className="mt-4 space-y-4"
       onSubmit={(event) => {
-        if (cryptoAmount > 0 && !isValidWalletAddress(walletAddress, cryptoAsset)) {
+        const needsBtc = creditsBtc > 0;
+        const needsEvm = creditsEth > 0 || creditsUsdt > 0 || creditsUsdc > 0 || creditsBnb > 0;
+        if (needsBtc && !isValidWalletAddress(walletBtc, "BTC")) {
           event.preventDefault();
-          setFormError(`Indirizzo non valido per ${selectedCrypto.label}.`);
+          setFormError("Indica un indirizzo Bitcoin valido.");
+          return;
+        }
+        if (needsEvm && !isValidWalletAddress(walletEvm, "ETH")) {
+          event.preventDefault();
+          setFormError("Indica un indirizzo EVM valido (MetaMask / Trust Wallet).");
         }
       }}
     >
       <ErrorBanner message={formError || state?.error} />
       <OkBanner message={state?.ok} />
       <p className="text-sm text-muted-foreground">
-        Euro, dollari e franchi restano in cassa negozio. BTC, ETH, USDT, USDC e BNB: alla conferma
-        i crediti si bruciano e il payout verso il wallet indicato viene accettato. Su EVM il
-        contratto Zecca conia sul destinatario; su Bitcoin la richiesta entra in coda con ricevuta
-        Zecca. Nessun versamento preventivo in cassa di rete.
+        Euro, dollari e franchi accreditano la cassa negozio. BTC, ETH, USDT, USDC e BNB: alla
+        conferma i crediti si bruciano e il negozio tenta l’invio on-chain; se la cassa di rete è
+        vuota la richiesta resta accettata in coda, con ricevuta Zecca.
       </p>
       <div className="grid gap-4 sm:grid-cols-3">
         <label className="text-sm">
-          Crediti → euro (negozio)
+          Crediti → euro (cassa)
           <Input
             name="creditsEur"
             type="number"
@@ -127,12 +135,11 @@ export function TreasuryConvertForm({
             value={creditsEur || ""}
             onChange={(e) => setCreditsEur(Number(e.target.value))}
             className="mt-1 font-ledger"
-            placeholder="0"
           />
           <span className="mt-1 block font-ledger text-ember">{previewEur}</span>
         </label>
         <label className="text-sm">
-          Crediti → dollari (negozio)
+          Crediti → dollari (cassa)
           <Input
             name="creditsUsd"
             type="number"
@@ -140,12 +147,11 @@ export function TreasuryConvertForm({
             value={creditsUsd || ""}
             onChange={(e) => setCreditsUsd(Number(e.target.value))}
             className="mt-1 font-ledger"
-            placeholder="0"
           />
           <span className="mt-1 block font-ledger text-ember">{previewUsd}</span>
         </label>
         <label className="text-sm">
-          Crediti → franchi svizzeri (negozio)
+          Crediti → franchi (cassa)
           <Input
             name="creditsChf"
             type="number"
@@ -153,82 +159,82 @@ export function TreasuryConvertForm({
             value={creditsChf || ""}
             onChange={(e) => setCreditsChf(Number(e.target.value))}
             className="mt-1 font-ledger"
-            placeholder="0"
           />
           <span className="mt-1 block font-ledger text-ember">{previewChf}</span>
         </label>
       </div>
       <div className="space-y-3 rounded-md bg-background/40 p-4 ring-1 ring-primary/15">
-        <p className="text-sm font-medium">Crediti → crypto (burn immediato, payout in coda)</p>
-        <input type="hidden" name="cryptoAsset" value={cryptoAsset} />
-        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-          {CRYPTO_CHOICES.map((asset) => (
-            <label key={asset.id} className={chip}>
-              <input
-                type="radio"
-                className="mt-1"
-                checked={cryptoAsset === asset.id}
-                onChange={() => {
-                  setCryptoAsset(asset.id);
-                  setFormError(null);
-                }}
+        <p className="text-sm font-medium">Crediti → crypto (tutte le reti)</p>
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+          {(
+            [
+              ["BTC", creditsBtc, setCreditsBtc],
+              ["ETH", creditsEth, setCreditsEth],
+              ["USDT", creditsUsdt, setCreditsUsdt],
+              ["USDC", creditsUsdc, setCreditsUsdc],
+              ["BNB", creditsBnb, setCreditsBnb],
+            ] as const
+          ).map(([asset, value, setter]) => (
+            <label key={asset} className="text-sm">
+              {asset}
+              <Input
+                name={`credits${asset}`}
+                type="number"
+                min={0}
+                value={value || ""}
+                onChange={(e) => setter(Number(e.target.value))}
+                className="mt-1 font-ledger"
               />
-              <span>
-                <span className="block">{asset.label}</span>
-                <span className="block text-xs text-muted-foreground">{asset.ticker}</span>
+              <span className="mt-1 block font-ledger text-xs text-ember">
+                {formatUsdFromCents((value > 0 ? value : 0) * usdCentsPerCredit)}
               </span>
             </label>
           ))}
         </div>
         <label className="block text-sm">
-          Crediti da convertire in {selectedCrypto.label}
+          Wallet Bitcoin
           <Input
-            name="creditsCrypto"
-            type="number"
-            min={0}
-            value={creditsCrypto || ""}
-            onChange={(e) => setCreditsCrypto(Number(e.target.value))}
+            name="walletBtc"
+            value={walletBtc}
+            onChange={(e) => {
+              setWalletBtc(e.target.value);
+              setFormError(null);
+            }}
             className="mt-1 font-ledger"
-            placeholder="0"
+            placeholder="bc1…"
+            autoComplete="off"
           />
-          <span className="mt-1 block font-ledger text-ember">{previewCrypto}</span>
         </label>
-        {cryptoAmount > 0 ? (
-          <label className="block text-sm">
-            Wallet di destinazione (MetaMask, Trust Wallet, exchange)
-            <Input
-              name="walletAddress"
-              required
-              value={walletAddress}
-              onChange={(e) => {
-                setWalletAddress(e.target.value);
-                setFormError(null);
-              }}
-              className="mt-1 font-ledger"
-              placeholder={selectedCrypto.hint}
-              autoComplete="off"
-            />
-            {walletAddress.trim() && !destOk ? (
-              <span className="mt-1 block text-xs text-destructive">
-                Indirizzo non valido per {selectedCrypto.ticker}.
-              </span>
-            ) : (
-              <span className="mt-1 block text-xs text-muted-foreground">
-                Alla conferma i crediti si bruciano e il controvalore viene erogato al wallet
-                indicato.
-              </span>
-            )}
-          </label>
-        ) : null}
+        <label className="block text-sm">
+          Wallet EVM (ETH, USDT, USDC, BNB — MetaMask / Trust Wallet)
+          <Input
+            name="walletEvm"
+            value={walletEvm}
+            onChange={(e) => {
+              setWalletEvm(e.target.value);
+              setFormError(null);
+            }}
+            className="mt-1 font-ledger"
+            placeholder="0x…"
+            autoComplete="off"
+          />
+        </label>
       </div>
       <p className="text-xs text-muted-foreground">
         Disponibili: {formatCredits(treasury)}. Tasso: 1 cr = {formatEurFromCents(eurCentsPerCredit)}{" "}
         · 1 cr = {formatFiatFromCents(usdCentsPerCredit, "USD")} · 1 cr ={" "}
         {formatFiatFromCents(chfCentsPerCredit, "CHF")}
       </p>
-      <SubmitButton pendingLabel="Conversione in corso…">
-        {cryptoAmount > 0 ? "Conferma" : "Converti Tesoreria"}
-      </SubmitButton>
+      <div className="flex flex-wrap gap-3">
+        <SubmitButton pendingLabel="Conversione in corso…">Conferma</SubmitButton>
+        <SubmitButton name="executeAll" value="on" pendingLabel="Prelievi in corso…">
+          Genera e preleva tutto
+        </SubmitButton>
+      </div>
+      <p className="text-xs text-muted-foreground">
+        «Genera e preleva tutto» conia se serve, accredita EUR/USD/CHF in cassa, tenta i payout
+        crypto e registra i prelievi IBAN casa su UniCredit e Wise.
+      </p>
     </form>
   );
 }

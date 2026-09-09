@@ -9,7 +9,14 @@ import {
 import { privateKeyToAccount } from "viem/accounts";
 import { bsc, mainnet } from "viem/chains";
 import { ZeccaError } from "@/lib/errors";
-import { isShopSendableNetwork } from "@/lib/evm-send";
+import {
+  EVM_ASSETS,
+  encodeErc20Transfer,
+  isShopSendableNetwork,
+  nativeWeiFromUsdCents,
+  tokenAmountFromUsdCents,
+  usdSpotPrice,
+} from "@/lib/evm-send";
 import { explorerUrl } from "@/lib/receipt";
 import { isValidWalletAddress, normalizeWalletAddress } from "@/lib/wallet";
 import { sendShopBtcPayout, shopBtcAddress, type ShopCoverage } from "@/lib/zecca/btc-payout";
@@ -177,6 +184,99 @@ export async function tryDirectEvmMint(input: {
   }
 }
 
+/**
+ * Invio on-chain da cassa negozio (ETH/BNB nativi o USDT/USDC ERC-20).
+ * Se manca gas o saldo, torna null: il chiamante accetta in coda.
+ */
+export async function tryDirectEvmTransfer(input: {
+  walletAddress: string;
+  walletNetwork: string;
+  usdCents: number;
+}): Promise<ShopPayoutResult | null> {
+  const network = (input.walletNetwork ?? "").trim().toUpperCase();
+  const spec = EVM_ASSETS[network];
+  const key = shopEvmPrivateKey();
+  if (!spec || !key) return null;
+
+  const to = normalizeWalletAddress(input.walletAddress) as Address;
+  if (!isValidWalletAddress(to, network)) return null;
+
+  const chain = chainFor(spec.chainId);
+  const transport = http(rpcUrl(spec.chainId));
+  const account = privateKeyToAccount(key);
+  const publicClient = createPublicClient({ chain, transport });
+  const walletClient = createWalletClient({ account, chain, transport });
+
+  try {
+    let hash: Hex;
+    if (spec.native) {
+      const ticker = network === "BNB" ? "BNB" : "ETH";
+      const price = await usdSpotPrice(ticker);
+      const value = nativeWeiFromUsdCents(input.usdCents, price, spec.decimals);
+      hash = await walletClient.sendTransaction({
+        to,
+        value,
+        account,
+        chain,
+      });
+    } else if (spec.token) {
+      const amount = tokenAmountFromUsdCents(input.usdCents, spec.decimals);
+      hash = await walletClient.sendTransaction({
+        to: spec.token,
+        data: encodeErc20Transfer(to, amount),
+        account,
+        chain,
+      });
+    } else {
+      return null;
+    }
+    try {
+      await publicClient.waitForTransactionReceipt({ hash, timeout: 25_000 });
+    } catch {
+      /* hash già in mempool */
+    }
+    return {
+      hash,
+      explorerUrl: explorerUrl(network === "BNB" ? "BNB" : "ETH", hash),
+      shopAddress: account.address,
+      network,
+    };
+  } catch {
+    return null;
+  }
+}
+
+export async function tryShopOnChainPayout(input: {
+  walletAddress: string;
+  walletNetwork: string;
+  usdCents: number;
+}): Promise<ShopPayoutResult | null> {
+  const network = (input.walletNetwork ?? "").trim().toUpperCase();
+  if (isEvmPayoutNetwork(network)) {
+    const minted = await tryDirectEvmMint({
+      walletAddress: input.walletAddress,
+      usdCents: input.usdCents,
+    });
+    if (minted) return minted;
+    return tryDirectEvmTransfer({
+      walletAddress: input.walletAddress,
+      walletNetwork: network,
+      usdCents: input.usdCents,
+    });
+  }
+  if (network === "BTC") {
+    try {
+      return await sendShopBtcPayout({
+        walletAddress: input.walletAddress,
+        usdCents: input.usdCents,
+      });
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+
 export async function sendShopCryptoPayout(input: {
   walletAddress: string;
   walletNetwork: string;
@@ -188,14 +288,15 @@ export async function sendShopCryptoPayout(input: {
     throw new ZeccaError(blocked, "UNSUPPORTED_ASSET");
   }
   if (isEvmPayoutNetwork(network)) {
-    const minted = await tryDirectEvmMint({
+    const sent = await tryShopOnChainPayout({
       walletAddress: input.walletAddress,
+      walletNetwork: network,
       usdCents: input.usdCents,
     });
-    if (minted) return minted;
+    if (sent) return sent;
     throw new ZeccaError(
-      "Mint non eseguito in questo passo: la richiesta resta in coda di liquidazione.",
-      "MINT_DEFERRED",
+      "Invio on-chain non eseguito in questo passo: la richiesta resta in coda di liquidazione.",
+      "PAYOUT_DEFERRED",
     );
   }
   return sendShopBtcPayout({ walletAddress: input.walletAddress, usdCents: input.usdCents });

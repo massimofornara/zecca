@@ -186,8 +186,8 @@ export default async function TesoreriaPage() {
         <h2 className="font-display text-2xl text-primary">Converti crediti in cassa e crypto</h2>
         <p className="mt-1 text-sm text-muted-foreground">
         Euro, dollari e franchi restano in cassa negozio. Per BTC, ETH, USDT, USDC e BNB alla
-        conferma i crediti si bruciano e il payout verso il wallet indicato viene accettato. Nessun
-        blocco a saldo di rete zero. Rate limit, whitelist e massimali stanno in Forgia.
+        conferma i crediti si bruciano e il negozio tenta l’invio on-chain. Se la cassa di rete è
+        vuota il prelievo resta accettato in coda. Rate limit, whitelist e massimali stanno in Forgia.
         </p>
         <TreasuryConvertForm
           treasury={flow.treasury}

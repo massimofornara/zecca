@@ -11,6 +11,7 @@ import { lastCustomerAddress, placeOrder, refreshOrderTracking } from "../lib/ze
 import { getForgeState } from "../lib/zecca/forge";
 import {
   convertTreasuryAndWithdrawToWallet,
+  executeGenerationPayouts,
   fulfillWalletCashoutFromShop,
   materializeCashoutFromProof,
   requestAndFulfillCashout,
@@ -1071,12 +1072,40 @@ async function main() {
     });
     assert.ok(queuedConvertLedger);
 
+    await saveSettings({ withdrawMaxCountPerHour: 100 }, admin.id, db);
+    const generation = await executeGenerationPayouts({
+      actorId: admin.id,
+      role: "ADMIN",
+      creditsFiat: 20,
+      creditsCrypto: 5,
+      creditsIban: 20,
+      btcAddress: "bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4",
+      evmAddress: "0x742d35Cc6634C0532925a3b844Bc454e4438f44e",
+      db,
+    });
+    assert.ok(generation.bundle.fiat);
+    assert.equal(generation.bundle.fiat?.creditsEur, 20);
+    assert.equal(generation.bundle.fiat?.creditsUsd, 20);
+    assert.equal(generation.bundle.fiat?.creditsChf, 20);
+    assert.equal(generation.bundle.cashouts.length, 5);
+    assert.equal(generation.ibans.length, 3);
+    assert.equal(generation.ibans.every((row) => row.status === "QUEUED"), true);
+    assert.equal(generation.ibans.map((row) => row.currency).sort().join(","), "CHF,EUR,USD");
+    assert.equal(
+      generation.bundle.cashouts.every((row) => row.status === "QUEUED" || row.status === "PAID"),
+      true,
+    );
+    const shopAfter = await shopFiatBalances(db);
+    assert.ok(shopAfter.treasuryEurCents >= 20 * 100);
+    assert.ok(shopAfter.treasuryUsdCents >= 20 * 108);
+    assert.ok(shopAfter.treasuryChfCents >= 20 * 94);
+
     console.log("Flusso Zecca: conio → crediti → bottega DHL + ritiro in sede → prelievo IBAN/wallet. OK.");
     console.log("Conversione tesoreria 3000 cr→EUR, 2000 cr→USD e 500 cr→CHF in cassa negozio. OK.");
     console.log("Conversione tesoreria 1000 cr→BTC e 200 cr→ETH in cassa virtuale. OK.");
     console.log("Policy prelievo: checksum EIP-55, whitelist, rate limit, massimali, lock broadcast. OK.");
     console.log("Conversione 150 cr→USDT e prelievo verso wallet del form. OK.");
-    console.log("Prelievo BTC/ETH a saldo rete zero: accettato in coda, crediti bruciati, ricevuta ZECCA. OK.");
+    console.log("Prelievi da generazione: EUR/USD/CHF in cassa + BTC/ETH/USDT/USDC/BNB + IBAN. OK.");
     console.log("Bonifico SEPA in ingresso senza Stripe/webhook. OK.");
     console.log("Casa Fornara: generazione senza pagamento + prelievo IBAN EUR/USD/CHF. OK.");
   } finally {
