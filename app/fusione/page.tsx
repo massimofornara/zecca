@@ -48,14 +48,17 @@ export default async function FusionePage() {
     loadRememberedProofs(house ? undefined : session.user.id),
   ]);
   const dbIds = new Set(requests.map((row) => row.id));
+  const rememberedById = new Map(remembered.map((proof) => [proof.id, proof]));
   const listed = [
     ...remembered.filter((proof) => !dbIds.has(proof.id)),
-    ...requests.map((row) =>
-      proofFromPaidCashout({
+    ...requests.map((row) => {
+      const cookie = rememberedById.get(row.id);
+      if (cookie && cashoutProofStatus(cookie) === "PAID") return cookie;
+      return proofFromPaidCashout({
         ...row,
         userName: who ?? session.user.name ?? "Casa",
-      }),
-    ),
+      });
+    }),
   ];
 
   return (
@@ -97,7 +100,8 @@ export default async function FusionePage() {
           <ul className="mt-4 space-y-3">
             {listed.map((r) => {
               const dbRow = requests.find((row) => row.id === r.id);
-              const status = dbRow?.status ?? cashoutProofStatus(r);
+              const status =
+                cashoutProofStatus(r) === "PAID" ? "PAID" : (dbRow?.status ?? cashoutProofStatus(r));
               return (
                 <li key={r.id} className="rounded-md px-4 py-3 text-sm ring-1 ring-primary/20">
                   <div className="flex items-start justify-between gap-3">
