@@ -45,7 +45,8 @@ export default async function RicevutaGatewayPage({
 
       <section className="metal-frame mt-8 space-y-4 rounded-md bg-card p-5 md:p-7">
         <p className="font-ledger text-xs uppercase tracking-wider text-ember">
-          {signed ? "FIRMA HMAC VALIDA" : "ATTESTAZIONE A LIBRO"} · {cert?.rail ?? cashout?.currency ?? "—"}
+          {signed ? "FIRMA HMAC VALIDA" : "ATTESTAZIONE A LIBRO"} ·{" "}
+          {cert?.rail ?? cashout?.walletNetwork ?? cashout?.currency ?? "—"}
         </p>
         <CopyField label="Identificativo trasmissione" value={cert?.id ?? cashout?.receiptRef ?? id} mono />
         {cert ? (
