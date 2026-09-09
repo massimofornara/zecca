@@ -116,7 +116,7 @@ export function settlementProviderHealth(): ProviderHealth[] {
   return [
     {
       id: "kms-signer",
-      label: "KMS / signer mint (chiave non in chiaro nel codice)",
+      label: "KMS secp256k1 / MINTER_ROLE",
       rails: ["USDT", "USDC", "ZECCA"],
       ready: kms.ready,
       detail: kms.detail,

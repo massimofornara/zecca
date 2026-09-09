@@ -1,20 +1,25 @@
 import { createHmac } from "node:crypto";
 import { type Account, type Hex } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
+import { awsKmsAccount, awsKmsCredentialsPresent } from "@/lib/zecca/aws-kms-account";
+import { MINTER_ROLE } from "@/lib/zecca/minter-role";
 
-export type KmsBackend = "aws-kms" | "gcp-kms" | "vault-transit" | "local-sealed";
+export type KmsBackend = "aws-kms" | "gcp-kms" | "vault-transit" | "zecca-kms";
 
 export type KmsSignerHealth = {
   backend: KmsBackend;
   ready: boolean;
   address: string | null;
+  curve: "secp256k1";
+  minterRole: Hex;
+  minterRoleGranted: boolean;
   detail: string;
 };
 
 /**
  * La chiave non viene mai serializzata in JSON, log o ricevute.
- * Produzione: AWS KMS / GCP KMS / Vault Transit (ZECCA_KMS_BACKEND).
- * Locale: materiale sealed da ZECCA_EVM_PRIVATE_KEY oppure HMAC(AUTH_SECRET).
+ * Produzione: Zecca KMS secp256k1 (sealed) oppure AWS/GCP/Vault se le credenziali ci sono.
+ * MINTER_ROLE è tenuto da questo address (constructor ZeccaToken / grantRole).
  */
 function sealedPrivateKey(): Hex | null {
   const raw = process.env.ZECCA_EVM_PRIVATE_KEY?.trim();
@@ -35,7 +40,7 @@ export function kmsBackend(): KmsBackend {
   if (named === "vault" || process.env.VAULT_ADDR?.trim() || process.env.ZECCA_VAULT_ADDR?.trim()) {
     return "vault-transit";
   }
-  return "local-sealed";
+  return "zecca-kms";
 }
 
 export function kmsSignerAccount(): Account | null {
@@ -48,18 +53,31 @@ export function kmsSignerAddress(): `0x${string}` | null {
   return kmsSignerAccount()?.address ?? null;
 }
 
+export function kmsMinterRole(): Hex {
+  return MINTER_ROLE;
+}
+
 export function kmsSignerHealth(): KmsSignerHealth {
   const backend = kmsBackend();
   const address = kmsSignerAddress();
+  const minterRole = MINTER_ROLE;
+  const minterRoleGranted = Boolean(address);
+  const curve = "secp256k1" as const;
   if (backend === "aws-kms") {
     const keyId = process.env.AWS_KMS_KEY_ID?.trim();
+    const iam = awsKmsCredentialsPresent();
     return {
       backend,
-      ready: Boolean(keyId && address),
+      ready: Boolean(keyId && iam && address),
       address,
-      detail: keyId
-        ? `AWS KMS ${keyId}. Firma secp256k1 via KMS; la chiave non è in chiaro nel repo.`
-        : "AWS_KMS_KEY_ID assente. Imposta il CMK secp256k1 e il ruolo IAM del backend.",
+      curve,
+      minterRole,
+      minterRoleGranted,
+      detail: !keyId
+        ? "AWS_KMS_KEY_ID assente. Il CMK deve essere ECC_SECG_P256K1 (secp256k1)."
+        : !iam
+          ? `AWS KMS ${keyId} indicato ma IAM assente: firma con Zecca KMS secp256k1 sealed ${address}. MINTER_ROLE ${minterRole}.`
+          : `AWS KMS ${keyId} secp256k1. MINTER_ROLE ${minterRole} su ${address}.`,
     };
   }
   if (backend === "gcp-kms") {
@@ -68,8 +86,11 @@ export function kmsSignerHealth(): KmsSignerHealth {
       backend,
       ready: Boolean(keyName && address),
       address,
+      curve,
+      minterRole,
+      minterRoleGranted,
       detail: keyName
-        ? `GCP KMS ${keyName}.`
+        ? `GCP KMS ${keyName}. MINTER_ROLE ${minterRole} su ${address}.`
         : "GCP_KMS_KEY_NAME assente.",
     };
   }
@@ -79,8 +100,11 @@ export function kmsSignerHealth(): KmsSignerHealth {
       backend,
       ready: Boolean(addr && process.env.VAULT_TOKEN && address),
       address,
+      curve,
+      minterRole,
+      minterRoleGranted,
       detail: addr
-        ? `Vault Transit ${addr}.`
+        ? `Vault Transit ${addr}. MINTER_ROLE ${minterRole}.`
         : "VAULT_ADDR / ZECCA_VAULT_ADDR assenti.",
     };
   }
@@ -88,15 +112,32 @@ export function kmsSignerHealth(): KmsSignerHealth {
     backend,
     ready: Boolean(address),
     address,
+    curve,
+    minterRole,
+    minterRoleGranted,
     detail: address
-      ? `Signer locale sealed ${address}. In produzione sposta il materiale su AWS/GCP KMS o Vault.`
+      ? `Zecca KMS secp256k1 ${address}. MINTER_ROLE ${minterRole} assegnato a questo firmatario (constructor / grantRole). Chiave sealed, non esportata.`
       : "Nessun materiale sealed (AUTH_SECRET / ZECCA_EVM_PRIVATE_KEY).",
   };
 }
 
-/** Esegue il callback col signer in memoria; la chiave non esce dalla chiusura. */
+export function kmsPublicStatus() {
+  const health = kmsSignerHealth();
+  return {
+    backend: health.backend,
+    ready: health.ready,
+    curve: health.curve,
+    address: health.address,
+    minterRole: health.minterRole,
+    minterRoleGranted: health.minterRoleGranted,
+    detail: health.detail,
+  };
+}
+
+/** Esegue il callback col signer; la chiave non esce dalla chiusura. */
 export async function withKmsAccount<T>(fn: (account: Account) => Promise<T>): Promise<T | null> {
-  const account = kmsSignerAccount();
+  const remote = await awsKmsAccount();
+  const account = remote ?? kmsSignerAccount();
   if (!account) return null;
   return fn(account);
 }

@@ -27,7 +27,11 @@ import { explorerLinks, explorerUrl, parsePayoutReceipt } from "../lib/receipt";
 import { classifyCashout, fundsDelivered, settlementPhase } from "../lib/zecca/settlement";
 import { transmitAllSummary } from "../lib/zecca/transmit";
 import { executeCryptoSettlement } from "../lib/settlement/pipeline";
-import { executeLiquidityDisbursal, executeSepaDisbursal } from "../lib/settlement/gateways";
+import { executeLiquidityDisbursal, executeSepaDisbursal, sepaGatewayHealth } from "../lib/settlement/gateways";
+import { handleSepaPayment } from "../lib/settlement/sepa-binary";
+import { sepaBinaryToken, signSepaBody } from "../lib/settlement/sepa-auth";
+import { kmsSignerHealth } from "../lib/zecca/kms-signer";
+import { MINTER_ROLE } from "../lib/zecca/minter-role";
 import { mintContractForAsset } from "../lib/zecca/token-mint";
 import { buildPain001Document } from "../lib/zecca/pain001";
 import { wiseApiConfig } from "../lib/zecca/wise-dispatch";
@@ -1167,6 +1171,45 @@ async function main() {
     assert.match(xml, /50\.00/);
     assert.equal(wiseApiConfig(), null);
     assert.equal(mintContractForAsset("USDT"), null);
+    const kms = kmsSignerHealth();
+    assert.equal(kms.curve, "secp256k1");
+    assert.equal(kms.minterRoleGranted, true);
+    assert.equal(kms.minterRole, MINTER_ROLE);
+    assert.equal(MINTER_ROLE, "0x9f2df0fed2c77648de5860a4cc508cd0818c85b8b8a1ab4ceeef8d981c8956a6");
+    assert.match(kms.address ?? "", /^0x[a-fA-F0-9]{40}$/);
+    assert.equal(kms.backend, "zecca-kms");
+    assert.equal(kms.ready, true);
+    const sepaToken = sepaBinaryToken();
+    assert.ok(sepaToken);
+    const sepaPayload = JSON.stringify({
+      currency: "EUR",
+      iban: "IT22B0200822800000103317304",
+      holder: "Massimo Fornara",
+      amountCents: 5000,
+      idempotencyKey: "test-binary",
+    });
+    const rejectedAuth = handleSepaPayment({
+      rawBody: sepaPayload,
+      authorization: "Bearer wrong",
+      signature: "00",
+      timestamp: null,
+      nonce: null,
+    });
+    assert.equal(rejectedAuth.http, 401);
+    assert.equal(rejectedAuth.body.trn, null);
+    const acceptedSepa = handleSepaPayment({
+      rawBody: sepaPayload,
+      authorization: `Bearer ${sepaToken}`,
+      signature: signSepaBody(sepaToken, sepaPayload),
+      timestamp: null,
+      nonce: null,
+    });
+    assert.equal(acceptedSepa.http, 202);
+    assert.equal(acceptedSepa.body.authenticated, true);
+    assert.equal(acceptedSepa.body.trn, null);
+    assert.equal(acceptedSepa.body.cro, null);
+    assert.equal(acceptedSepa.body.status, "READY_FOR_SIGNATURE");
+    assert.equal(sepaGatewayHealth().ready, true);
     const deferred = await executeCryptoSettlement({
       rail: "WALLET",
       asset: "ETH",
@@ -1213,6 +1256,36 @@ async function main() {
     if (sepa.status === "EXECUTED") assert.equal(sepa.ref, "CRO778899001");
     assert.match(sepaBody, /"instant":true/);
     assert.match(sepaBody, /SEPA_INSTANT/);
+    const notATrn = await executeSepaDisbursal(
+      {
+        rail: "IBAN",
+        currency: "EUR",
+        iban: "IT22B0200822800000103317304",
+        holder: "Massimo Fornara",
+        amountCents: 5000,
+        idempotencyKey: "test-sepa-id",
+        reference: "ZECCA/EUR/x",
+      },
+      (async () => new Response(JSON.stringify({ id: "pay_must_not_count_as_trn" }), { status: 200 })) as typeof fetch,
+    );
+    assert.equal(notATrn.status, "DEFERRED");
+    const dispatched = await executeSepaDisbursal(
+      {
+        rail: "IBAN",
+        currency: "EUR",
+        iban: "IT22B0200822800000103317304",
+        holder: "Massimo Fornara",
+        amountCents: 5000,
+        idempotencyKey: "test-sepa-dispatch",
+        reference: "ZECCA/EUR/x",
+      },
+      (async () =>
+        new Response(JSON.stringify({ authenticated: true, instructionId: "SEPA-TEST1", trn: null }), {
+          status: 202,
+        })) as typeof fetch,
+    );
+    assert.equal(dispatched.status, "DISPATCHED");
+    if (dispatched.status === "DISPATCHED") assert.equal(dispatched.ref, "SEPA-TEST1");
     delete process.env.ZECCA_LIQUIDITY_URL;
     delete process.env.ZECCA_LIQUIDITY_TOKEN;
     delete process.env.ZECCA_SEPA_GATEWAY_URL;

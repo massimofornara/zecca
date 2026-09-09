@@ -130,6 +130,8 @@ Su Vercel il SQLite in `/tmp` è per istanza. Senza `DATABASE_URL` Postgres il l
 
 Analisi della monetizzazione interna, on/off-ramp e rischi di conio scoperto: [`docs/architettura-monetizzazione.md`](docs/architettura-monetizzazione.md). Pipeline esecutiva mint / liquidity / Wise / SEPA: [`docs/pipeline-settlement.md`](docs/pipeline-settlement.md). Check provider: `npm run check:settlement`.
 
+In produzione: KMS secp256k1 con `MINTER_ROLE` in `GET /api/rails/kms`; binario SEPA autenticato in `GET /api/rails/sepa` e `POST /api/rails/sepa/v1/payments`. Senza gas o BaaS upstream non nascono tx_hash né CRO UniCredit.
+
 Deploy on-chain di `ZeccaToken` (solo se il signer ha gas; **non** inventa `tx_hash`): `npm run token:balances` poi `ZECCA_TOKEN_CHAIN_ID=1 npm run token:deploy`. Il constructor assegna `DEFAULT_ADMIN_ROLE` e `MINTER_ROLE` all’admin KMS/sealed. Senza ETH/BNB sul firmatario lo script esce con `NO_GAS`. Gli euro su UniCredit restano `pain.001` finché non c’è `ZECCA_SEPA_GATEWAY_*` o un conto ordinante `ZECCA_SEPA_DEBTOR_IBAN`.
 
 ## Libro mastro

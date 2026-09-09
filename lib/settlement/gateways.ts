@@ -1,5 +1,11 @@
-import { createHmac } from "node:crypto";
 import { explorerUrl, isValidTxHash } from "@/lib/receipt";
+import {
+  sepaAuthHeaders,
+  sepaBinaryEnabled,
+  sepaBinaryOrigin,
+  sepaBinaryToken,
+  signSepaBody,
+} from "@/lib/settlement/sepa-auth";
 import type {
   CryptoInstruction,
   FiatInstruction,
@@ -16,10 +22,15 @@ export function liquidityGatewayConfig() {
 }
 
 export function sepaGatewayConfig() {
-  const url = process.env.ZECCA_SEPA_GATEWAY_URL?.trim().replace(/\/$/, "");
-  const token = process.env.ZECCA_SEPA_GATEWAY_TOKEN?.trim();
-  if (!url || !token) return null;
-  return { url, token };
+  const explicitUrl = process.env.ZECCA_SEPA_GATEWAY_URL?.trim().replace(/\/$/, "");
+  const explicitToken = process.env.ZECCA_SEPA_GATEWAY_TOKEN?.trim();
+  if (explicitUrl && explicitToken) return { url: explicitUrl, token: explicitToken, source: "env" as const };
+  const token = sepaBinaryToken();
+  const origin = sepaBinaryOrigin();
+  if (token && origin && sepaBinaryEnabled()) {
+    return { url: `${origin}/api/rails/sepa`, token, source: "zecca-binary" as const };
+  }
+  return null;
 }
 
 export function liquidityHealth(): ProviderHealth {
@@ -37,19 +48,20 @@ export function liquidityHealth(): ProviderHealth {
 
 export function sepaGatewayHealth(): ProviderHealth {
   const cfg = sepaGatewayConfig();
+  const binary = Boolean(sepaBinaryToken());
   return {
     id: "sepa",
-    label: "SEPA Instant / BaaS (UniCredit EUR)",
+    label: "SEPA Instant autenticato (binario Zecca / BaaS)",
     rails: ["EUR"],
-    ready: Boolean(cfg),
+    ready: Boolean(cfg) || binary,
     detail: cfg
-      ? `Gateway ${cfg.url}`
-      : "ZECCA_SEPA_GATEWAY_URL e ZECCA_SEPA_GATEWAY_TOKEN assenti. Il pain.001 resta distinta, non un TRN.",
+      ? cfg.source === "zecca-binary"
+        ? `Binario SEPA autenticato ${cfg.url}/v1/payments. HMAC Bearer. Nessun TRN inventato senza upstream bancario.`
+        : `Gateway esterno ${cfg.url}`
+      : binary
+        ? "Binario SEPA autenticato sul deploy. In produzione è il gateway (VERCEL_ENV=production). Senza conto ordinante o BaaS non esce un TRN UniCredit."
+        : "ZECCA_SEPA_GATEWAY_URL / token assenti e AUTH_SECRET troppo corto. Il pain.001 resta distinta, non un TRN.",
   };
-}
-
-function signBody(token: string, body: string) {
-  return createHmac("sha256", token).update(body).digest("hex");
 }
 
 async function postJson(
@@ -63,9 +75,8 @@ async function postJson(
     const res = await fetchImpl(`${cfg.url}${path}`, {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${cfg.token}`,
-        "Content-Type": "application/json",
-        "X-Zecca-Signature": signBody(cfg.token, body),
+        ...sepaAuthHeaders(cfg.token, body),
+        "X-Zecca-Body-Signature": signSepaBody(cfg.token, body),
       },
       body,
       signal: AbortSignal.timeout(8_000),
@@ -187,7 +198,7 @@ export async function executeSepaDisbursal(
       reason: `Gateway SEPA HTTP ${posted.status || "down"}. Nessun TRN inventato.`,
     };
   }
-  const trn = readString(posted.json, ["trn", "cro", "endToEndId", "paymentId", "id"]);
+  const trn = readString(posted.json, ["trn", "cro"]);
   if (trn && !/^ZECCA\//i.test(trn)) {
     return {
       status: "EXECUTED",
@@ -198,10 +209,21 @@ export async function executeSepaDisbursal(
       signer: cfg.url,
     };
   }
+  const instructionId = readString(posted.json, ["instructionId"]);
+  if (posted.ok && instructionId && posted.json?.authenticated === true) {
+    return {
+      status: "DISPATCHED",
+      provider: "sepa",
+      proofKind: "PROVIDER_REF",
+      ref: instructionId,
+      url: null,
+      signer: cfg.url,
+    };
+  }
   return {
     status: "DEFERRED",
     provider: "sepa",
     code: "SEPA_NO_TRN",
-    reason: "Il gateway SEPA non ha restituito un TRN/CRO bancario.",
+    reason: "Il binario SEPA è autenticato ma non ha restituito un TRN/CRO bancario. Nessun accredito inventato.",
   };
 }

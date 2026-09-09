@@ -7,6 +7,10 @@ export function publicOrigin(requestUrl?: string) {
       /* ignore malformed */
     }
   }
+  const vercelHost = (process.env.VERCEL_PROJECT_PRODUCTION_URL || process.env.VERCEL_URL || "").trim();
+  if (vercelHost) {
+    return `https://${vercelHost.replace(/^https?:\/\//, "")}`;
+  }
   if (requestUrl) return new URL(requestUrl).origin;
   return "";
 }

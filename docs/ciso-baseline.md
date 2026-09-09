@@ -27,7 +27,15 @@ Senza connettore BaaS autenticato il backend **non** dispone un SEPA. Genera `pa
 
 ## Signer
 
-`lib/zecca/kms-signer.ts`: AWS KMS / GCP KMS / Vault Transit, fallback locale sealed. La chiave privata non compare in log né nelle API.
+`lib/zecca/kms-signer.ts`: **Zecca KMS secp256k1** (chiave sealed, mai in log) con `MINTER_ROLE` = `keccak256("MINTER_ROLE")` sullo stesso address del constructor di `ZeccaToken`. AWS KMS `ECC_SECG_P256K1` / GCP / Vault solo se le credenziali IAM ci sono — senza IAM non si finge una firma KMS cloud.
+
+Health: `GET /api/rails/kms`.
+
+## Binario SEPA autenticato
+
+`POST /api/rails/sepa/v1/payments` con Bearer + HMAC (`X-Zecca-Signature`). In produzione (`VERCEL_ENV=production`) è il gateway interno. Risponde `READY_FOR_SIGNATURE` + pain.001. **Nessun TRN UniCredit inventato.** Un `id` di istruzione non è un CRO.
+
+Health: `GET /api/rails/sepa`.
 
 ## Prove 50.000 EUR
 
