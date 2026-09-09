@@ -10,6 +10,7 @@ import { requestBonificoPurchase, confirmBonificoPurchase, saveShopBank } from "
 import { lastCustomerAddress, placeOrder, refreshOrderTracking } from "../lib/zecca/shop";
 import { getForgeState } from "../lib/zecca/forge";
 import { requestAndFulfillCashout, requestCustomerCashout, resolveCashout } from "../lib/zecca/cashout";
+import { proofFromPaidCashout, signCashoutProof, verifyCashoutProof } from "../lib/cashout-proof";
 import { explorerUrl } from "../lib/receipt";
 import { convertTreasuryToShopFiat, shopFiatBalances } from "../lib/zecca/convert";
 import { pocketBalance, treasuryBalance } from "../lib/zecca/ledger";
@@ -535,6 +536,11 @@ async function main() {
     assert.equal(instantBank.receiptKind, "BANK_REF");
     assert.ok(instantBank.receiptRef?.startsWith("ZECCA/"));
     assert.equal(instantBank.receiptHash?.length, 64);
+    const bankProof = proofFromPaidCashout({ ...instantBank, userName: "Maxi" });
+    const bankToken = signCashoutProof(bankProof);
+    assert.equal(verifyCashoutProof(bankToken)?.id, instantBank.id);
+    assert.equal(verifyCashoutProof(`${bankToken}x`), null);
+    assert.equal(verifyCashoutProof("not-a-token"), null);
     assert.equal(await pocketBalance("USER", houseB.id, db), 0);
 
     const aliasUser = await db.user.create({

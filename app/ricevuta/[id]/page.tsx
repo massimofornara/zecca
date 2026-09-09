@@ -10,27 +10,56 @@ import { prisma } from "@/lib/db";
 import { walletNetworkLabel } from "@/lib/wallet";
 import { housePayoutLabel } from "@/lib/zecca/house-accounts";
 import { isHouseEmail } from "@/lib/zecca/house";
+import { proofFromPaidCashout, signCashoutProof, verifyCashoutProof, type CashoutProof } from "@/lib/cashout-proof";
+import { findRememberedProof } from "@/lib/cashout-proof-store";
 
 export const metadata = { title: "Ricevuta di prelievo" };
 export const dynamic = "force-dynamic";
 
-export default async function RicevutaPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function RicevutaPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ p?: string }>;
+}) {
   const session = await auth();
   if (!session?.user) redirect("/accedi?callbackUrl=/ricevuta");
   const { id } = await params;
-  const cashout = await prisma.cashoutRequest.findUnique({
+  const query = await searchParams;
+  const house = isHouseEmail(session.user.email) || session.user.role === "ADMIN";
+
+  const row = await prisma.cashoutRequest.findUnique({
     where: { id },
     include: { user: { select: { id: true, email: true, name: true } } },
   });
-  if (!cashout || cashout.status !== "PAID") notFound();
 
-  const house = isHouseEmail(session.user.email) || session.user.role === "ADMIN";
-  if (!house && cashout.userId !== session.user.id) notFound();
+  let proof: CashoutProof | null = null;
+  if (row && row.status === "PAID" && (house || row.userId === session.user.id)) {
+    proof = proofFromPaidCashout({
+      ...row,
+      userName: row.user?.name ?? session.user.name ?? "Casa",
+    });
+  }
+  if (!proof) {
+    const fromQuery = verifyCashoutProof(query.p);
+    if (fromQuery && fromQuery.id === id && (house || fromQuery.userId === session.user.id)) {
+      proof = fromQuery;
+    }
+  }
+  if (!proof) {
+    const fromCookie = await findRememberedProof(id, house ? undefined : session.user.id);
+    if (fromCookie && fromCookie.id === id && (house || fromCookie.userId === session.user.id)) {
+      proof = fromCookie;
+    }
+  }
+  if (!proof) notFound();
 
   const destination =
-    cashout.payoutKind === "WALLET"
-      ? `${walletNetworkLabel(cashout.walletNetwork)} ${cashout.walletAddress ?? ""}`
-      : `${cashout.ibanHolder ?? ""} · ${housePayoutLabel(cashout.iban) ?? cashout.iban ?? ""}`;
+    proof.payoutKind === "WALLET"
+      ? `${walletNetworkLabel(proof.walletNetwork)} ${proof.walletAddress ?? ""}`
+      : `${proof.ibanHolder ?? ""} · ${housePayoutLabel(proof.iban) ?? proof.iban ?? ""}`;
+  const token = signCashoutProof(proof);
 
   return (
     <PageShell>
@@ -46,24 +75,25 @@ export default async function RicevutaPage({ params }: { params: Promise<{ id: s
       </p>
 
       <section className="metal-frame mt-8 space-y-4 rounded-md bg-card p-5 md:p-7">
-        <CopyField label="Numero prelievo" value={cashout.id} mono />
+        <CopyField label="Numero prelievo" value={proof.id} mono />
         <p className="font-ledger text-xl text-ember">
-          {formatCredits(cashout.credits)} → {formatCashoutValue(cashout)}
+          {formatCredits(proof.credits)} → {formatCashoutValue(proof)}
         </p>
         <p className="text-sm">{destination}</p>
         <p className="text-xs text-muted-foreground">
-          {cashout.user?.name} · {formatRomeDate(cashout.resolvedAt ?? cashout.createdAt)}
+          {proof.userName} · {formatRomeDate(new Date(proof.resolvedAt || proof.createdAt))}
         </p>
-        {cashout.receiptHash ? (
-          <CopyField label="Hash ricevuta Zecca (SHA-256)" value={cashout.receiptHash} mono />
+        {proof.receiptHash ? (
+          <CopyField label="Hash ricevuta Zecca (SHA-256)" value={proof.receiptHash} mono />
         ) : null}
         <CashoutReceipt
-          cashoutId={cashout.id}
-          receiptKind={cashout.receiptKind}
-          receiptRef={cashout.receiptRef}
-          receiptUrl={cashout.receiptUrl}
-          receiptHash={cashout.receiptHash}
-          walletNetwork={cashout.walletNetwork}
+          cashoutId={proof.id}
+          receiptKind={proof.receiptKind}
+          receiptRef={proof.receiptRef}
+          receiptUrl={proof.receiptUrl}
+          receiptHash={proof.receiptHash}
+          walletNetwork={proof.walletNetwork}
+          proofToken={token}
         />
       </section>
     </PageShell>

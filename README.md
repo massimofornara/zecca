@@ -112,6 +112,8 @@ Controlla lo stato: `npm run check:live`. In **Zecchiere → Tesoreria** vedi la
 
 **Euro o dollari in uscita (veri):** il cliente (o la casa) indica IBAN e valuta. In **Fusioni** compare un blocco da incollare in banca. Tu invii **dal proprio home banking**, poi confermi. L’app non ha accesso ai conti.
 
+Su Vercel il SQLite in `/tmp` è per istanza: senza `DATABASE_URL` Postgres i prelievi restano nel libro di quella lambda. La ricevuta ufficiale (`/ricevuta/…`) e «Le tue richieste» tengono anche una **prova firmata** (cookie + link `?p=`), così CRO e hash restano apribili dopo il prelievo. Non è un bonifico UniCredit e non è un invio Ethereum dalla casa: è il documento Zecca.
+
 Non esiste un pulsante che “conia e manda” soldi a un IBAN da sola. Le due email della casa generano crediti nel libro e aprono la richiesta di bonifico: il giro di denaro resta in banca.
 
 ## Conio e conversione in cassa negozio

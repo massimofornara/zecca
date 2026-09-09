@@ -14,6 +14,8 @@ import { getSettings } from "@/lib/zecca/settings";
 import { walletNetworkLabel } from "@/lib/wallet";
 import { houseDisplayName, housePayoutLabel } from "@/lib/zecca/house-accounts";
 import { fulfillPendingHouseBankCashouts } from "@/lib/zecca/cashout";
+import { proofFromPaidCashout, signCashoutProof } from "@/lib/cashout-proof";
+import { loadRememberedProofs } from "@/lib/cashout-proof-store";
 import { ensureHouseAdmin, isHouseEmail } from "@/lib/zecca/house";
 
 export const metadata = { title: "Prelievo" };
@@ -40,14 +42,25 @@ export default async function FusionePage() {
   if (house) {
     await fulfillPendingHouseBankCashouts({ userId: session.user.id, actorId: session.user.id });
   }
-  const [wallet, settings, requests] = await Promise.all([
+  const [wallet, settings, requests, remembered] = await Promise.all([
     userWallet(session.user.id),
     getSettings(),
     prisma.cashoutRequest.findMany({
       where: { userId: session.user.id },
       orderBy: { createdAt: "desc" },
     }),
+    loadRememberedProofs(session.user.id),
   ]);
+  const dbIds = new Set(requests.map((row) => row.id));
+  const listed = [
+    ...remembered.filter((proof) => !dbIds.has(proof.id)),
+    ...requests.map((row) =>
+      proofFromPaidCashout({
+        ...row,
+        userName: who ?? session.user.name ?? "Casa",
+      }),
+    ),
+  ];
 
   return (
     <PageShell>
@@ -77,7 +90,7 @@ export default async function FusionePage() {
       </div>
       <section className="mt-12">
         <h2 className="font-display text-2xl text-primary">Le tue richieste</h2>
-        {requests.length === 0 ? (
+        {listed.length === 0 ? (
           <div className="mt-4">
             <EmptyState
               title="Nessun prelievo"
@@ -86,37 +99,42 @@ export default async function FusionePage() {
           </div>
         ) : (
           <ul className="mt-4 space-y-3">
-            {requests.map((r) => (
-              <li key={r.id} className="rounded-md px-4 py-3 text-sm ring-1 ring-primary/20">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <p className="font-ledger">
-                      {formatCredits(r.credits)} → {formatCashoutValue(r)}
-                      {r.payoutKind === "WALLET"
-                        ? ` · ${walletNetworkLabel(r.walletNetwork)} ${r.walletAddress ?? ""}`
-                        : r.iban
-                          ? ` · ${housePayoutLabel(r.iban) ?? r.iban}`
-                          : ""}
-                    </p>
-                    <p className="text-xs text-muted-foreground">{formatRomeDate(r.createdAt)}</p>
+            {listed.map((r) => {
+              const pending = requests.find((row) => row.id === r.id);
+              const status = pending?.status ?? "PAID";
+              return (
+                <li key={r.id} className="rounded-md px-4 py-3 text-sm ring-1 ring-primary/20">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="font-ledger">
+                        {formatCredits(r.credits)} → {formatCashoutValue(r)}
+                        {r.payoutKind === "WALLET"
+                          ? ` · ${walletNetworkLabel(r.walletNetwork)} ${r.walletAddress ?? ""}`
+                          : r.iban
+                            ? ` · ${housePayoutLabel(r.iban) ?? r.iban}`
+                            : ""}
+                      </p>
+                      <p className="text-xs text-muted-foreground">{formatRomeDate(new Date(r.createdAt))}</p>
+                    </div>
+                    <Status status={status} />
                   </div>
-                  <Status status={r.status} />
-                </div>
-                {r.status === "PAID" ? (
-                  <CashoutReceipt
-                    cashoutId={r.id}
-                    receiptKind={r.receiptKind}
-                    receiptRef={r.receiptRef}
-                    receiptUrl={r.receiptUrl}
-                    receiptHash={r.receiptHash}
-                    walletNetwork={r.walletNetwork}
-                  />
-                ) : null}
-                {house && r.status === "PENDING" ? (
-                  <SettleCashoutForm cashoutId={r.id} payoutKind={r.payoutKind} />
-                ) : null}
-              </li>
-            ))}
+                  {status === "PAID" ? (
+                    <CashoutReceipt
+                      cashoutId={r.id}
+                      receiptKind={r.receiptKind}
+                      receiptRef={r.receiptRef}
+                      receiptUrl={r.receiptUrl}
+                      receiptHash={r.receiptHash}
+                      walletNetwork={r.walletNetwork}
+                      proofToken={signCashoutProof(r)}
+                    />
+                  ) : null}
+                  {house && status === "PENDING" && pending ? (
+                    <SettleCashoutForm cashoutId={r.id} payoutKind={r.payoutKind} />
+                  ) : null}
+                </li>
+              );
+            })}
           </ul>
         )}
       </section>

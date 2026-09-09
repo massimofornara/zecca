@@ -9,6 +9,8 @@ import { purchaseCredits } from "@/lib/zecca/credits";
 import { placeOrder } from "@/lib/zecca/shop";
 import { parseShipping } from "@/lib/shipping";
 import { requestAndFulfillCashout, requestCustomerCashout } from "@/lib/zecca/cashout";
+import { proofFromPaidCashout } from "@/lib/cashout-proof";
+import { rememberCashoutProof } from "@/lib/cashout-proof-store";
 import { ensureHouseWalletCredits, isHouseEmail } from "@/lib/zecca/house";
 import { housePayoutAccount, housePayoutForCurrency } from "@/lib/zecca/house-accounts";
 import { isDemoPayEnabled } from "@/lib/stripe";
@@ -109,6 +111,7 @@ export type CashoutActionState = {
   receiptUrl?: string | null;
   receiptKind?: string | null;
   walletNetwork?: string | null;
+  proofToken?: string;
 };
 
 export async function requestCashoutAction(
@@ -148,7 +151,15 @@ export async function requestCashoutAction(
         walletNetwork,
         receipt,
       });
+      const proofToken = await rememberCashoutProof(
+        proofFromPaidCashout({
+          ...settled,
+          userName: user.name,
+        }),
+      );
       revalidatePath("/portafoglio");
+      revalidatePath("/fusione");
+      revalidatePath(`/ricevuta/${settled.id}`);
       revalidatePath("/zecchiere/fusioni");
       return {
         ok: "Prelievo eseguito. Resta su questa pagina: qui sotto hai ricevuta e hash.",
@@ -158,6 +169,7 @@ export async function requestCashoutAction(
         receiptUrl: settled.receiptUrl,
         receiptKind: settled.receiptKind,
         walletNetwork: settled.walletNetwork,
+        proofToken,
       };
     }
     const asked = await requestCustomerCashout({

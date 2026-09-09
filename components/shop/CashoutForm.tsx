@@ -88,6 +88,7 @@ export function CashoutForm({
           receiptUrl={state.receiptUrl ?? null}
           receiptHash={state.receiptHash ?? null}
           walletNetwork={state.walletNetwork}
+          proofToken={state.proofToken}
         />
         <button
           type="button"

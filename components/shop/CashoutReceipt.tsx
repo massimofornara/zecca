@@ -8,6 +8,7 @@ export function CashoutReceipt({
   receiptUrl,
   receiptHash,
   walletNetwork,
+  proofToken,
 }: {
   cashoutId?: string;
   receiptKind: string | null;
@@ -15,6 +16,7 @@ export function CashoutReceipt({
   receiptUrl: string | null;
   receiptHash?: string | null;
   walletNetwork?: string | null;
+  proofToken?: string | null;
 }) {
   if (!receiptRef && !receiptHash) return null;
   return (
@@ -31,7 +33,14 @@ export function CashoutReceipt({
       )}
       <div className="flex flex-wrap gap-3">
         {cashoutId ? (
-          <a href={`/ricevuta/${cashoutId}`} className="text-sm text-ember underline-offset-2 hover:underline">
+          <a
+            href={
+              proofToken
+                ? `/ricevuta/${cashoutId}?p=${encodeURIComponent(proofToken)}`
+                : `/ricevuta/${cashoutId}`
+            }
+            className="text-sm text-ember underline-offset-2 hover:underline"
+          >
             Apri la ricevuta ufficiale
           </a>
         ) : null}
