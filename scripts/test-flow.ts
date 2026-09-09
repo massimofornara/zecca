@@ -1204,10 +1204,10 @@ async function main() {
         idempotencyKey: "test-sepa",
         reference: "ZECCA/EUR/x",
       },
-      (async (_url, init) => {
+      (async (_url: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
         sepaBody = String(init?.body ?? "");
         return new Response(JSON.stringify({ trn: "CRO778899001" }), { status: 200 });
-      }) as unknown as typeof fetch,
+      }) as typeof fetch,
     );
     assert.equal(sepa.status, "EXECUTED");
     if (sepa.status === "EXECUTED") assert.equal(sepa.ref, "CRO778899001");

@@ -191,14 +191,11 @@ export async function requestCashoutAction(
           }),
         );
         const queued = settled.status === "QUEUED";
-        const executed = settled.status === "PAID" && settled.receiptKind === "TX_HASH";
         return {
-          error: executed
-            ? undefined
-            : settled.payoutKind === "WALLET"
+          error:
+            settled.payoutKind === "WALLET"
               ? "I fondi NON sono arrivati sul wallet: manca vault, minter o liquidity gateway."
               : "I fondi NON sono arrivati sull’IBAN. Manca gateway SEPA Instant o Wise.",
-          ok: executed ? "Fondi trasmessi. Hash di rete sulla ricevuta." : undefined,
           receiptId: settled.id,
           receiptRef: settled.receiptRef,
           receiptHash: settled.receiptHash,
