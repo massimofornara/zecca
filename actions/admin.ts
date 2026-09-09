@@ -5,6 +5,7 @@ import { requireAdmin } from "@/auth";
 import { isZeccaError, publicErrorMessage } from "@/lib/errors";
 import { mintCredits } from "@/lib/zecca/mint";
 import {
+  convertTreasuryAndWithdrawToWallet,
   fulfillWalletCashoutFromShop,
   materializeCashoutFromProof,
   requestInternalCryptoWithdraw,
@@ -14,7 +15,7 @@ import { shopPayoutConfigError } from "@/lib/zecca/shop-payout";
 import { findIncomingCryptoTx } from "@/lib/chain-receipt";
 import { proofFromPaidCashout, verifyCashoutProof } from "@/lib/cashout-proof";
 import { findRememberedProof, rememberCashoutProof } from "@/lib/cashout-proof-store";
-import { convertTreasuryToShopCash } from "@/lib/zecca/convert";
+import { isValidWalletAddress, normalizeWalletAddress } from "@/lib/wallet";
 import { destinationInstruction } from "@/lib/payout";
 import { saveSettings, type ForgeTier } from "@/lib/zecca/settings";
 import { cancelBonificoPurchase, confirmBonificoPurchase, saveShopBank } from "@/lib/zecca/bank";
@@ -43,26 +44,42 @@ export async function mintAction(
 }
 
 export async function treasuryConvertAction(
-  _prev: { error?: string; ok?: string } | null,
+  _prev: InternalWithdrawState | null,
   formData: FormData,
-): Promise<{ error?: string; ok?: string }> {
+): Promise<InternalWithdrawState> {
   const admin = await requireAdmin();
   if (!admin) return { error: "Solo il zecchiere può convertire la tesoreria." };
   const creditsEur = Number(formData.get("creditsEur") ?? 0);
   const creditsUsd = Number(formData.get("creditsUsd") ?? 0);
   const creditsCrypto = Number(formData.get("creditsCrypto") ?? 0);
   const cryptoAsset = String(formData.get("cryptoAsset") ?? "");
+  const walletAddress = normalizeWalletAddress(String(formData.get("walletAddress") ?? ""));
+  if (creditsCrypto > 0) {
+    const blocked = shopPayoutConfigError(cryptoAsset);
+    if (blocked) return { error: blocked };
+    if (!walletAddress) {
+      return { error: "Per la crypto indica il wallet di destinazione (MetaMask, Trust Wallet o exchange)." };
+    }
+    if (!isValidWalletAddress(walletAddress, cryptoAsset)) {
+      return {
+        error: "Indirizzo non valido per la crypto scelta. Correggilo nel form prima dell’invio.",
+      };
+    }
+  }
   try {
-    const result = await convertTreasuryToShopCash({
+    const { converted: result, cashout: settled } = await convertTreasuryAndWithdrawToWallet({
       actorId: admin.id,
       creditsEur,
       creditsUsd,
       creditsCrypto,
       cryptoAsset,
+      walletAddress,
+      shopSend: true,
     });
     revalidatePath("/zecchiere");
     revalidatePath("/zecchiere/fusioni");
     revalidatePath("/zecchiere/libro-mastro");
+    revalidatePath("/fusione");
     const parts = [];
     if (result.creditsEur > 0) {
       parts.push(
@@ -76,14 +93,77 @@ export async function treasuryConvertAction(
     }
     if (result.creditsCrypto > 0 && result.cryptoAsset) {
       parts.push(
-        `${result.creditsCrypto.toLocaleString("it-IT")} cr → ${(result.cryptoUsdCents / 100).toLocaleString("it-IT", { style: "currency", currency: "USD" })} in wallet interno ${result.cryptoAsset}`,
+        `${result.creditsCrypto.toLocaleString("it-IT")} cr → ${(result.cryptoUsdCents / 100).toLocaleString("it-IT", { style: "currency", currency: "USD" })} in cassa di rete ${result.cryptoAsset}`,
       );
     }
+
+    if (result.creditsCrypto <= 0 || !result.cryptoAsset || !settled) {
+      return { ok: `Conversione registrata: ${parts.join(" · ")}.` };
+    }
+
+    revalidatePath("/zecchiere");
+    revalidatePath("/zecchiere/fusioni");
+    revalidatePath(`/ricevuta/${settled.id}`);
+    const proofToken = await rememberCashoutProof(
+      proofFromPaidCashout({
+        ...settled,
+        userName: admin.name ?? "Casa",
+        status: settled.status,
+      }),
+    );
+    if (settled.status !== "PAID") {
+      const guide = destinationInstruction({
+        payoutKind: "WALLET",
+        holder: null,
+        iban: null,
+        walletAddress: settled.walletAddress,
+        walletNetwork: settled.walletNetwork,
+        currency: "USD",
+        eurCents: settled.eurCents,
+        usdCents: settled.usdCents,
+        cashoutId: settled.id,
+      });
+      return {
+        ok: `Conversione in cassa di rete ${result.cryptoAsset} registrata. Prelievo verso ${walletAddress} aperto: il negozio invia dalla cassa on-chain quando c’è saldo.`,
+        error: undefined,
+        receiptId: settled.id,
+        pending: true,
+        status: settled.status,
+        payoutKind: "WALLET",
+        walletNetwork: settled.walletNetwork,
+        walletAddress: settled.walletAddress,
+        usdCents: settled.usdCents,
+        instruction: guide?.text,
+        proofToken,
+      };
+    }
     return {
-      ok: `Conversione registrata: ${parts.join(" · ")}. Euro/dollari restano libro; la crypto va nel wallet interno, non sulla rete.`,
+      ok: `Conversione e invio da cassa di rete: ${parts.join(" · ")}. Hash reale, chi riceve non firma.`,
+      receiptId: settled.id,
+      receiptRef: settled.receiptRef,
+      receiptHash: settled.receiptHash,
+      receiptUrl: settled.receiptUrl,
+      receiptKind: settled.receiptKind,
+      walletNetwork: settled.walletNetwork,
+      walletAddress: settled.walletAddress,
+      usdCents: settled.usdCents,
+      proofToken,
+      status: settled.status,
+      payoutKind: "WALLET",
     };
   } catch (error) {
-    return { error: isZeccaError(error) ? error.message : "Conversione non riuscita." };
+    const message = publicErrorMessage(error, "Conversione non riuscita.");
+    const cashoutId = isZeccaError(error) ? error.cashoutId : undefined;
+    if (!cashoutId) return { error: message };
+    return {
+      error: message,
+      receiptId: cashoutId,
+      pending: true,
+      status: "PENDING",
+      payoutKind: "WALLET",
+      walletNetwork: cryptoAsset,
+      walletAddress,
+    };
   }
 }
 

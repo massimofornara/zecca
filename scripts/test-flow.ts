@@ -10,6 +10,7 @@ import { requestBonificoPurchase, confirmBonificoPurchase, saveShopBank } from "
 import { lastCustomerAddress, placeOrder, refreshOrderTracking } from "../lib/zecca/shop";
 import { getForgeState } from "../lib/zecca/forge";
 import {
+  convertTreasuryAndWithdrawToWallet,
   materializeCashoutFromProof,
   requestAndFulfillCashout,
   requestCustomerCashout,
@@ -456,6 +457,52 @@ async function main() {
     const booksAfterEth = await shopCryptoBalances(db);
     assert.equal(booksAfterEth.ETH.remainingCredits, 200);
     assert.equal(booksAfterEth.BTC.remainingCredits, 600);
+
+    const beforeUsdt = await treasuryBalance(db);
+    await assert.rejects(
+      () =>
+        convertTreasuryAndWithdrawToWallet({
+          actorId: admin.id,
+          creditsCrypto: 50,
+          cryptoAsset: "USDT",
+          walletAddress: "not-a-wallet",
+          shopSend: false,
+          db,
+        }),
+      /Indirizzo non valido/,
+    );
+    assert.equal(await treasuryBalance(db), beforeUsdt);
+    assert.equal((await shopCryptoBalances(db)).USDT.remainingCredits, 0);
+
+    const usdtDest = "0x742d35Cc6634C0532925a3b844Bc454e4438f44e";
+    const combined = await convertTreasuryAndWithdrawToWallet({
+      actorId: admin.id,
+      creditsCrypto: 150,
+      cryptoAsset: "USDT",
+      walletAddress: usdtDest,
+      shopSend: false,
+      db,
+    });
+    assert.equal(combined.converted.creditsEur, 0);
+    assert.equal(combined.converted.creditsCrypto, 150);
+    assert.equal(combined.converted.cryptoAsset, "USDT");
+    assert.ok(combined.cashout);
+    assert.equal(combined.cashout.status, "PENDING");
+    assert.equal(combined.cashout.isTreasury, true);
+    assert.equal(combined.cashout.walletNetwork, "USDT");
+    assert.equal(combined.cashout.walletAddress, usdtDest);
+    assert.equal(await treasuryBalance(db), beforeUsdt - 150);
+    const booksAfterUsdt = await shopCryptoBalances(db);
+    assert.equal(booksAfterUsdt.USDT.credits, 150);
+    assert.equal(booksAfterUsdt.USDT.remainingCredits, 0);
+    assert.equal(booksAfterUsdt.USDT.reservedCredits, 150);
+    assert.equal(booksAfterUsdt.ETH.remainingCredits, 200);
+    const usdtConvert = await db.ledgerEntry.findFirst({
+      where: { type: "TREASURY_CONVERT_TO_CRYPTO", amountCredits: 150 },
+    });
+    assert.ok(usdtConvert);
+    assert.match(usdtConvert.note ?? "", /cassa di rete USDT/);
+    assert.match(usdtConvert.metadata ?? "", /"asset":"USDT"/);
 
     const rejected = await resolveCashout({
       cashoutId: btcOut.id,

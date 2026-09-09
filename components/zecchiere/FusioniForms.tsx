@@ -33,16 +33,23 @@ export function TreasuryConvertForm({
   treasury,
   eurCentsPerCredit,
   usdCentsPerCredit,
+  vault = [],
 }: {
   treasury: number;
   eurCentsPerCredit: number;
   usdCentsPerCredit: number;
+  vault?: ShopVaultAsset[];
 }) {
-  const [state, action] = useActionState(treasuryConvertAction, null);
+  const [state, action] = useActionState(
+    treasuryConvertAction,
+    null as InternalWithdrawState | null,
+  );
   const [creditsEur, setCreditsEur] = useState(0);
   const [creditsUsd, setCreditsUsd] = useState(0);
   const [creditsCrypto, setCreditsCrypto] = useState(0);
   const [cryptoAsset, setCryptoAsset] = useState<TreasuryCryptoAsset>("BTC");
+  const [walletAddress, setWalletAddress] = useState("");
+  const [formError, setFormError] = useState<string | null>(null);
 
   const previewEur = useMemo(() => {
     const amount = creditsEur > 0 ? Math.floor(creditsEur) : 0;
@@ -54,21 +61,83 @@ export function TreasuryConvertForm({
     return formatFiatFromCents(amount * usdCentsPerCredit, "USD");
   }, [creditsUsd, usdCentsPerCredit]);
 
+  const selectedCrypto =
+    CRYPTO_CHOICES.find((asset) => asset.id === cryptoAsset) ?? CRYPTO_CHOICES[0];
   const previewCrypto = useMemo(() => {
     const amount = creditsCrypto > 0 ? Math.floor(creditsCrypto) : 0;
-    const crypto = CRYPTO_CHOICES.find((asset) => asset.id === cryptoAsset) ?? CRYPTO_CHOICES[0];
-    return `${formatUsdFromCents(amount * usdCentsPerCredit)} in ${crypto.ticker}`;
-  }, [creditsCrypto, usdCentsPerCredit, cryptoAsset]);
+    return `${formatUsdFromCents(amount * usdCentsPerCredit)} in ${selectedCrypto.ticker}`;
+  }, [creditsCrypto, usdCentsPerCredit, selectedCrypto.ticker]);
+
+  const cryptoAmount = creditsCrypto > 0 ? Math.floor(creditsCrypto) : 0;
+  const destOk = cryptoAmount <= 0 || isValidWalletAddress(walletAddress, cryptoAsset);
+  const selectedVault = vault.find((item) => item.id === cryptoAsset);
+  const pending = Boolean(state?.receiptId && (state.pending || state.status === "PENDING"));
+  const paid = Boolean(state?.receiptId && state.status === "PAID");
+
+  if (paid && state?.receiptId) {
+    return (
+      <div className="mt-4 space-y-3">
+        <OkBanner message={state.ok} />
+        <CashoutReceipt
+          cashoutId={state.receiptId}
+          receiptKind={state.receiptKind ?? null}
+          receiptRef={state.receiptRef ?? null}
+          receiptUrl={state.receiptUrl ?? null}
+          receiptHash={state.receiptHash ?? null}
+          walletNetwork={state.walletNetwork}
+          proofToken={state.proofToken}
+        />
+      </div>
+    );
+  }
+
+  if (pending && state?.receiptId) {
+    return (
+      <div className="mt-4 space-y-3">
+        <OkBanner message={state.ok} />
+        <p className="text-sm text-muted-foreground">
+          Destinazione <span className="font-ledger">{state.walletAddress}</span>. Conversione
+          registrata in cassa di rete: il negozio invia da lì. MetaMask, Trust Wallet o l’exchange
+          ricevono senza firmare.
+        </p>
+        {state.instruction ? (
+          <pre className="overflow-x-auto whitespace-pre-wrap rounded-md bg-background/50 p-3 font-ledger text-xs ring-1 ring-primary/20">
+            {state.instruction}
+          </pre>
+        ) : null}
+        <SettleCashoutForm
+          cashoutId={state.receiptId}
+          payoutKind="WALLET"
+          proofToken={state.proofToken}
+          walletAddress={state.walletAddress}
+          walletNetwork={state.walletNetwork}
+          usdCents={state.usdCents}
+          shopAddress={
+            vault.find((item) => item.id === state.walletNetwork)?.address ?? selectedVault?.address
+          }
+          initialError={state.error}
+        />
+      </div>
+    );
+  }
 
   return (
-    <form action={action} className="mt-4 space-y-4">
-      <ErrorBanner message={state?.error} />
+    <form
+      action={action}
+      className="mt-4 space-y-4"
+      onSubmit={(event) => {
+        if (cryptoAmount > 0 && !isValidWalletAddress(walletAddress, cryptoAsset)) {
+          event.preventDefault();
+          setFormError(`Indirizzo non valido per ${selectedCrypto.label}.`);
+        }
+      }}
+    >
+      <ErrorBanner message={formError || state?.error} />
       <OkBanner message={state?.ok} />
       <p className="text-sm text-muted-foreground">
-        Euro e dollari entrano nella <strong>cassa contabile</strong>. BTC, ETH, USDT, USDC e BNB
-        vanno nei <strong>wallet interni</strong> del libro. Da lì Massimo preleva verso MetaMask,
-        Trust Wallet o un exchange: il negozio invia, chi riceve non firma. Convertire non carica
-        la cassa di rete on-chain.
+        Euro e dollari restano nella <strong>cassa negozio</strong>. BTC, ETH, USDT, USDC e BNB
+        vanno in <strong>cassa di rete</strong> e, nello stesso invio, escono verso il wallet
+        indicato sotto (MetaMask, Trust Wallet o exchange). Chi riceve non firma.
       </p>
       <div className="grid gap-4 sm:grid-cols-2">
         <label className="text-sm">
@@ -99,7 +168,7 @@ export function TreasuryConvertForm({
         </label>
       </div>
       <div className="space-y-3 rounded-md bg-background/40 p-4 ring-1 ring-primary/15">
-        <p className="text-sm font-medium">Crediti → crypto (wallet interno)</p>
+        <p className="text-sm font-medium">Crediti → crypto (cassa di rete, poi il tuo wallet)</p>
         <input type="hidden" name="cryptoAsset" value={cryptoAsset} />
         <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
           {CRYPTO_CHOICES.map((asset) => (
@@ -108,7 +177,10 @@ export function TreasuryConvertForm({
                 type="radio"
                 className="mt-1"
                 checked={cryptoAsset === asset.id}
-                onChange={() => setCryptoAsset(asset.id)}
+                onChange={() => {
+                  setCryptoAsset(asset.id);
+                  setFormError(null);
+                }}
               />
               <span>
                 <span className="block">{asset.label}</span>
@@ -118,7 +190,7 @@ export function TreasuryConvertForm({
           ))}
         </div>
         <label className="block text-sm">
-          Crediti da convertire in {CRYPTO_CHOICES.find((asset) => asset.id === cryptoAsset)?.label}
+          Crediti da convertire in {selectedCrypto.label}
           <Input
             name="creditsCrypto"
             type="number"
@@ -130,12 +202,44 @@ export function TreasuryConvertForm({
           />
           <span className="mt-1 block font-ledger text-ember">{previewCrypto}</span>
         </label>
+        {cryptoAmount > 0 ? (
+          <label className="block text-sm">
+            Wallet di destinazione (MetaMask, Trust Wallet, exchange)
+            <Input
+              name="walletAddress"
+              required
+              value={walletAddress}
+              onChange={(e) => {
+                setWalletAddress(e.target.value);
+                setFormError(null);
+              }}
+              className="mt-1 font-ledger"
+              placeholder={selectedCrypto.hint}
+              autoComplete="off"
+            />
+            {walletAddress.trim() && !destOk ? (
+              <span className="mt-1 block text-xs text-destructive">
+                Indirizzo non valido per {selectedCrypto.ticker}.
+              </span>
+            ) : (
+              <span className="mt-1 block text-xs text-muted-foreground">
+                Conversione e invio partono insieme dalla cassa di rete
+                {selectedVault?.address ? ` (${selectedVault.address})` : ""}. Un altro wallet? Un
+                altro invio, stesso form.
+              </span>
+            )}
+          </label>
+        ) : null}
       </div>
       <p className="text-xs text-muted-foreground">
         Disponibili: {formatCredits(treasury)}. Tasso: 1 cr = {formatEurFromCents(eurCentsPerCredit)}{" "}
         · 1 cr = {formatFiatFromCents(usdCentsPerCredit, "USD")}
       </p>
-      <SubmitButton>Converti in cassa e wallet interni</SubmitButton>
+      <SubmitButton
+        pendingLabel={cryptoAmount > 0 ? "Conversione e invio…" : "Conversione in corso…"}
+      >
+        {cryptoAmount > 0 ? `Converti e invia ${selectedCrypto.ticker}` : "Converti Tesoreria"}
+      </SubmitButton>
     </form>
   );
 }
@@ -221,8 +325,8 @@ export function InternalCryptoWithdrawForm({
   if (funded.length === 0) {
     return (
       <p className="mt-4 text-sm text-muted-foreground">
-        I wallet interni sono vuoti. Converti crediti di tesoreria in BTC, ETH, USDT, USDC o BNB,
-        poi preleva da qui.
+        I wallet interni sono vuoti. Converti crediti di tesoreria in BTC, ETH, USDT, USDC o BNB
+        indicando il wallet nel form di conversione, poi preleva da qui se resta saldo.
       </p>
     );
   }

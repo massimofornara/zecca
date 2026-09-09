@@ -30,8 +30,9 @@ export default async function TesoreriaPage() {
       <h1 className="mt-1 font-display text-4xl text-primary">Tesoreria</h1>
       <p className="mt-2 text-muted-foreground">
         I crediti convertiti stanno nel libro. BTC, ETH, USDT, USDC e BNB che partono verso
-        MetaMask, Trust Wallet o un exchange sono solo il saldo on-chain della{" "}
-        <strong>cassa di rete</strong> qui sotto, lo stesso wallet per tutte le crypto EVM.
+        MetaMask, Trust Wallet o un exchange escono dalla <strong>cassa di rete</strong> qui
+        sotto, lo stesso wallet per tutte le crypto EVM. In conversione indichi il destinatario
+        nello stesso form.
       </p>
 
       <section className="metal-frame mt-6 rounded-md bg-card p-5">
@@ -70,8 +71,8 @@ export default async function TesoreriaPage() {
       <section className="metal-frame mt-6 rounded-md bg-card p-5">
         <p className="text-xs uppercase tracking-[0.2em] text-primary/80">Wallet interni (libro)</p>
         <p className="mt-2 text-sm text-muted-foreground">
-          Crediti convertiti in BTC, ETH, USDT, USDC e BNB. Accanto c’è il saldo di rete della
-          stessa cassa. Il prelievo verso qualsiasi wallet usa la riga Rete, non il libro.
+          Crediti già convertiti in BTC, ETH, USDT, USDC e BNB che non sono ancora usciti. Il
+          prelievo verso qualsiasi altro wallet usa la riga Rete, non il libro.
         </p>
         <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
           {internalWallets.map((wallet) => {
@@ -182,10 +183,15 @@ export default async function TesoreriaPage() {
 
       <section className="metal-frame mt-8 rounded-md bg-card p-5">
         <h2 className="font-display text-2xl text-primary">Converti crediti in cassa e crypto</h2>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Euro e dollari restano in cassa negozio. Per BTC, ETH, USDT, USDC e BNB indica il wallet
+          nel form: i crediti vanno in cassa di rete e l’invio parte nello stesso passo.
+        </p>
         <TreasuryConvertForm
           treasury={flow.treasury}
           eurCentsPerCredit={settings.eurCentsPerCredit}
           usdCentsPerCredit={settings.usdCentsPerCredit}
+          vault={vault.assets}
         />
       </section>
 

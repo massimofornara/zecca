@@ -7,11 +7,12 @@ import { prisma } from "@/lib/db";
 import { treasuryBalance } from "@/lib/zecca/ledger";
 import { getSettings } from "@/lib/zecca/settings";
 import { shopPayoutAddress } from "@/lib/zecca/shop-payout";
+import { getShopNetworkVault } from "@/lib/zecca/shop-vault";
 
 export const metadata = { title: "Fusioni" };
 
 export default async function FusioniPage() {
-  const [pending, closed, treasury, settings] = await Promise.all([
+  const [pending, closed, treasury, settings, vault] = await Promise.all([
     prisma.cashoutRequest.findMany({
       where: { status: "PENDING" },
       orderBy: { createdAt: "asc" },
@@ -25,27 +26,31 @@ export default async function FusioniPage() {
     }),
     treasuryBalance(),
     getSettings(),
+    getShopNetworkVault(),
   ]);
 
   return (
     <div>
       <h1 className="font-display text-4xl text-primary">Fusioni</h1>
       <p className="mt-2 text-muted-foreground">
-        Per la crypto i crediti si convertono in tesoreria nei wallet interni, poi il negozio
-        crea l’hash (Mempool, Etherscan, BscScan, Blockscout). Il wallet indicato riceve, senza
-        firmare. Il bonifico IBAN lo disponi tu da UniCredit o Wise, poi chiudi con il CRO.
+        I crediti di tesoreria diventano euro, dollari e crypto. La parte crypto va in cassa di
+        rete e, nello stesso form, esce verso il wallet (o i wallet, un invio alla volta) che
+        indichi. Il negozio crea l’hash su Mempool, Etherscan o BscScan: chi riceve non firma. Il
+        bonifico IBAN lo disponi tu da UniCredit o Wise, poi chiudi con il CRO.
       </p>
 
       <section className="metal-frame mt-8 rounded-md bg-card p-5">
-        <h2 className="font-display text-2xl text-primary">Conversione in cassa e wallet interni</h2>
+        <h2 className="font-display text-2xl text-primary">Conversione in cassa e invio crypto</h2>
         <p className="mt-1 text-sm text-muted-foreground">
           I crediti ancora in tesoreria ({formatCredits(treasury)}) possono diventare euro, dollari
-          o crypto nei wallet interni. Non è un bonifico e non carica Mempool o Etherscan.
+          o crypto. Per la crypto indica il wallet nel form: conversione e prelievo partono insieme
+          dalla cassa di rete.
         </p>
         <TreasuryConvertForm
           treasury={treasury}
           eurCentsPerCredit={settings.eurCentsPerCredit}
           usdCentsPerCredit={settings.usdCentsPerCredit}
+          vault={vault.assets}
         />
       </section>
 

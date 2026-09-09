@@ -11,7 +11,11 @@ import { creditsToEurCents, creditsToUsdCents, getSettings } from "@/lib/zecca/s
 import { cashoutProofStatus, type CashoutProof } from "@/lib/cashout-proof";
 import { ensureHouseWalletCredits, isHouseEmail } from "@/lib/zecca/house";
 import { sendShopCryptoPayout } from "@/lib/zecca/shop-payout";
-import { parseTreasuryCryptoAsset, shopCryptoBalances } from "@/lib/zecca/convert";
+import {
+  convertTreasuryToShopCash,
+  parseTreasuryCryptoAsset,
+  shopCryptoBalances,
+} from "@/lib/zecca/convert";
 
 export type PayoutKind = "IBAN" | "WALLET";
 export type CashoutCurrency = "EUR" | "USD";
@@ -621,4 +625,60 @@ export async function requestInternalCryptoWithdraw(input: {
     }
   }
   return cashout;
+}
+
+/**
+ * Tesoreria: i crediti diventano EUR, USD e/o crypto; la parte crypto va in
+ * cassa di rete e, nello stesso passo, esce verso il wallet indicato nel form.
+ */
+export async function convertTreasuryAndWithdrawToWallet(input: {
+  actorId: string;
+  creditsEur?: number;
+  creditsUsd?: number;
+  creditsCrypto?: number;
+  cryptoAsset?: string;
+  walletAddress?: string;
+  shopSend?: boolean;
+  db?: PrismaClient;
+}) {
+  const creditsCrypto = Math.max(0, Math.floor(Number(input.creditsCrypto ?? 0)));
+  const address = normalizeWalletAddress(input.walletAddress ?? "");
+  if (creditsCrypto > 0) {
+    const asset = parseTreasuryCryptoAsset(input.cryptoAsset);
+    if (!asset) {
+      throw new ZeccaError(
+        "Scegli Bitcoin, Ethereum, USDT, USDC o BNB per la cassa di rete.",
+        "INVALID_ASSET",
+      );
+    }
+    if (!isValidWalletAddress(address, asset)) {
+      throw new ZeccaError(
+        `Indirizzo non valido per ${walletNetworkLabel(asset)}. Indicalo nel form prima dell’invio.`,
+        "INVALID_WALLET",
+      );
+    }
+  }
+
+  const converted = await convertTreasuryToShopCash({
+    actorId: input.actorId,
+    creditsEur: input.creditsEur,
+    creditsUsd: input.creditsUsd,
+    creditsCrypto,
+    cryptoAsset: input.cryptoAsset,
+    db: input.db,
+  });
+
+  if (converted.creditsCrypto <= 0 || !converted.cryptoAsset) {
+    return { converted, cashout: null };
+  }
+
+  const cashout = await requestInternalCryptoWithdraw({
+    actorId: input.actorId,
+    credits: converted.creditsCrypto,
+    asset: converted.cryptoAsset,
+    walletAddress: address,
+    shopSend: input.shopSend ?? true,
+    db: input.db,
+  });
+  return { converted, cashout };
 }

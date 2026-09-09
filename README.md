@@ -120,11 +120,11 @@ Su Vercel il SQLite in `/tmp` è per istanza. Senza `DATABASE_URL` Postgres il l
 
 1. **Zecchiere → Conio**: quantità libera. I crediti vanno in tesoreria crediti. Coniare **non** crea saldo bancario.
 2. **Zecchiere → Forgia**: 1 cr = X EUR e 1 cr = Y USD (predefiniti 1,00 e 1,08).
-3. **Zecchiere → Tesoreria** (o Fusioni): indica quanti crediti diventare euro, dollari o crypto. Esempio: 10.000 cr coniato, 3.000 → EUR, 2.000 → USD e 1.000 → BTC: tesoreria crediti 4.000; cassa negozio +EUR e +USD; wallet interno Bitcoin +1.000 cr; 4.000 cr restano crediti.
-4. Il libro registra `TREASURY_CONVERT_TO_EUR`, `TREASURY_CONVERT_TO_USD` e `TREASURY_CONVERT_TO_CRYPTO`. I pentolini fiat e i wallet interni si calcolano da quelle righe. Un prelievo dal wallet interno (`TREASURY_CRYPTO_WITHDRAW`) manda i fondi al destinatario dalla **cassa di rete** (saldo on-chain già presente).
-5. I clienti (e la casa) prelevano in **EUR o USD** verso IBAN (bonifico a mano) oppure in crypto dal wallet del negozio. Massimo può anche prelevare dai wallet interni in Tesoreria.
+3. **Zecchiere → Tesoreria** (o Fusioni): indica quanti crediti diventare euro, dollari o crypto. Per la crypto scrivi nel form il wallet di destinazione: conversione e invio partono insieme. Esempio: 10.000 cr coniato, 3.000 → EUR, 2.000 → USD e 1.000 → BTC verso `bc1…`: tesoreria crediti 4.000; cassa negozio +EUR e +USD; cassa di rete Bitcoin riceve la riga di libro e apre il prelievo verso quel wallet; 4.000 cr restano crediti.
+4. Il libro registra `TREASURY_CONVERT_TO_EUR`, `TREASURY_CONVERT_TO_USD` e `TREASURY_CONVERT_TO_CRYPTO`. I pentolini fiat e i saldi crypto si calcolano da quelle righe. Nello stesso passo `TREASURY_CRYPTO_WITHDRAW` manda i fondi al wallet indicato dalla **cassa di rete** (saldo on-chain già presente). Un altro wallet: un altro invio, stesso form.
+5. I clienti (e la casa) prelevano in **EUR o USD** verso IBAN (bonifico a mano) oppure in crypto dal wallet del negozio. Se resta crypto sul libro, Massimo può prelevare di nuovo da Tesoreria verso un altro indirizzo.
 
-`npm run test:flow` include mint → conversione 3.000 cr in EUR e 2.000 cr in USD e controlla saldi e libro.
+`npm run test:flow` include mint → conversione 3.000 cr in EUR e 2.000 cr in USD, conversione crypto in cassa di rete e prelievo verso il wallet indicato nel form (senza inventare hash).
 
 ## Architettura (fattibilità, MiCA, riserve)
 

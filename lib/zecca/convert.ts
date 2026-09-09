@@ -212,7 +212,7 @@ export async function convertTreasuryToShopCash(input: {
 
   if (creditsCrypto > 0 && !cryptoAssetId) {
     throw new ZeccaError(
-      "Scegli Bitcoin, Ethereum, USDT, USDC o BNB per il wallet interno.",
+      "Scegli Bitcoin, Ethereum, USDT, USDC o BNB per la cassa di rete.",
       "INVALID_ASSET",
     );
   }
@@ -293,8 +293,13 @@ export async function convertTreasuryToShopCash(input: {
             eurCents: 0,
             usdCents: cryptoUsdCents,
             fiatCurrency: "USD",
-            note: `Conversione tesoreria: ${creditsCrypto} cr → ${(cryptoUsdCents / 100).toFixed(2)} USD in wallet interno ${ticker}`,
-            metadata: { asset: cryptoAssetId, credits: creditsCrypto, usdCents: cryptoUsdCents },
+            note: `Conversione tesoreria: ${creditsCrypto} cr → ${(cryptoUsdCents / 100).toFixed(2)} USD in cassa di rete ${ticker} (${shopPayoutAddress(cryptoAssetId) ?? "wallet negozio"})`,
+            metadata: {
+              asset: cryptoAssetId,
+              credits: creditsCrypto,
+              usdCents: cryptoUsdCents,
+              shopAddress: shopPayoutAddress(cryptoAssetId),
+            },
           },
           tx,
         ),
