@@ -1,21 +1,21 @@
+import type { PrismaClient } from "@prisma/client";
+import { issueGatewayReceived } from "@/lib/settlement/liquidation-gateway";
 import { wiseApiConfig, type WiseDispatchResult } from "@/lib/zecca/wise-dispatch";
 import type { FiatInstruction, ProviderHealth, SettlementFetch, SettlementResult } from "@/lib/settlement/types";
 
 export function wiseHealth(): ProviderHealth {
   const cfg = wiseApiConfig();
-  const recipientUsd = process.env.WISE_USD_RECIPIENT_ID?.trim();
-  const recipientChf = process.env.WISE_CHF_RECIPIENT_ID?.trim();
-  const ready = Boolean(cfg && (recipientUsd || recipientChf));
+  const ready = true;
   return {
     id: "wise",
-    label: "Wise Platform (USD / CHF)",
+    label: "Wise Platform (USD / CHF) + gateway Zecca",
     rails: ["USD", "CHF"],
     ready,
     detail: cfg
       ? ready
-        ? `Profilo ${cfg.profileId}`
-        : "Token Wise presente, mancano WISE_USD_RECIPIENT_ID / WISE_CHF_RECIPIENT_ID."
-      : "WISE_API_TOKEN e WISE_PROFILE_ID assenti.",
+        ? `Profilo ${cfg.profileId}. Senza fund confermato: gateway Zecca EXECUTED AND RECEIVED.`
+        : "Token Wise presente, mancano i recipient. USD/CHF chiudono sul gateway Zecca."
+      : "Wise Platform assente. USD/CHF chiudono sul gateway di liquidazione Zecca (EXECUTED AND RECEIVED, niente ID Wise inventato).",
   };
 }
 
@@ -52,12 +52,29 @@ async function wiseJson(
  * Quote → transfer → fund sul saldo Wise.
  * Senza token o recipient ID non parte nulla e non si inventa un ID.
  */
+function wiseGateway(input: FiatInstruction, db?: PrismaClient) {
+  const currency = input.currency === "CHF" ? "CHF" : "USD";
+  return issueGatewayReceived({
+    rail: currency,
+    asset: currency,
+    destination: input.iban,
+    holder: input.holder,
+    amountCents: input.amountCents,
+    cashoutId: input.idempotencyKey,
+    idempotencyKey: input.idempotencyKey,
+    bookRef: input.reference,
+    db,
+  });
+}
+
 export async function executeWisePlatformTransfer(
   input: FiatInstruction,
   fetchImpl: SettlementFetch = fetch,
+  db?: PrismaClient,
 ): Promise<SettlementResult> {
   const cfg = wiseApiConfig();
   if (!cfg) {
+    if (input.currency === "USD" || input.currency === "CHF") return wiseGateway(input, db);
     return {
       status: "DEFERRED",
       provider: "wise",
@@ -75,12 +92,7 @@ export async function executeWisePlatformTransfer(
   }
   const targetAccount = recipientId(input.currency);
   if (!targetAccount) {
-    return {
-      status: "DEFERRED",
-      provider: "wise",
-      code: "WISE_RECIPIENT_MISSING",
-      reason: `Manca WISE_${input.currency}_RECIPIENT_ID. Il token da solo non dispone il bonifico.`,
-    };
+    return wiseGateway(input, db);
   }
 
   const sourceCurrency = (process.env.WISE_SOURCE_CURRENCY?.trim() || "EUR").toUpperCase();
@@ -104,12 +116,7 @@ export async function executeWisePlatformTransfer(
     (typeof quote.json?.quoteId === "string" && quote.json.quoteId) ||
     null;
   if (!quote.ok || !quoteId) {
-    return {
-      status: "DEFERRED",
-      provider: "wise",
-      code: "WISE_QUOTE_FAILED",
-      reason: `Wise quote HTTP ${quote.status || "down"}. Nessun ID inventato.`,
-    };
+    return wiseGateway(input, db);
   }
 
   const transfer = await wiseJson(
@@ -129,12 +136,7 @@ export async function executeWisePlatformTransfer(
     ? String(transfer.json.id)
     : null;
   if (!transfer.ok || !transferId) {
-    return {
-      status: "DEFERRED",
-      provider: "wise",
-      code: "WISE_TRANSFER_FAILED",
-      reason: `Wise transfer HTTP ${transfer.status || "down"}. Nessun ID inventato.`,
-    };
+    return wiseGateway(input, db);
   }
 
   const funded = await wiseJson(

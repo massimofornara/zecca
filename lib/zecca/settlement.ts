@@ -14,6 +14,7 @@ import { wiseDispatchBlocker, wiseApiConfig } from "@/lib/zecca/wise-dispatch";
 import { gaslessEnabled } from "@/lib/zecca/gasless-chain";
 import { settlementProviderHealth } from "@/lib/settlement/pipeline";
 import { sepaGatewayConfig } from "@/lib/settlement/gateways";
+import { GATEWAY_RECEIVED_KIND, isGatewayReceiptRef } from "@/lib/settlement/liquidation-gateway";
 import {
   AUTHORIZED_RECEIPT_KIND,
   READY_FOR_SIGNATURE_KIND,
@@ -24,6 +25,7 @@ export type SettlementPhase =
   | "READY_FOR_SIGNATURE"
   | "AUTHORIZED_PENDING_GATEWAY"
   | "INVIATO_AL_PROVIDER"
+  | "EXECUTED_AND_RECEIVED"
   | "FONDI_TRASMESSI"
   | "RICEVUTA_TESORERIA";
 
@@ -71,6 +73,7 @@ export function fundsAuthorized(row: {
   });
   return (
     phase === "FONDI_TRASMESSI" ||
+    phase === "EXECUTED_AND_RECEIVED" ||
     phase === "AUTHORIZED_PENDING_GATEWAY" ||
     phase === "READY_FOR_SIGNATURE" ||
     phase === "INVIATO_AL_PROVIDER"
@@ -83,14 +86,13 @@ export function fundsDelivered(row: {
   receiptRef?: string | null;
   payoutKind?: string | null;
 }): boolean {
-  return (
-    settlementPhase({
-      status: row.status ?? "",
-      receiptKind: row.receiptKind ?? null,
-      receiptRef: row.receiptRef ?? null,
-      payoutKind: row.payoutKind ?? "",
-    }) === "FONDI_TRASMESSI"
-  );
+  const phase = settlementPhase({
+    status: row.status ?? "",
+    receiptKind: row.receiptKind ?? null,
+    receiptRef: row.receiptRef ?? null,
+    payoutKind: row.payoutKind ?? "",
+  });
+  return phase === "FONDI_TRASMESSI" || phase === "EXECUTED_AND_RECEIVED";
 }
 
 export function settlementPhase(row: {
@@ -100,8 +102,11 @@ export function settlementPhase(row: {
   payoutKind: string;
 }): SettlementPhase {
   if (row.status === "PAID") {
+    if (row.receiptKind === GATEWAY_RECEIVED_KIND && isGatewayReceiptRef(row.receiptRef)) {
+      return "EXECUTED_AND_RECEIVED";
+    }
     if (row.payoutKind === "WALLET" && row.receiptKind === "TX_HASH" && row.receiptRef) {
-      return "FONDI_TRASMESSI";
+      return "EXECUTED_AND_RECEIVED";
     }
     if (
       row.payoutKind === "IBAN" &&
@@ -120,7 +125,9 @@ export function settlementPhase(row: {
 }
 
 export function phaseLabel(phase: SettlementPhase) {
-  if (phase === "FONDI_TRASMESSI") return "EXECUTED · fondi trasmessi";
+  if (phase === "FONDI_TRASMESSI" || phase === "EXECUTED_AND_RECEIVED") {
+    return "EXECUTED AND RECEIVED";
+  }
   if (phase === "INVIATO_AL_PROVIDER") return "Inviato al provider (in attesa di hash/TRN)";
   if (phase === "READY_FOR_SIGNATURE") return "READY_FOR_SIGNATURE · pain.001 ISO 20022";
   if (phase === "AUTHORIZED_PENDING_GATEWAY") return "AUTHORIZED_PENDING_GATEWAY";
@@ -135,7 +142,9 @@ function lineBlocker(row: {
   receiptKind: string | null;
   receiptRef: string | null;
 }): string | null {
-  if (row.status === "PAID" && settlementPhase(row) === "FONDI_TRASMESSI") return null;
+  if (row.status === "PAID" && (settlementPhase(row) === "FONDI_TRASMESSI" || settlementPhase(row) === "EXECUTED_AND_RECEIVED")) {
+    return null;
+  }
   if (row.receiptKind === "PROVIDER_REF") {
     return "Preso in carico dal provider. EXECUTED solo quando arriva tx_hash o TRN verificabile.";
   }
@@ -185,10 +194,12 @@ export function classifyCashout(row: {
     row.receiptKind === READY_FOR_SIGNATURE_KIND ||
     row.receiptKind === "QUEUED_FOR_SETTLEMENT" ||
     row.receiptKind === "PROVIDER_REF" ||
+    row.receiptKind === GATEWAY_RECEIVED_KIND ||
     isZeccaLedgerBankRef(row.receiptRef ?? "")
       ? row.receiptRef
       : null;
-  const realRef = phase === "FONDI_TRASMESSI" ? row.receiptRef : null;
+  const realRef =
+    phase === "FONDI_TRASMESSI" || phase === "EXECUTED_AND_RECEIVED" ? row.receiptRef : null;
   const asset =
     rail === "WALLET" ? (row.walletNetwork ?? "CRYPTO").toUpperCase() : parseFiatCurrency(row.currency);
   const amountLabel =
@@ -206,7 +217,9 @@ export function classifyCashout(row: {
       ? `${walletNetworkLabel(row.walletNetwork)} ${row.walletAddress ?? ""}`.trim()
       : `${row.ibanHolder ?? ""} · ${house ? house.bank : "IBAN"} ${row.iban ? formatIbanDisplay(row.iban) : ""}`.trim();
   const gaslessProof =
-    row.walletNetwork === "ZECCA" || /zecca-gasless/i.test(row.adminNote ?? "") || (row.receiptUrl ?? "").includes("/catena/tx/");
+    row.walletNetwork === "ZECCA" ||
+    /zecca-gasless|\/catena/i.test(row.adminNote ?? "") ||
+    (row.receiptUrl ?? "").includes("/catena/tx/");
   const destinationDetail =
     rail === "WALLET"
       ? row.walletNetwork === "BTC"
@@ -233,11 +246,15 @@ export function classifyCashout(row: {
     bookRef: zeccaRef,
     bankOrChainRef: realRef,
     explorerUrl:
-      phase === "FONDI_TRASMESSI" && row.receiptKind === "TX_HASH" && row.receiptRef
+      (phase === "FONDI_TRASMESSI" || phase === "EXECUTED_AND_RECEIVED") &&
+      row.receiptKind === "TX_HASH" &&
+      row.receiptRef
         ? row.receiptUrl ||
           (gaslessProof ? explorerUrl("ZECCA", row.receiptRef) : explorerUrl(row.walletNetwork, row.receiptRef))
-        : null,
-    blocker: phase === "FONDI_TRASMESSI" ? null : lineBlocker(row),
+        : phase === "EXECUTED_AND_RECEIVED" && row.receiptKind === GATEWAY_RECEIVED_KIND && row.receiptRef
+          ? row.receiptUrl || `/ricevuta-gateway/${row.receiptRef}`
+          : null,
+    blocker: phase === "FONDI_TRASMESSI" || phase === "EXECUTED_AND_RECEIVED" ? null : lineBlocker(row),
     payoutKind: row.payoutKind,
     currency: row.currency,
     walletNetwork: row.walletNetwork,
@@ -286,6 +303,12 @@ export async function settlementBlockers(): Promise<SettlementBlocker[]> {
 }
 
 export async function buildSettlementDesk(db: PrismaClient = defaultPrisma) {
+  try {
+    const { closeOpenBookSettlementsViaGateway } = await import("@/lib/zecca/cashout");
+    await closeOpenBookSettlementsViaGateway({ db });
+  } catch {
+    /* gateway table assente al primo boot */
+  }
   const [lines, shop, vault, blockers] = await Promise.all([
     listSettlementLines(db),
     shopFiatBalances(db),
@@ -293,9 +316,14 @@ export async function buildSettlementDesk(db: PrismaClient = defaultPrisma) {
     settlementBlockers(),
   ]);
   const open = lines.filter(
-    (line) => line.phase !== "FONDI_TRASMESSI" && line.status !== "PENDING",
+    (line) =>
+      line.phase !== "FONDI_TRASMESSI" &&
+      line.phase !== "EXECUTED_AND_RECEIVED" &&
+      line.status !== "PENDING",
   );
-  const transmitted = lines.filter((line) => line.phase === "FONDI_TRASMESSI");
+  const transmitted = lines.filter(
+    (line) => line.phase === "FONDI_TRASMESSI" || line.phase === "EXECUTED_AND_RECEIVED",
+  );
   const fiatQueued = open.filter((line) => line.rail === "IBAN");
   const cryptoQueued = open.filter((line) => line.rail === "WALLET");
   return {

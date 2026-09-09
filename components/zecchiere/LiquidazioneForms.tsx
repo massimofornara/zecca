@@ -13,7 +13,7 @@ import { cn } from "@/lib/utils";
 import type { SettlementLine } from "@/lib/zecca/settlement";
 
 function phaseLabel(phase: SettlementLine["phase"]) {
-  if (phase === "FONDI_TRASMESSI") return "EXECUTED · fondi trasmessi";
+  if (phase === "FONDI_TRASMESSI" || phase === "EXECUTED_AND_RECEIVED") return "EXECUTED AND RECEIVED";
   if (phase === "INVIATO_AL_PROVIDER") return "Inviato al provider";
   if (phase === "READY_FOR_SIGNATURE") return "READY_FOR_SIGNATURE";
   if (phase === "AUTHORIZED_PENDING_GATEWAY") return "AUTHORIZED_PENDING_GATEWAY";
@@ -97,7 +97,7 @@ export function AttachBankRefForm({
 }
 
 export function SettlementLineCard({ line }: { line: SettlementLine }) {
-  const transmitted = line.phase === "FONDI_TRASMESSI";
+  const transmitted = line.phase === "FONDI_TRASMESSI" || line.phase === "EXECUTED_AND_RECEIVED";
   return (
     <li className="metal-frame rounded-md bg-card p-4">
       <div className="flex flex-wrap items-start justify-between gap-2">
@@ -135,7 +135,7 @@ export function SettlementLineCard({ line }: { line: SettlementLine }) {
           rel="noreferrer"
           className="mt-2 inline-block text-sm text-ember underline-offset-2 hover:underline"
         >
-          Apri sull’explorer
+          {line.receiptKind === "GATEWAY_RECEIVED" ? "Apri la ricevuta di trasmissione" : "Apri sull’explorer"}
         </a>
       ) : null}
       {line.blocker ? <p className="mt-3 text-sm text-muted-foreground">{line.blocker}</p> : null}

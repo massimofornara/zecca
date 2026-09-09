@@ -89,7 +89,7 @@ export default async function RicevutaPage({
       </div>
       <p className="mt-3 max-w-2xl text-muted-foreground">
         {queued
-          ? "Istruzione firmata a libro (HMAC). Fiat in READY_FOR_SIGNATURE, crypto nativa in AUTHORIZED_PENDING_GATEWAY. Non è un CRO e non è un tx_hash."
+          ? "Istruzione firmata a libro (HMAC). BTC/SEPA/USD/CHF chiudono sul gateway come EXECUTED AND RECEIVED. Non è un CRO UniCredit e non è un tx_hash Mempool."
           : pending
             ? proof.payoutKind === "WALLET"
               ? "I crediti sono in deposito. Alla conferma il negozio accetta il payout verso il wallet indicato."

@@ -1,4 +1,5 @@
 import { publicOrigin } from "@/lib/public-url";
+import { isGatewayReceiptRef } from "@/lib/settlement/liquidation-gateway";
 import { walletNetworkLabel } from "@/lib/wallet";
 
 export function catenaTxUrl(hash: string) {
@@ -14,12 +15,35 @@ export function normalizeReceipt(raw: string): string {
   return raw.replace(/\s+/g, "").trim();
 }
 
+const PRODUCTION_GASLESS_HASHES = new Set([
+  "0xca584a225287196c77f4368dc6bc9e8c92190dfeb49e476d9e470a4f2db21d21",
+  "0xd49eafa08b2a878508d1e8f0ebe997301719ee8170a000c3d07bba9ab82c664c",
+  "0xd5d482dddc423e0af6de627463145d84f9851978a5532da5387d84ef2e501cb4",
+  "0x35216ad2114fd8a0143ad00aff443af0b3d926d7af049fecb573096034e451bd",
+]);
+
+export function isZeccaGaslessExplorerHash(
+  hash: string | null | undefined,
+  network?: string | null,
+  receiptUrl?: string | null,
+) {
+  if (network === "ZECCA") return true;
+  if ((receiptUrl ?? "").includes("/catena/tx")) return true;
+  const ref = normalizeReceipt(hash ?? "").toLowerCase();
+  return PRODUCTION_GASLESS_HASHES.has(ref);
+}
+
 export function explorerLinks(
   network: string | null | undefined,
   hash: string,
+  receiptUrl?: string | null,
 ): { label: string; url: string }[] {
   const ref = normalizeReceipt(hash);
   if (!ref) return [];
+  if (isZeccaGaslessExplorerHash(ref, network, receiptUrl)) {
+    const path = ref.startsWith("0x") ? ref : `0x${ref}`;
+    return [{ label: "Catena Zecca", url: catenaTxUrl(path) }];
+  }
   if (network === "BTC") {
     return [
       { label: "Mempool", url: `https://mempool.space/tx/${ref}` },
@@ -106,10 +130,10 @@ export function parsePayoutReceipt(input: {
     };
   }
   const ref = input.receipt.trim();
-  if (isZeccaLedgerBankRef(ref)) {
+  if (isZeccaLedgerBankRef(ref) || isGatewayReceiptRef(ref)) {
     return {
       error:
-        "ZECCA/… è il numero del libro mastro, non un CRO UniCredit o Wise. Incolla il riferimento del bonifico già disposto dalla banca.",
+        "ZECCA/… o GW-/SEPA-… è la ricevuta del libro o del gateway, non un CRO UniCredit o Wise. Incolla il riferimento del bonifico già disposto dalla banca.",
     };
   }
   if (!isValidBankRef(ref)) {
@@ -123,6 +147,7 @@ export function parsePayoutReceipt(input: {
 
 export function receiptLabel(kind: string | null | undefined, network?: string | null): string {
   if (kind === "TX_HASH") return `Hash ${walletNetworkLabel(network ?? "OTHER")}`;
+  if (kind === "GATEWAY_RECEIVED") return "Ricevuta di trasmissione gateway";
   if (kind === "PROVIDER_REF") return "Riferimento provider";
   if (kind === "READY_FOR_SIGNATURE") return "pain.001 READY_FOR_SIGNATURE";
   if (kind === "AUTHORIZED_PENDING_GATEWAY" || kind === "QUEUED_FOR_SETTLEMENT") {

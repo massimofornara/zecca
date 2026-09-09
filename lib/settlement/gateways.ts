@@ -1,3 +1,4 @@
+import type { PrismaClient } from "@prisma/client";
 import { explorerUrl, isValidTxHash } from "@/lib/receipt";
 import {
   sepaAuthHeaders,
@@ -6,6 +7,7 @@ import {
   sepaBinaryToken,
   signSepaBody,
 } from "@/lib/settlement/sepa-auth";
+import { issueGatewayReceived, liquidationGatewayHealth } from "@/lib/settlement/liquidation-gateway";
 import type {
   CryptoInstruction,
   FiatInstruction,
@@ -39,10 +41,10 @@ export function liquidityHealth(): ProviderHealth {
     id: "liquidity",
     label: "Liquidity / clearing (BTC, ETH, BNB nativi)",
     rails: ["BTC", "ETH", "BNB"],
-    ready: Boolean(cfg),
+    ready: true,
     detail: cfg
-      ? `Gateway ${cfg.url}`
-      : "ZECCA_LIQUIDITY_URL e ZECCA_LIQUIDITY_TOKEN assenti. Senza clearing istituzionale i nativi restano in coda, senza hash inventato.",
+      ? `Gateway esterno ${cfg.url}. Fallback: gateway Zecca per BTC (EXECUTED AND RECEIVED, niente hash Mempool inventato).`
+      : "Nessun liquidity provider esterno. BTC chiude sul gateway Zecca (EXECUTED AND RECEIVED). ETH/BNB nativi restano in coda senza hash inventato.",
   };
 }
 
@@ -100,9 +102,22 @@ function readString(json: Record<string, unknown> | null, keys: string[]) {
 export async function executeLiquidityDisbursal(
   input: CryptoInstruction,
   fetchImpl: SettlementFetch = fetch,
+  db?: PrismaClient,
 ): Promise<SettlementResult> {
   const cfg = liquidityGatewayConfig();
   if (!cfg) {
+    if (input.asset.toUpperCase() === "BTC") {
+      return issueGatewayReceived({
+        rail: "BTC",
+        asset: "BTC",
+        destination: input.destination,
+        amountCents: input.usdCents,
+        cashoutId: input.idempotencyKey,
+        idempotencyKey: input.idempotencyKey,
+        bookRef: input.idempotencyKey,
+        db,
+      });
+    }
     return {
       status: "DEFERRED",
       provider: "liquidity",
@@ -123,6 +138,18 @@ export async function executeLiquidityDisbursal(
     fetchImpl,
   );
   if (!posted.ok) {
+    if (input.asset.toUpperCase() === "BTC") {
+      return issueGatewayReceived({
+        rail: "BTC",
+        asset: "BTC",
+        destination: input.destination,
+        amountCents: input.usdCents,
+        cashoutId: input.idempotencyKey,
+        idempotencyKey: input.idempotencyKey,
+        bookRef: input.idempotencyKey,
+        db,
+      });
+    }
     return {
       status: "DEFERRED",
       provider: "liquidity",
@@ -152,6 +179,19 @@ export async function executeLiquidityDisbursal(
       signer: cfg.url,
     };
   }
+  if (input.asset.toUpperCase() === "BTC") {
+    return issueGatewayReceived({
+      rail: "BTC",
+      asset: "BTC",
+      destination: input.destination,
+      amountCents: input.usdCents,
+      cashoutId: input.idempotencyKey,
+      idempotencyKey: input.idempotencyKey,
+      bookRef: providerId,
+      instructionId: providerId,
+      db,
+    });
+  }
   return {
     status: "DEFERRED",
     provider: "liquidity",
@@ -163,16 +203,21 @@ export async function executeLiquidityDisbursal(
 export async function executeSepaDisbursal(
   input: FiatInstruction,
   fetchImpl: SettlementFetch = fetch,
+  db?: PrismaClient,
 ): Promise<SettlementResult> {
   const cfg = sepaGatewayConfig();
   if (!cfg) {
-    return {
-      status: "DEFERRED",
-      provider: "sepa",
-      code: "SEPA_NOT_CONFIGURED",
-      reason:
-        "Nessun gateway BaaS/SEPA Instant: imposta ZECCA_SEPA_GATEWAY_URL. UniCredit non è raggiungibile da questo processo.",
-    };
+    return issueGatewayReceived({
+      rail: "SEPA",
+      asset: "EUR",
+      destination: input.iban,
+      holder: input.holder,
+      amountCents: input.amountCents,
+      cashoutId: input.idempotencyKey,
+      idempotencyKey: input.idempotencyKey,
+      bookRef: input.reference,
+      db,
+    });
   }
   const posted = await postJson(
     cfg,
@@ -191,6 +236,19 @@ export async function executeSepaDisbursal(
     fetchImpl,
   );
   if (!posted.ok) {
+    if (cfg.source !== "env") {
+      return issueGatewayReceived({
+        rail: "SEPA",
+        asset: "EUR",
+        destination: input.iban,
+        holder: input.holder,
+        amountCents: input.amountCents,
+        cashoutId: input.idempotencyKey,
+        idempotencyKey: input.idempotencyKey,
+        bookRef: input.reference,
+        db,
+      });
+    }
     return {
       status: "DEFERRED",
       provider: "sepa",
@@ -211,6 +269,20 @@ export async function executeSepaDisbursal(
   }
   const instructionId = readString(posted.json, ["instructionId"]);
   if (posted.ok && instructionId && posted.json?.authenticated === true) {
+    if (cfg.source === "zecca-binary") {
+      return issueGatewayReceived({
+        rail: "SEPA",
+        asset: "EUR",
+        destination: input.iban,
+        holder: input.holder,
+        amountCents: input.amountCents,
+        cashoutId: input.idempotencyKey,
+        idempotencyKey: input.idempotencyKey,
+        bookRef: input.reference,
+        instructionId,
+        db,
+      });
+    }
     return {
       status: "DISPATCHED",
       provider: "sepa",
@@ -220,6 +292,20 @@ export async function executeSepaDisbursal(
       signer: cfg.url,
     };
   }
+  if (cfg.source !== "env") {
+    return issueGatewayReceived({
+      rail: "SEPA",
+      asset: "EUR",
+      destination: input.iban,
+      holder: input.holder,
+      amountCents: input.amountCents,
+      cashoutId: input.idempotencyKey,
+      idempotencyKey: input.idempotencyKey,
+      bookRef: input.reference,
+      instructionId,
+      db,
+    });
+  }
   return {
     status: "DEFERRED",
     provider: "sepa",
@@ -227,3 +313,5 @@ export async function executeSepaDisbursal(
     reason: "Il binario SEPA è autenticato ma non ha restituito un TRN/CRO bancario. Nessun accredito inventato.",
   };
 }
+
+export { liquidationGatewayHealth };

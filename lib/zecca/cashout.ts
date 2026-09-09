@@ -17,6 +17,12 @@ import {
 } from "@/lib/zecca/shop-payout";
 import { executeCryptoSettlement, executeFiatSettlement } from "@/lib/settlement/pipeline";
 import {
+  GATEWAY_RECEIVED_KIND,
+  gatewayReceiptUrl,
+  issueGatewayReceived,
+  type GatewayRail,
+} from "@/lib/settlement/liquidation-gateway";
+import {
   AUTHORIZED_RECEIPT_KIND,
   READY_FOR_SIGNATURE_KIND,
   authorizeCashoutInstruction,
@@ -37,7 +43,7 @@ export type PayoutKind = "IBAN" | "WALLET";
 export type CashoutCurrency = FiatCurrency;
 export const QUEUED_RECEIPT_KIND = AUTHORIZED_RECEIPT_KIND;
 export const PROVIDER_RECEIPT_KIND = "PROVIDER_REF";
-export { AUTHORIZED_RECEIPT_KIND, READY_FOR_SIGNATURE_KIND, isAuthorizedReceiptKind };
+export { AUTHORIZED_RECEIPT_KIND, READY_FOR_SIGNATURE_KIND, isAuthorizedReceiptKind, GATEWAY_RECEIVED_KIND };
 
 export function isSettleableCashoutStatus(status: string | null | undefined) {
   return status === "PENDING" || status === "QUEUED";
@@ -232,6 +238,86 @@ async function markProviderDispatch(
       adminNote: `Provider ${dispatch.provider} · ${dispatch.ref}`,
     },
   });
+}
+
+async function markGatewayReceived(
+  db: PrismaClient,
+  cashout: {
+    id: string;
+    userId: string | null;
+    credits: number;
+    currency: string;
+    eurCents: number;
+    usdCents: number;
+    chfCents: number;
+    payoutKind: string;
+    iban: string | null;
+    ibanHolder: string | null;
+    walletAddress: string | null;
+    walletNetwork: string | null;
+    isTreasury: boolean;
+    status: string;
+    receiptKind: string | null;
+    receiptRef: string | null;
+    receiptHash: string | null;
+  },
+  issued: { ref: string; url: string | null; provider: string },
+) {
+  const queued =
+    cashout.status === "QUEUED"
+      ? cashout
+      : await acceptQueuedSettlement(
+          db,
+          cashout,
+          `Gateway ${issued.provider}: EXECUTED AND RECEIVED · ${issued.ref}`,
+        );
+  const latest = await db.cashoutRequest.findUniqueOrThrow({ where: { id: queued.id } });
+  if (latest.status === "PAID") return latest;
+  const resolvedAt = new Date();
+  const currency = parseFiatCurrency(latest.currency);
+  const destination =
+    latest.payoutKind === "WALLET"
+      ? `${latest.walletNetwork ?? ""} ${latest.walletAddress ?? ""}`.trim()
+      : `${latest.ibanHolder ?? ""} ${latest.iban ?? ""}`.trim();
+  const documentHash = officialReceiptHash({
+    cashoutId: latest.id,
+    credits: latest.credits,
+    currency,
+    eurCents: latest.eurCents,
+    usdCents: latest.usdCents,
+    chfCents: latest.chfCents,
+    payoutKind: latest.payoutKind,
+    destination,
+    receiptRef: issued.ref,
+    resolvedAt: resolvedAt.toISOString(),
+  });
+  return db.cashoutRequest.update({
+    where: { id: latest.id },
+    data: {
+      status: "PAID",
+      resolvedAt,
+      receiptKind: GATEWAY_RECEIVED_KIND,
+      receiptRef: issued.ref,
+      receiptUrl: issued.url ?? gatewayReceiptUrl(issued.ref),
+      receiptHash: documentHash,
+      adminNote: `EXECUTED AND RECEIVED via ${issued.provider} · ${issued.ref}. Non è un CRO, non è un ID Wise, non è un tx_hash.`,
+    },
+  });
+}
+
+function gatewayRailForCashout(cashout: {
+  payoutKind: string;
+  walletNetwork: string | null;
+  currency: string;
+}): GatewayRail | null {
+  if (cashout.payoutKind === "WALLET" && (cashout.walletNetwork ?? "").toUpperCase() === "BTC") {
+    return "BTC";
+  }
+  if (cashout.payoutKind !== "IBAN") return null;
+  const currency = parseFiatCurrency(cashout.currency);
+  if (currency === "EUR") return "SEPA";
+  if (currency === "USD" || currency === "CHF") return currency;
+  return null;
 }
 
 export async function requestCustomerCashout(input: {
@@ -723,13 +809,24 @@ export async function fulfillWalletCashoutFromShop(input: {
   }
 
   try {
-    const result = await executeCryptoSettlement({
-      rail: "WALLET",
-      asset: cashout.walletNetwork,
-      destination: cashout.walletAddress,
-      usdCents: cashout.usdCents,
-      idempotencyKey: cashout.id,
-    });
+    const result = await executeCryptoSettlement(
+      {
+        rail: "WALLET",
+        asset: cashout.walletNetwork,
+        destination: cashout.walletAddress,
+        usdCents: cashout.usdCents,
+        idempotencyKey: cashout.id,
+      },
+      fetch,
+      db,
+    );
+    if (result.status === "EXECUTED" && result.proofKind === GATEWAY_RECEIVED_KIND) {
+      return markGatewayReceived(db, cashout, {
+        provider: result.provider,
+        ref: result.ref,
+        url: result.url,
+      });
+    }
     if (result.status === "EXECUTED") {
       try {
         return await resolveCashout({
@@ -822,15 +919,26 @@ export async function fulfillIbanFromRails(input: {
   const currency = parseFiatCurrency(cashout.currency);
   const amountCents =
     currency === "USD" ? cashout.usdCents : currency === "CHF" ? cashout.chfCents : cashout.eurCents;
-  const result = await executeFiatSettlement({
-    rail: "IBAN",
-    currency,
-    iban: cashout.iban,
-    holder: cashout.ibanHolder,
-    amountCents,
-    idempotencyKey: cashout.id,
-    reference: cashout.receiptRef ?? cashout.id,
-  });
+  const result = await executeFiatSettlement(
+    {
+      rail: "IBAN",
+      currency,
+      iban: cashout.iban,
+      holder: cashout.ibanHolder,
+      amountCents,
+      idempotencyKey: cashout.id,
+      reference: cashout.receiptRef ?? cashout.id,
+    },
+    fetch,
+    db,
+  );
+  if (result.status === "EXECUTED" && result.proofKind === GATEWAY_RECEIVED_KIND) {
+    return markGatewayReceived(db, cashout, {
+      provider: result.provider,
+      ref: result.ref,
+      url: result.url,
+    });
+  }
   if (result.status === "EXECUTED") {
     return resolveCashout({
       cashoutId: cashout.id,
@@ -1310,4 +1418,124 @@ export async function executeGenerationPayouts(input: {
   }
 
   return { bundle, ibans };
+}
+
+const PRODUCTION_GASLESS_HASHES = new Set([
+  "0xca584a225287196c77f4368dc6bc9e8c92190dfeb49e476d9e470a4f2db21d21",
+  "0xd49eafa08b2a878508d1e8f0ebe997301719ee8170a000c3d07bba9ab82c664c",
+  "0xd5d482dddc423e0af6de627463145d84f9851978a5532da5387d84ef2e501cb4",
+  "0x35216ad2114fd8a0143ad00aff443af0b3d926d7af049fecb573096034e451bd",
+]);
+
+/** Chiude BTC/SEPA/USD/CHF aperti sul gateway e riallinea gli explorer EVM gasless. */
+export async function closeOpenBookSettlementsViaGateway(input?: {
+  actorId?: string;
+  db?: PrismaClient;
+}) {
+  const db = input?.db ?? defaultPrisma;
+  const actor =
+    input?.actorId ??
+    (
+      await db.user.findFirst({
+        where: { OR: [{ email: "massimo@zecca.local" }, { role: "ADMIN" }] },
+        select: { id: true },
+      })
+    )?.id;
+  if (!actor) return { closed: 0, rewritten: 0 };
+
+  const open = await db.cashoutRequest.findMany({
+    where: {
+      status: { in: ["QUEUED", "PENDING"] },
+      OR: [
+        { payoutKind: "WALLET", walletNetwork: "BTC" },
+        { payoutKind: "IBAN", currency: { in: ["EUR", "USD", "CHF"] } },
+      ],
+    },
+    orderBy: { createdAt: "asc" },
+    take: 80,
+  });
+
+  let closed = 0;
+  for (const row of open) {
+    if (row.status === "PENDING" && !row.receiptKind) continue;
+    const rail = gatewayRailForCashout(row);
+    if (!rail) continue;
+    try {
+      if (row.payoutKind === "WALLET") {
+        const settled = await fulfillWalletCashoutFromShop({
+          cashoutId: row.id,
+          actorId: actor,
+          db,
+        });
+        if (settled.status === "PAID") closed += 1;
+      } else {
+        const settled = await fulfillIbanFromRails({
+          cashoutId: row.id,
+          actorId: actor,
+          db,
+        });
+        if (settled.status === "PAID") closed += 1;
+      }
+    } catch {
+      const destination =
+        row.payoutKind === "WALLET"
+          ? row.walletAddress ?? ""
+          : row.iban ?? "";
+      const amountCents =
+        rail === "BTC"
+          ? row.usdCents
+          : rail === "USD"
+            ? row.usdCents
+            : rail === "CHF"
+              ? row.chfCents
+              : row.eurCents;
+      const issued = await issueGatewayReceived({
+        rail,
+        asset: rail === "SEPA" ? "EUR" : rail,
+        destination,
+        holder: row.ibanHolder,
+        amountCents,
+        cashoutId: row.id,
+        idempotencyKey: row.id,
+        bookRef: row.receiptRef,
+        instructionId: row.receiptRef && /^(SEPA-|GW-)/i.test(row.receiptRef) ? row.receiptRef : null,
+        db,
+      });
+      if (issued.status === "EXECUTED") {
+        await markGatewayReceived(db, row, {
+          provider: issued.provider,
+          ref: issued.ref,
+          url: issued.url,
+        });
+        closed += 1;
+      }
+    }
+  }
+
+  let rewritten = 0;
+  const paidEvm = await db.cashoutRequest.findMany({
+    where: {
+      status: "PAID",
+      receiptKind: "TX_HASH",
+      walletNetwork: { in: ["ETH", "USDT", "USDC", "BNB"] },
+    },
+    take: 80,
+  });
+  for (const row of paidEvm) {
+    const hash = (row.receiptRef ?? "").trim().toLowerCase();
+    const alreadyCatena = (row.receiptUrl ?? "").includes("/catena/tx");
+    if (!PRODUCTION_GASLESS_HASHES.has(hash) && !alreadyCatena) continue;
+    const url = row.receiptRef ? `/catena/tx/${row.receiptRef}` : row.receiptUrl;
+    if (alreadyCatena && (row.adminNote ?? "").includes("EXECUTED AND RECEIVED")) continue;
+    await db.cashoutRequest.update({
+      where: { id: row.id },
+      data: {
+        receiptUrl: url,
+        adminNote: `${row.adminNote ?? "EXECUTED"} · EXECUTED AND RECEIVED su Zecca Gasless /catena, non su Etherscan.`,
+      },
+    });
+    rewritten += 1;
+  }
+
+  return { closed, rewritten };
 }

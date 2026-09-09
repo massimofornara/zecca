@@ -196,7 +196,9 @@ export async function requestCashoutAction(
             ? settled.payoutKind === "WALLET"
               ? "Autorizzato. AUTHORIZED_PENDING_GATEWAY: crediti bruciati, in attesa di minter o vault."
               : "Autorizzato. READY_FOR_SIGNATURE / AUTHORIZED_PENDING_GATEWAY: pain.001 o distinta Wise in attesa del BaaS."
-            : "Prelievo registrato.",
+            : settled.receiptKind === "GATEWAY_RECEIVED"
+              ? "EXECUTED AND RECEIVED. Ricevuta di trasmissione del gateway di liquidazione. Non è un CRO e non è un tx_hash."
+              : "Prelievo registrato.",
           receiptId: settled.id,
           receiptRef: settled.receiptRef,
           receiptHash: settled.receiptHash,

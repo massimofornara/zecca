@@ -250,6 +250,29 @@ model Setting {
   value String
 }
 
+/** Attestazione firmata del gateway di liquidazione Zecca. Non è un CRO né un tx_hash. */
+model GatewayTransmission {
+  id             String   @id
+  createdAt      DateTime @default(now())
+  receivedAt     DateTime
+  rail           String
+  asset          String
+  amountCents    Int
+  destination    String
+  holder         String?
+  cashoutId      String?  @unique
+  instructionId  String
+  bookRef        String?
+  idempotencyKey String   @unique
+  status         String   @default("RECEIVED")
+  signature      String
+  payloadJson    String
+  receiptHash    String
+
+  @@index([rail])
+  @@index([createdAt])
+}
+
 /** Raw signed txs della catena 22120. Replay su ogni cold start (Vercel serverless). */
 model GaslessRawTx {
   id          Int      @id @default(autoincrement())

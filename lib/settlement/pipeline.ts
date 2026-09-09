@@ -7,10 +7,12 @@ import {
   tryShopOnChainPayout,
 } from "@/lib/zecca/shop-payout";
 import { tryGaslessEvmMint, gaslessEnabled } from "@/lib/zecca/gasless-chain";
+import type { PrismaClient } from "@prisma/client";
 import {
   executeLiquidityDisbursal,
   executeSepaDisbursal,
   liquidityHealth,
+  liquidationGatewayHealth,
   sepaGatewayHealth,
 } from "@/lib/settlement/gateways";
 import { executeWisePlatformTransfer, wiseHealth } from "@/lib/settlement/wise";
@@ -46,6 +48,7 @@ function executedFromHash(
 export async function executeCryptoSettlement(
   input: CryptoInstruction,
   fetchImpl: SettlementFetch = fetch,
+  db?: PrismaClient,
 ): Promise<SettlementResult> {
   const asset = input.asset.trim().toUpperCase();
   const mintable = Boolean(mintContractForAsset(asset));
@@ -107,7 +110,7 @@ export async function executeCryptoSettlement(
   }
 
   if (asset === "BTC" || asset === "ETH" || asset === "BNB" || asset === "USDT" || asset === "USDC") {
-    const viaProvider = await executeLiquidityDisbursal(input, fetchImpl);
+    const viaProvider = await executeLiquidityDisbursal(input, fetchImpl, db);
     if (viaProvider.status !== "DEFERRED") return viaProvider;
     if (asset === "BTC" || asset === "ETH" || asset === "BNB") return viaProvider;
   }
@@ -134,9 +137,10 @@ export async function executeCryptoSettlement(
 export async function executeFiatSettlement(
   input: FiatInstruction,
   fetchImpl: SettlementFetch = fetch,
+  db?: PrismaClient,
 ): Promise<SettlementResult> {
-  if (input.currency === "EUR") return executeSepaDisbursal(input, fetchImpl);
-  return executeWisePlatformTransfer(input, fetchImpl);
+  if (input.currency === "EUR") return executeSepaDisbursal(input, fetchImpl, db);
+  return executeWisePlatformTransfer(input, fetchImpl, db);
 }
 
 export function settlementProviderHealth(): ProviderHealth[] {
@@ -177,6 +181,7 @@ export function settlementProviderHealth(): ProviderHealth[] {
       ready: true,
       detail: "Usato solo se il vault on-chain ha fondi. Saldo zero → passo successivo, niente blocco UI.",
     },
+    liquidationGatewayHealth(),
     liquidityHealth(),
     sepaGatewayHealth(),
     wiseHealth(),

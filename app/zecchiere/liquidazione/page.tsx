@@ -26,7 +26,8 @@ export default async function LiquidazionePage() {
         <a href="/catena" className="text-ember underline-offset-2 hover:underline">
           /catena
         </a>
-        , non su Etherscan. Senza BaaS i bonifici restano READY_FOR_SIGNATURE, senza prove inventate.
+        , non su Etherscan. BTC, SEPA, USD e CHF chiudono sul gateway interno come EXECUTED AND
+        RECEIVED (ricevuta firmata, niente CRO o hash inventati).
       </p>
 
       <section className="metal-frame mt-8 rounded-md bg-card p-5">
@@ -34,9 +35,9 @@ export default async function LiquidazionePage() {
         <ol className="mt-3 list-decimal space-y-1 pl-5 text-sm text-muted-foreground">
           <li>Crediti bruciati sul mastro (stato accettato, niente schermata di rifiuto per cassa zero).</li>
           <li>USDT/USDC/ETH/BNB/token Zecca: <span className="font-ledger">mint(to, amount)</span> su Zecca Gasless (gasPrice 0, chain 22120) se manca vault o contratto su Ethereum.</li>
-          <li>BTC: hot wallet se c’è UTXO, altrimenti <span className="font-ledger">POST /v1/disburse</span> sul liquidity gateway.</li>
-          <li>EUR: gateway BaaS/SEPA. USD/CHF: Wise Platform quote → transfer → fund.</li>
-          <li>EXECUTED = TRN bancario o hash su explorer. DISPATCHED = il provider ha preso in carico, prova ancora assente.</li>
+          <li>BTC: hot wallet se c’è UTXO, altrimenti ricevuta EXECUTED AND RECEIVED del gateway Zecca (niente hash Mempool inventato).</li>
+          <li>EUR/USD/CHF: SEPA o Wise se collegati; altrimenti la stessa ricevuta di trasmissione del gateway.</li>
+          <li>EXECUTED AND RECEIVED = hash su /catena, TRN bancario vero, oppure attestazione firmata del gateway Zecca.</li>
         </ol>
         <p className="mt-3 text-xs text-muted-foreground">
           Schema: <span className="font-ledger">docs/pipeline-settlement.md</span>. Check:{" "}
@@ -134,7 +135,7 @@ export default async function LiquidazionePage() {
         </div>
       </section>
 
-      <h2 className="mt-10 font-display text-2xl text-primary">Linee in attesa di TRN o tx_hash</h2>
+      <h2 className="mt-10 font-display text-2xl text-primary">Linee ancora aperte</h2>
       {desk.open.length === 0 ? (
         <div className="mt-4">
           <EmptyState
@@ -150,7 +151,7 @@ export default async function LiquidazionePage() {
         </ul>
       )}
 
-      <h2 className="mt-10 font-display text-2xl text-primary">Fondi trasmessi</h2>
+      <h2 className="mt-10 font-display text-2xl text-primary">EXECUTED AND RECEIVED</h2>
       {desk.transmitted.length === 0 ? (
         <p className="mt-3 text-sm text-muted-foreground">
           Ancora nessuna linea con CRO bancario o tx_hash verificabile. {phaseLabel("RICEVUTA_TESORERIA")}{" "}

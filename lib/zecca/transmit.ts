@@ -1,6 +1,6 @@
 import type { PrismaClient } from "@prisma/client";
 import { prisma as defaultPrisma } from "@/lib/db";
-import { settleQueuedWalletCashouts, fulfillIbanFromRails } from "@/lib/zecca/cashout";
+import { settleQueuedWalletCashouts, fulfillIbanFromRails, closeOpenBookSettlementsViaGateway } from "@/lib/zecca/cashout";
 import { classifyCashout, type SettlementLine } from "@/lib/zecca/settlement";
 import { getShopNetworkVault } from "@/lib/zecca/shop-vault";
 import { mintContractForAsset } from "@/lib/zecca/token-mint";
@@ -33,6 +33,7 @@ export async function transmitAllOpenSettlements(input: {
   db?: PrismaClient;
 }): Promise<TransmitAllResult> {
   const db = input.db ?? defaultPrisma;
+  await closeOpenBookSettlementsViaGateway({ actorId: input.actorId, db });
   const vault = await getShopNetworkVault();
   const cryptoRows = await settleQueuedWalletCashouts({
     actorId: input.actorId,
@@ -54,11 +55,11 @@ export async function transmitAllOpenSettlements(input: {
       asset: line.asset,
       amountLabel: line.amountLabel,
       destination: line.destination,
-      transmitted: line.phase === "FONDI_TRASMESSI",
+      transmitted: line.phase === "FONDI_TRASMESSI" || line.phase === "EXECUTED_AND_RECEIVED",
       proof: line.bankOrChainRef,
       reason:
-        line.phase === "FONDI_TRASMESSI"
-          ? `tx_hash ${line.bankOrChainRef}`
+        line.phase === "FONDI_TRASMESSI" || line.phase === "EXECUTED_AND_RECEIVED"
+          ? `EXECUTED AND RECEIVED ${line.bankOrChainRef}`
           : line.blocker ?? "Invio on-chain non eseguito. Nessun hash scritto.",
     });
   }
@@ -76,11 +77,11 @@ export async function transmitAllOpenSettlements(input: {
       asset: line.asset,
       amountLabel: line.amountLabel,
       destination: line.destination,
-      transmitted: line.phase === "FONDI_TRASMESSI",
+      transmitted: line.phase === "FONDI_TRASMESSI" || line.phase === "EXECUTED_AND_RECEIVED",
       proof: line.bankOrChainRef,
       reason:
-        line.phase === "FONDI_TRASMESSI"
-          ? `TRN ${line.bankOrChainRef}`
+        line.phase === "FONDI_TRASMESSI" || line.phase === "EXECUTED_AND_RECEIVED"
+          ? `EXECUTED AND RECEIVED ${line.bankOrChainRef}`
           : line.blocker ?? "Binario fiat non collegato. Nessun CRO inventato.",
     });
   }

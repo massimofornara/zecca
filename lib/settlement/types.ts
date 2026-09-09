@@ -1,6 +1,6 @@
 export type SettlementRail = "WALLET" | "IBAN";
 
-export type SettlementProofKind = "TX_HASH" | "BANK_REF" | "PROVIDER_REF";
+export type SettlementProofKind = "TX_HASH" | "BANK_REF" | "PROVIDER_REF" | "GATEWAY_RECEIVED";
 
 export type CryptoInstruction = {
   rail: "WALLET";
@@ -25,7 +25,7 @@ export type SettlementInstruction = CryptoInstruction | FiatInstruction;
 export type ExecutedSettlement = {
   status: "EXECUTED";
   provider: string;
-  proofKind: "TX_HASH" | "BANK_REF";
+  proofKind: "TX_HASH" | "BANK_REF" | "GATEWAY_RECEIVED";
   ref: string;
   url: string | null;
   signer: string | null;

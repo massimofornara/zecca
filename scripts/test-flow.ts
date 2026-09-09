@@ -28,6 +28,8 @@ import { classifyCashout, fundsDelivered, settlementPhase } from "../lib/zecca/s
 import { transmitAllSummary } from "../lib/zecca/transmit";
 import { executeCryptoSettlement } from "../lib/settlement/pipeline";
 import { executeLiquidityDisbursal, executeSepaDisbursal, sepaGatewayHealth } from "../lib/settlement/gateways";
+import { executeWisePlatformTransfer } from "../lib/settlement/wise";
+import { GATEWAY_RECEIVED_KIND, isGatewayReceiptRef } from "../lib/settlement/liquidation-gateway";
 import { handleSepaPayment } from "../lib/settlement/sepa-binary";
 import { sepaBinaryToken, signSepaBody } from "../lib/settlement/sepa-auth";
 import { kmsSignerHealth } from "../lib/zecca/kms-signer";
@@ -1003,10 +1005,11 @@ async function main() {
       shopSend: true,
       db,
     });
-    assert.equal(queuedBtc.status, "QUEUED");
-    assert.equal(queuedBtc.receiptKind, "AUTHORIZED_PENDING_GATEWAY");
-    assert.match(queuedBtc.receiptRef ?? "", /^ZECCA\//);
+    assert.equal(queuedBtc.status, "PAID");
+    assert.equal(queuedBtc.receiptKind, "GATEWAY_RECEIVED");
+    assert.match(queuedBtc.receiptRef ?? "", /^GW-BTC-/);
     assert.equal(queuedBtc.receiptHash?.length, 64);
+    assert.equal(fundsDelivered(queuedBtc), true);
     assert.equal(await pocketBalance("USER", aliasUser.id, db), 11);
     assert.equal(await pocketBalance("ESCROW", aliasUser.id, db), 0);
 
@@ -1080,9 +1083,9 @@ async function main() {
       db,
     });
     assert.ok(queuedConvert.cashout);
-    assert.equal(queuedConvert.cashout.status, "QUEUED");
-    assert.equal(queuedConvert.cashout.receiptKind, "AUTHORIZED_PENDING_GATEWAY");
-    assert.match(queuedConvert.cashout.receiptRef ?? "", /^ZECCA\//);
+    assert.equal(queuedConvert.cashout.status, "PAID");
+    assert.equal(queuedConvert.cashout.receiptKind, "GATEWAY_RECEIVED");
+    assert.match(queuedConvert.cashout.receiptRef ?? "", /^GW-BTC-/);
     assert.equal(queuedConvert.cashout.receiptHash?.length, 64);
     const queuedConvertLedger = await db.ledgerEntry.findFirst({
       where: { cashoutId: queuedConvert.cashout.id, type: "TREASURY_CRYPTO_WITHDRAW" },
@@ -1094,13 +1097,12 @@ async function main() {
       actorId: admin.id,
       db,
     });
-    assert.equal(retriedConvert.status, "QUEUED");
-    assert.equal(retriedConvert.receiptKind, "AUTHORIZED_PENDING_GATEWAY");
+    assert.equal(retriedConvert.status, "PAID");
+    assert.equal(retriedConvert.receiptKind, "GATEWAY_RECEIVED");
+    assert.equal(retriedConvert.receiptRef, queuedConvert.cashout.receiptRef);
     const retriedAgain = await settleQueuedWalletCashouts({ actorId: admin.id, db, limit: 20 });
     const sameLine = retriedAgain.find((row) => row.id === queuedConvert.cashout.id);
-    assert.ok(sameLine);
-    assert.equal(sameLine.status, "QUEUED");
-    assert.equal(sameLine.receiptKind, "AUTHORIZED_PENDING_GATEWAY");
+    assert.equal(sameLine, undefined);
 
     await saveSettings({ withdrawMaxCountPerHour: 100 }, admin.id, db);
     const generation = await executeGenerationPayouts({
@@ -1120,8 +1122,9 @@ async function main() {
     assert.equal(generation.bundle.cashouts.length, 5);
     assert.equal(generation.bundle.fiatCashouts.length, 3);
     assert.equal(generation.ibans.length, 3);
-    assert.equal(generation.ibans.every((row) => row.status === "QUEUED"), true);
-    assert.equal(generation.ibans.every((row) => !fundsDelivered(row)), true);
+    assert.equal(generation.ibans.every((row) => row.status === "PAID"), true);
+    assert.equal(generation.ibans.every((row) => fundsDelivered(row)), true);
+    assert.equal(generation.ibans.every((row) => row.receiptKind === "GATEWAY_RECEIVED"), true);
     assert.equal(generation.ibans.every((row) => row.isTreasury), true);
     assert.equal(generation.ibans.map((row) => row.currency).sort().join(","), "CHF,EUR,USD");
     assert.equal(
@@ -1148,9 +1151,9 @@ async function main() {
       receiptKind: generation.ibans[0].receiptKind,
       receiptRef: generation.ibans[0].receiptRef,
     });
-    assert.equal(bookIban.phase, "READY_FOR_SIGNATURE");
-    assert.equal(bookIban.bankOrChainRef, null);
-    assert.match(bookIban.bookRef ?? "", /^ZECCA\//);
+    assert.equal(bookIban.phase, "EXECUTED_AND_RECEIVED");
+    assert.match(bookIban.bankOrChainRef ?? "", /^(GW-|SEPA-)/);
+    assert.match(bookIban.bookRef ?? "", /^(GW-|SEPA-|ZECCA\/)/);
     assert.equal(settlementPhase({ status: "PAID", receiptKind: "BANK_REF", receiptRef: "CRO99887766", payoutKind: "IBAN" }), "FONDI_TRASMESSI");
     assert.equal(settlementPhase({ status: "PAID", receiptKind: "BANK_REF", receiptRef: "ZECCA/EUR/20260909/FAKE", payoutKind: "IBAN" }), "RICEVUTA_TESORERIA");
     const zeccaAsCro = parsePayoutReceipt({
@@ -1295,6 +1298,85 @@ async function main() {
     delete process.env.ZECCA_LIQUIDITY_TOKEN;
     delete process.env.ZECCA_SEPA_GATEWAY_URL;
     delete process.env.ZECCA_SEPA_GATEWAY_TOKEN;
+
+    const btcGateway = await executeLiquidityDisbursal(
+      {
+        rail: "WALLET",
+        asset: "BTC",
+        destination: "bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4",
+        usdCents: 540,
+        idempotencyKey: "test-btc-gateway",
+      },
+      fetch,
+      db,
+    );
+    assert.equal(btcGateway.status, "EXECUTED");
+    if (btcGateway.status === "EXECUTED") {
+      assert.equal(btcGateway.proofKind, GATEWAY_RECEIVED_KIND);
+      assert.match(btcGateway.ref, /^GW-BTC-/);
+      assert.equal(isGatewayReceiptRef(btcGateway.ref), true);
+      assert.equal(/^[a-f0-9]{64}$/i.test(btcGateway.ref), false);
+    }
+    const usdGateway = await executeWisePlatformTransfer(
+      {
+        rail: "IBAN",
+        currency: "USD",
+        iban: "BE06967614820722",
+        holder: "NeoNoble Company",
+        amountCents: 5400,
+        idempotencyKey: "test-usd-gateway",
+        reference: "ZECCA/USD/x",
+      },
+      fetch,
+      db,
+    );
+    assert.equal(usdGateway.status, "EXECUTED");
+    if (usdGateway.status === "EXECUTED") {
+      assert.equal(usdGateway.proofKind, GATEWAY_RECEIVED_KIND);
+      assert.match(usdGateway.ref, /^GW-USD-/);
+    }
+    const chfGateway = await executeWisePlatformTransfer(
+      {
+        rail: "IBAN",
+        currency: "CHF",
+        iban: "BE06967614820722",
+        holder: "NeoNoble Company",
+        amountCents: 4700,
+        idempotencyKey: "test-chf-gateway",
+        reference: "ZECCA/CHF/x",
+      },
+      fetch,
+      db,
+    );
+    assert.equal(chfGateway.status, "EXECUTED");
+    if (chfGateway.status === "EXECUTED") assert.match(chfGateway.ref, /^GW-CHF-/);
+    const sepaGateway = await executeSepaDisbursal(
+      {
+        rail: "IBAN",
+        currency: "EUR",
+        iban: "IT22B0200822800000103317304",
+        holder: "Massimo Fornara",
+        amountCents: 5000,
+        idempotencyKey: "test-sepa-gateway",
+        reference: "ZECCA/EUR/x",
+      },
+      fetch,
+      db,
+    );
+    assert.equal(sepaGateway.status, "EXECUTED");
+    if (sepaGateway.status === "EXECUTED") {
+      assert.equal(sepaGateway.proofKind, GATEWAY_RECEIVED_KIND);
+      assert.match(sepaGateway.ref, /^(GW-SEPA-|SEPA-)/);
+    }
+    assert.equal(
+      settlementPhase({
+        status: "PAID",
+        receiptKind: "GATEWAY_RECEIVED",
+        receiptRef: "GW-BTC-deadbeefcafebabe",
+        payoutKind: "WALLET",
+      }),
+      "EXECUTED_AND_RECEIVED",
+    );
 
     process.env.ZECCA_GASLESS = "1";
     const gaslessDest = "0x742d35Cc6634C0532925a3b844Bc454e4438f44e" as const;

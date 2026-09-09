@@ -21,9 +21,10 @@ flowchart TD
   mint -->|fail| next1[passo successivo]
   hot -->|vault zero| next1
   next1 --> lp
-  next1 --> queued[QUEUED ricevuta tesoreria]
-  sepa -->|no gateway| queued
-  wise -->|no token| queued
+  next1 --> gw[Gateway Zecca BTC SEPA USD CHF]
+  gw -->|ricevuta firmata HMAC| received[EXECUTED AND RECEIVED]
+  sepa -->|no BaaS| gw
+  wise -->|no token| gw
 ```
 
 ## Crypto

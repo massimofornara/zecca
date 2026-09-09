@@ -1,5 +1,6 @@
 import { CopyField } from "@/components/copy/CopyField";
 import { explorerLinks, receiptLabel } from "@/lib/receipt";
+import { isGatewayReceiptRef } from "@/lib/settlement/liquidation-gateway";
 
 export function CashoutReceipt({
   cashoutId,
@@ -19,14 +20,31 @@ export function CashoutReceipt({
   proofToken?: string | null;
 }) {
   if (!receiptRef && !receiptHash) return null;
+  const gatewayRef = isGatewayReceiptRef(receiptRef);
+  const gatewayPage =
+    gatewayRef && receiptRef
+      ? `/ricevuta-gateway/${encodeURIComponent(receiptRef)}`
+      : receiptKind === "GATEWAY_RECEIVED" && receiptUrl
+        ? receiptUrl
+        : null;
   return (
     <div className="mt-2 space-y-2 rounded-md bg-background/50 p-3 ring-1 ring-primary/20">
-      <p className="text-[11px] uppercase tracking-[0.18em] text-primary/80">Ricevuta del prelievo</p>
+      <p className="text-[11px] uppercase tracking-[0.18em] text-primary/80">
+        {receiptKind === "GATEWAY_RECEIVED" || receiptKind === "TX_HASH"
+          ? "EXECUTED AND RECEIVED"
+          : "Ricevuta del prelievo"}
+      </p>
       {receiptRef ? <CopyField label={receiptLabel(receiptKind, walletNetwork)} value={receiptRef} mono /> : null}
       {receiptHash ? <CopyField label="Hash ricevuta (SHA-256)" value={receiptHash} mono /> : null}
       {receiptKind === "TX_HASH" ? (
         <p className="text-xs text-ember">
-          Hash di rete verificato. Aprilo sugli explorer: è visibile solo se la transazione è già confermata.
+          EXECUTED AND RECEIVED. Hash di rete verificato sulla catena del negozio. Non aprirlo su
+          etherscan.io se è un mint Zecca Gasless: è visibile su /catena.
+        </p>
+      ) : receiptKind === "GATEWAY_RECEIVED" ? (
+        <p className="text-xs text-ember">
+          EXECUTED AND RECEIVED. Attestazione firmata del gateway di liquidazione Zecca. Non è un
+          CRO UniCredit, non è un ID Wise e non è un tx_hash Mempool/Etherscan.
         </p>
       ) : receiptKind === "PROVIDER_REF" ? (
         <p className="text-xs text-muted-foreground">
@@ -63,28 +81,22 @@ export function CashoutReceipt({
             Apri la ricevuta ufficiale
           </a>
         ) : null}
+        {gatewayPage ? (
+          <a href={gatewayPage} className="text-sm text-ember underline-offset-2 hover:underline">
+            Ricevuta di trasmissione gateway
+          </a>
+        ) : null}
         {receiptKind === "TX_HASH" && receiptRef
-          ? explorerLinks(walletNetwork, receiptRef).map((link) => (
+          ? explorerLinks(walletNetwork, receiptRef, receiptUrl).map((link) => (
               <a
                 key={link.url}
                 href={link.url}
-                target="_blank"
-                rel="noreferrer"
                 className="text-sm text-ember underline-offset-2 hover:underline"
               >
                 {link.label}
               </a>
             ))
-          : receiptUrl ? (
-              <a
-                href={receiptUrl}
-                target="_blank"
-                rel="noreferrer"
-                className="text-sm text-ember underline-offset-2 hover:underline"
-              >
-                Apri sulla rete
-              </a>
-            ) : null}
+          : null}
       </div>
     </div>
   );
