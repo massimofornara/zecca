@@ -30,8 +30,9 @@ export function CashoutReceipt({
         </p>
       ) : receiptKind === "QUEUED_FOR_SETTLEMENT" ? (
         <p className="text-xs text-muted-foreground">
-          Prelievo accettato. I crediti sono bruciati sul libro. Questa è la ricevuta interna della
-          Zecca; la liquidazione on-chain procede in coda.
+          Ricevuta tesoreria. I crediti sono bruciati sul libro. Non è un CRO UniCredit, non è un ID
+          Wise e non è un tx_hash Etherscan/BscScan/Mempool. Finché manca quel riferimento i fondi
+          non sono trasmessi.
         </p>
       ) : (
         <p className="text-xs text-muted-foreground">

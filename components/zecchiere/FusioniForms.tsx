@@ -459,7 +459,8 @@ export function PendingCashoutCard({
       {status === "QUEUED" ? (
         <div className="mt-2 space-y-2">
           <p className="text-sm text-muted-foreground">
-            Prelievo accettato. In coda di liquidazione. Ricevuta Zecca emessa.
+            Prelievo accettato sul libro. Ricevuta tesoreria emessa: non è un CRO e non è un
+            tx_hash. La chiusura con fondi trasmessi è in Liquidazione.
           </p>
           <CashoutReceipt
             cashoutId={id}

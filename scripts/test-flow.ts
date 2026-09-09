@@ -22,7 +22,10 @@ import {
 import { saveSettings, DEFAULT_SETTINGS } from "../lib/zecca/settings";
 import { assertWithdrawPolicy, WITHDRAW_BROADCASTING } from "../lib/zecca/withdraw-policy";
 import { cashoutProofStatus, proofFromPaidCashout, signCashoutProof, verifyCashoutProof } from "../lib/cashout-proof";
-import { explorerLinks, explorerUrl } from "../lib/receipt";
+import { explorerLinks, explorerUrl, parsePayoutReceipt } from "../lib/receipt";
+import { classifyCashout, settlementPhase } from "../lib/zecca/settlement";
+import { buildPain001Document } from "../lib/zecca/pain001";
+import { wiseApiConfig } from "../lib/zecca/wise-dispatch";
 import { encodeErc20Transfer, nativeWeiFromUsdCents, tokenAmountFromUsdCents } from "../lib/evm-send";
 import { isShopEvmConfigured, shopPayoutConfigError, shopWalletAddress } from "../lib/zecca/shop-payout";
 import { shopBtcAddress } from "../lib/zecca/btc-payout";
@@ -1100,12 +1103,56 @@ async function main() {
     assert.ok(shopAfter.treasuryUsdCents >= 20 * 108);
     assert.ok(shopAfter.treasuryChfCents >= 20 * 94);
 
+    const bookIban = classifyCashout({
+      id: generation.ibans[0].id,
+      status: generation.ibans[0].status,
+      payoutKind: generation.ibans[0].payoutKind,
+      currency: generation.ibans[0].currency,
+      eurCents: generation.ibans[0].eurCents,
+      usdCents: generation.ibans[0].usdCents,
+      chfCents: generation.ibans[0].chfCents,
+      iban: generation.ibans[0].iban,
+      ibanHolder: generation.ibans[0].ibanHolder,
+      walletAddress: generation.ibans[0].walletAddress,
+      walletNetwork: generation.ibans[0].walletNetwork,
+      receiptKind: generation.ibans[0].receiptKind,
+      receiptRef: generation.ibans[0].receiptRef,
+    });
+    assert.equal(bookIban.phase, "RICEVUTA_TESORERIA");
+    assert.equal(bookIban.bankOrChainRef, null);
+    assert.match(bookIban.bookRef ?? "", /^ZECCA\//);
+    assert.equal(settlementPhase({ status: "PAID", receiptKind: "BANK_REF", receiptRef: "CRO99887766", payoutKind: "IBAN" }), "FONDI_TRASMESSI");
+    assert.equal(settlementPhase({ status: "PAID", receiptKind: "BANK_REF", receiptRef: "ZECCA/EUR/20260909/FAKE", payoutKind: "IBAN" }), "RICEVUTA_TESORERIA");
+    const zeccaAsCro = parsePayoutReceipt({
+      payoutKind: "IBAN",
+      receipt: generation.ibans[0].receiptRef ?? "ZECCA/EUR/x",
+    });
+    assert.equal("error" in zeccaAsCro, true);
+    const xml = buildPain001Document({
+      debtor: { name: "Ordinante SPA", iban: "IT60X0542811101000000123456" },
+      credits: [
+        {
+          endToEndId: "ZECCA/EUR/20260909/CMTUG0C9",
+          amountCents: 5000,
+          currency: "EUR",
+          creditorName: "Massimo Fornara",
+          creditorIban: "IT22B0200822800000103317304",
+          remittance: "Zecca fusione CMTUG0C9",
+        },
+      ],
+    });
+    assert.match(xml, /pain\.001\.001\.03/);
+    assert.match(xml, /IT22B0200822800000103317304/);
+    assert.match(xml, /50\.00/);
+    assert.equal(wiseApiConfig(), null);
+
     console.log("Flusso Zecca: conio → crediti → bottega DHL + ritiro in sede → prelievo IBAN/wallet. OK.");
     console.log("Conversione tesoreria 3000 cr→EUR, 2000 cr→USD e 500 cr→CHF in cassa negozio. OK.");
     console.log("Conversione tesoreria 1000 cr→BTC e 200 cr→ETH in cassa virtuale. OK.");
     console.log("Policy prelievo: checksum EIP-55, whitelist, rate limit, massimali, lock broadcast. OK.");
     console.log("Conversione 150 cr→USDT e prelievo verso wallet del form. OK.");
     console.log("Prelievi da generazione: EUR/USD/CHF in cassa + BTC/ETH/USDT/USDC/BNB + IBAN. OK.");
+    console.log("Liquidazione: ricevuta tesoreria ZECCA/… distinta da CRO e tx_hash. OK.");
     console.log("Bonifico SEPA in ingresso senza Stripe/webhook. OK.");
     console.log("Casa Fornara: generazione senza pagamento + prelievo IBAN EUR/USD/CHF. OK.");
   } finally {

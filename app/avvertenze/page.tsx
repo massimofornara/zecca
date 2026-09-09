@@ -15,9 +15,9 @@ export default function AvvertenzePage() {
         </p>
         <p>
           Gli euro veri, se arrivano, passano da Stripe (ingressi con carta) e dal conto della casa
-          (uscite IBAN). In prelievo crypto i crediti si convertono nella valuta scelta e il negozio
-          crea la transazione: MetaMask, Trust Wallet o l’exchange ricevono, senza firmare. Questo
-          sito non è una banca e non è la Banca d’Italia.
+          (uscite IBAN). Un prelievo crypto brucia i crediti sul libro: l’hash on-chain esiste solo
+          se il wallet del negozio firma una transazione reale o se è configurato un contratto
+          proprietario. Questo sito non è una banca e non è la Banca d’Italia.
         </p>
         <p>
           In modalità dimostrativa nessun pagamento si muove. Per i fondi veri servono le chiavi

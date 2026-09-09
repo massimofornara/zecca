@@ -31,9 +31,13 @@ export default async function FusioniPage() {
       <h1 className="font-display text-4xl text-primary">Fusioni</h1>
       <p className="mt-2 text-muted-foreground">
         I crediti di tesoreria diventano euro, dollari, franchi svizzeri e crypto. Alla conferma
-        crypto i crediti si bruciano e il payout verso MetaMask, Trust Wallet o exchange viene
-        accettato — mint EVM se il contratto Zecca è attivo, altrimenti coda di liquidazione con
-        ricevuta Zecca. Il bonifico IBAN lo disponi tu da UniCredit o Wise, poi chiudi con il CRO.
+        crypto i crediti si bruciano e il payout viene accettato sul libro. L’accredito bancario e
+        l’hash on-chain si chiudono in{" "}
+        <a href="/zecchiere/liquidazione" className="text-ember underline-offset-2 hover:underline">
+          Liquidazione
+        </a>
+        : distinta SEPA, CRO UniCredit/Wise, ritentativo mint/transfer. Un codice ZECCA/… non è un
+        bonifico.
       </p>
 
       <section className="metal-frame mt-8 rounded-md bg-card p-5">

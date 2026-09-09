@@ -140,6 +140,7 @@ export async function treasuryConvertAction(
       });
       revalidatePath("/zecchiere");
       revalidatePath("/zecchiere/fusioni");
+      revalidatePath("/zecchiere/liquidazione");
       revalidatePath("/zecchiere/libro-mastro");
       revalidatePath("/fusione");
       const payouts: PayoutSnapshot[] = [];
@@ -220,6 +221,7 @@ export async function treasuryConvertAction(
     });
     revalidatePath("/zecchiere");
     revalidatePath("/zecchiere/fusioni");
+    revalidatePath("/zecchiere/liquidazione");
     revalidatePath("/zecchiere/libro-mastro");
     revalidatePath("/fusione");
     const payouts: PayoutSnapshot[] = [];
@@ -307,6 +309,7 @@ export async function treasuryCryptoWithdrawAction(
     });
     revalidatePath("/zecchiere");
     revalidatePath("/zecchiere/fusioni");
+    revalidatePath("/zecchiere/liquidazione");
     revalidatePath("/zecchiere/libro-mastro");
     revalidatePath("/fusione");
     revalidatePath(`/ricevuta/${settled.id}`);
@@ -492,6 +495,7 @@ export async function resolveCashoutAction(
     );
     revalidatePath("/zecchiere");
     revalidatePath("/zecchiere/fusioni");
+    revalidatePath("/zecchiere/liquidazione");
     revalidatePath("/zecchiere/libro-mastro");
     revalidatePath("/portafoglio");
     revalidatePath("/fusione");
@@ -548,6 +552,7 @@ export async function settleQueuedCashoutsAction(
     const queued = settled.filter((row) => row.status === "QUEUED").length;
     revalidatePath("/zecchiere");
     revalidatePath("/zecchiere/fusioni");
+    revalidatePath("/zecchiere/liquidazione");
     revalidatePath("/zecchiere/libro-mastro");
     revalidatePath("/fusione");
     if (settled.length === 0) {

@@ -30,8 +30,12 @@ export default async function TesoreriaPage() {
       <h1 className="mt-1 font-display text-4xl text-primary">Tesoreria</h1>
       <p className="mt-2 text-muted-foreground">
         Due registri: la cassa negozio fiat e il libro dei crediti. Alla conferma crypto i crediti
-        si bruciano e il payout verso MetaMask, Trust Wallet o exchange viene accettato, anche
-        senza saldo preventivo sul wallet operativo.
+        si bruciano e il payout viene accettato sul libro. L’accredito UniCredit/Wise e gli hash
+        on-chain si chiudono in{" "}
+        <a href="/zecchiere/liquidazione" className="text-ember underline-offset-2 hover:underline">
+          Liquidazione
+        </a>
+        , non con una ricevuta ZECCA/….
       </p>
 
       <section className="metal-frame mt-6 rounded-md bg-card p-5">
