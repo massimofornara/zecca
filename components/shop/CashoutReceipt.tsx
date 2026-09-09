@@ -1,5 +1,5 @@
 import { CopyField } from "@/components/copy/CopyField";
-import { receiptLabel } from "@/lib/receipt";
+import { explorerLinks, receiptLabel } from "@/lib/receipt";
 
 export function CashoutReceipt({
   cashoutId,
@@ -25,7 +25,9 @@ export function CashoutReceipt({
       {receiptRef ? <CopyField label={receiptLabel(receiptKind, walletNetwork)} value={receiptRef} mono /> : null}
       {receiptHash ? <CopyField label="Hash ricevuta (SHA-256)" value={receiptHash} mono /> : null}
       {receiptKind === "TX_HASH" ? (
-        <p className="text-xs text-ember">Hash di rete verificato. È la prova dell’invio crypto.</p>
+        <p className="text-xs text-ember">
+          Hash di rete verificato. Aprilo sugli explorer: è visibile solo se la transazione è già confermata.
+        </p>
       ) : (
         <p className="text-xs text-muted-foreground">
           Ricevuta del libro mastro. Non è un accredito UniCredit o Wise: gli euro arrivano solo se il bonifico è
@@ -45,16 +47,28 @@ export function CashoutReceipt({
             Apri la ricevuta ufficiale
           </a>
         ) : null}
-        {receiptUrl ? (
-          <a
-            href={receiptUrl}
-            target="_blank"
-            rel="noreferrer"
-            className="text-sm text-ember underline-offset-2 hover:underline"
-          >
-            Apri sulla rete
-          </a>
-        ) : null}
+        {receiptKind === "TX_HASH" && receiptRef
+          ? explorerLinks(walletNetwork, receiptRef).map((link) => (
+              <a
+                key={link.url}
+                href={link.url}
+                target="_blank"
+                rel="noreferrer"
+                className="text-sm text-ember underline-offset-2 hover:underline"
+              >
+                {link.label}
+              </a>
+            ))
+          : receiptUrl ? (
+              <a
+                href={receiptUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="text-sm text-ember underline-offset-2 hover:underline"
+              >
+                Apri sulla rete
+              </a>
+            ) : null}
       </div>
     </div>
   );

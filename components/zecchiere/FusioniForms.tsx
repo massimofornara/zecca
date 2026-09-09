@@ -176,21 +176,21 @@ export function PendingCashoutCard({
       <div className="mt-3 flex flex-wrap items-end gap-2">
         <form action={payAction} noValidate className="w-full space-y-2 sm:w-auto">
           <input type="hidden" name="cashoutId" value={id} />
-          <input type="hidden" name="action" value="pay" />
           <input type="hidden" name="payoutKind" value={isWallet ? "WALLET" : "IBAN"} />
           <label className="block text-sm">
             {isWallet ? "Hash reale della transazione (ricevuta)" : "CRO / riferimento bonifico (ricevuta)"}
             <Input
               name="receipt"
-              required
+              required={!isWallet}
               autoComplete="off"
               className="mt-1 max-w-xl font-ledger"
-              placeholder={isWallet ? "0x… hash già confermato sulla rete" : "CRO o end-to-end ID"}
+              placeholder={isWallet ? "0x… oppure cerca sulla rete" : "CRO o end-to-end ID"}
             />
           </label>
           {isWallet ? (
             <p className="text-xs text-muted-foreground">
-              Zecca interroga la rete: l’hash deve esistere e andare a questo wallet. Senza transazione reale il prelievo resta aperto.
+              Zecca cerca l’hash su Etherscan, Blockscout, BscScan o Mempool. Deve già esistere sulla rete verso
+              questo wallet.
             </p>
           ) : null}
           <label className="flex items-start gap-2 text-xs text-muted-foreground">
@@ -207,9 +207,16 @@ export function PendingCashoutCard({
                 ? "Ho disposto il bonifico in dollari (SWIFT/estero) dal mio conto verso questo IBAN."
                 : "Ho disposto il bonifico SEPA dal mio conto verso questo IBAN."}
           </label>
-          <SubmitButton size="sm" formNoValidate>
-            {isWallet ? "Chiudi prelievo con hash" : "Chiudi prelievo con CRO"}
-          </SubmitButton>
+          <div className="flex flex-wrap gap-2">
+            {isWallet ? (
+              <SubmitButton size="sm" formNoValidate name="action" value="search">
+                Cerca hash su Etherscan / BscScan / Blockscout
+              </SubmitButton>
+            ) : null}
+            <SubmitButton size="sm" formNoValidate name="action" value="pay">
+              {isWallet ? "Chiudi prelievo con hash" : "Chiudi prelievo con CRO"}
+            </SubmitButton>
+          </div>
         </form>
         <form action={rejectAction}>
           <input type="hidden" name="cashoutId" value={id} />

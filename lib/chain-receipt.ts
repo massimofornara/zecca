@@ -31,12 +31,7 @@ async function postJson(url: string, body: unknown, timeoutMs = 8000): Promise<u
   return res.json();
 }
 
-async function lookupEth(hash: string): Promise<OnChainTx | null> {
-  const endpoints = [
-    "https://ethereum.publicnode.com",
-    "https://cloudflare-eth.com",
-    "https://rpc.ankr.com/eth",
-  ];
+async function lookupEvm(hash: string, endpoints: string[], label: string): Promise<OnChainTx | null> {
   for (const url of endpoints) {
     try {
       const json = (await postJson(url, {
@@ -54,7 +49,19 @@ async function lookupEth(hash: string): Promise<OnChainTx | null> {
       continue;
     }
   }
-  throw new Error("Rete Ethereum non raggiungibile per verificare l’hash.");
+  throw new Error(`Rete ${label} non raggiungibile per verificare l’hash.`);
+}
+
+async function lookupEth(hash: string): Promise<OnChainTx | null> {
+  return lookupEvm(
+    hash,
+    ["https://ethereum.publicnode.com", "https://cloudflare-eth.com", "https://rpc.ankr.com/eth"],
+    "Ethereum",
+  );
+}
+
+async function lookupBsc(hash: string): Promise<OnChainTx | null> {
+  return lookupEvm(hash, ["https://bsc-dataseed.binance.org", "https://bsc.publicnode.com"], "BNB");
 }
 
 async function lookupBtc(hash: string): Promise<OnChainTx | null> {
@@ -100,8 +107,77 @@ async function lookupTrx(hash: string): Promise<OnChainTx | null> {
 export const defaultChainLookup: ChainLookup = async ({ network, hash }) => {
   if (network === "BTC") return lookupBtc(hash);
   if (network === "TRX") return lookupTrx(hash);
+  if (network === "BNB") return lookupBsc(hash);
   return lookupEth(hash);
 };
+
+async function getJson(url: string, timeoutMs = 8000): Promise<unknown> {
+  const res = await fetch(url, { signal: AbortSignal.timeout(timeoutMs) });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
+function parseIso(value: string | number | null | undefined) {
+  if (value == null) return null;
+  if (typeof value === "number") return new Date(value * (value < 1e12 ? 1000 : 1));
+  const at = new Date(value);
+  return Number.isNaN(at.getTime()) ? null : at;
+}
+
+/**
+ * Cerca un hash già confermato verso questo wallet. Non inventa transazioni:
+ * legge Etherscan/Blockscout, BscScan/Blockscout o Mempool.
+ */
+export async function findIncomingCryptoTx(input: {
+  network: string;
+  address: string;
+  notBefore?: Date;
+}): Promise<{ hash: string } | null> {
+  const address = normalizeWalletAddress(input.address);
+  const since = input.notBefore ?? new Date(0);
+  try {
+    if (input.network === "BTC") {
+      const txs = (await getJson(`https://mempool.space/api/address/${address}/txs`)) as {
+        txid?: string;
+        status?: { block_time?: number };
+        vout?: { scriptpubkey_address?: string }[];
+      }[];
+      const hit = (Array.isArray(txs) ? txs : []).find((tx) => {
+        const at = tx.status?.block_time ? new Date(tx.status.block_time * 1000) : null;
+        const toUs = (tx.vout ?? []).some((out) => out.scriptpubkey_address === address);
+        return Boolean(tx.txid) && toUs && (!at || at >= since);
+      });
+      return hit?.txid ? { hash: hit.txid } : null;
+    }
+    if (input.network === "TRX") return null;
+    const host = input.network === "BNB" ? "https://bsc.blockscout.com" : "https://eth.blockscout.com";
+    const [native, tokens] = await Promise.all([
+      getJson(`${host}/api/v2/addresses/${address}/transactions?filter=to`).catch(() => ({ items: [] })),
+      getJson(`${host}/api/v2/addresses/${address}/token-transfers`).catch(() => ({ items: [] })),
+    ]);
+    const nativeItems = ((native as { items?: { hash?: string; timestamp?: string; result?: string }[] }).items ??
+      []) as { hash?: string; timestamp?: string; result?: string }[];
+    const tokenItems = ((tokens as { items?: { transaction_hash?: string; timestamp?: string; token?: { symbol?: string } }[] })
+      .items ?? []) as { transaction_hash?: string; timestamp?: string; token?: { symbol?: string } }[];
+    const wantToken = input.network === "USDT" || input.network === "USDC" ? input.network : null;
+    const tokenHit = tokenItems.find((item) => {
+      const at = parseIso(item.timestamp);
+      const symbol = (item.token?.symbol ?? "").toUpperCase();
+      const okToken = !wantToken || symbol === wantToken || symbol.startsWith(wantToken);
+      return Boolean(item.transaction_hash) && okToken && (!at || at >= since);
+    });
+    if (tokenHit?.transaction_hash) return { hash: tokenHit.transaction_hash };
+    const nativeHit = nativeItems.find((item) => {
+      const at = parseIso(item.timestamp);
+      return Boolean(item.hash) && item.result !== "error" && (!at || at >= since);
+    });
+    if (nativeHit?.hash && !wantToken) return { hash: nativeHit.hash };
+    if (nativeHit?.hash && wantToken && !tokenHit) return { hash: nativeHit.hash };
+    return null;
+  } catch {
+    return null;
+  }
+}
 
 export async function verifyCryptoReceipt(input: {
   network: string;
@@ -120,7 +196,7 @@ export async function verifyCryptoReceipt(input: {
   const expected = input.expectedAddress ? normalizeWalletAddress(input.expectedAddress) : "";
   if (expected && found.recipients.length > 0) {
     const match = found.recipients.some((recipient) => sameAddress(recipient, expected));
-    if (!match && (input.network === "ETH" || input.network === "USDT" || input.network === "USDC" || input.network === "BTC")) {
+    if (!match && (input.network === "ETH" || input.network === "USDT" || input.network === "USDC" || input.network === "BNB" || input.network === "BTC")) {
       throw new Error(
         "L’hash è reale ma non va al wallet indicato in questo prelievo. Controlla destinazione e rete.",
       );

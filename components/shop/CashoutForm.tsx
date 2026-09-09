@@ -93,7 +93,7 @@ export function CashoutForm({
         <p className="text-sm text-muted-foreground">
           {pending
             ? payoutKind === "WALLET"
-              ? "La richiesta è attiva. Invia dal wallet l’importo in crypto, poi incolla qui l’hash che la rete crea dopo l’invio."
+              ? "La richiesta è attiva. Invia dal wallet l’importo in crypto, poi cerca l’hash su Etherscan, BscScan o Blockscout."
               : "La richiesta è attiva. Copia i dati, invia da banca o wallet, poi incolla CRO o hash qui sotto per chiuderla."
             : "CRO o hash sotto chiudono il prelievo nel libro. Non sono un accredito creato dal sito."}
         </p>

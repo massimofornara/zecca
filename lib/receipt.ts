@@ -6,22 +6,42 @@ export function normalizeReceipt(raw: string): string {
   return raw.replace(/\s+/g, "").trim();
 }
 
-export function explorerUrl(network: string | null | undefined, hash: string): string | null {
+export function explorerLinks(
+  network: string | null | undefined,
+  hash: string,
+): { label: string; url: string }[] {
   const ref = normalizeReceipt(hash);
-  if (!ref) return null;
-  if (network === "BTC") return `https://mempool.space/tx/${ref}`;
-  if (network === "TRX") return `https://tronscan.org/#/transaction/${ref}`;
-  if (network === "ETH" || network === "USDT" || network === "USDC") {
-    const path = ref.startsWith("0x") ? ref : `0x${ref}`;
-    return `https://etherscan.io/tx/${path}`;
+  if (!ref) return [];
+  if (network === "BTC") {
+    return [
+      { label: "Mempool", url: `https://mempool.space/tx/${ref}` },
+      { label: "Blockstream", url: `https://blockstream.info/tx/${ref}` },
+    ];
   }
-  return null;
+  if (network === "TRX") {
+    return [{ label: "Tronscan", url: `https://tronscan.org/#/transaction/${ref}` }];
+  }
+  const path = ref.startsWith("0x") ? ref : `0x${ref}`;
+  if (network === "BNB") {
+    return [
+      { label: "BscScan", url: `https://bscscan.com/tx/${path}` },
+      { label: "Blockscout", url: `https://bsc.blockscout.com/tx/${path}` },
+    ];
+  }
+  return [
+    { label: "Etherscan", url: `https://etherscan.io/tx/${path}` },
+    { label: "Blockscout", url: `https://eth.blockscout.com/tx/${path}` },
+  ];
+}
+
+export function explorerUrl(network: string | null | undefined, hash: string): string | null {
+  return explorerLinks(network, hash)[0]?.url ?? null;
 }
 
 export function isValidTxHash(raw: string, network: string | null | undefined): boolean {
   const hash = normalizeReceipt(raw);
   if (hash.length < 16 || hash.length > 128) return false;
-  if (network === "ETH" || network === "USDT" || network === "USDC") {
+  if (network === "ETH" || network === "USDT" || network === "USDC" || network === "BNB") {
     return /^0x[a-fA-F0-9]{64}$/.test(hash);
   }
   if (network === "BTC" || network === "TRX") {

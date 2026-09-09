@@ -16,7 +16,7 @@ import {
   resolveCashout,
 } from "../lib/zecca/cashout";
 import { cashoutProofStatus, proofFromPaidCashout, signCashoutProof, verifyCashoutProof } from "../lib/cashout-proof";
-import { explorerUrl } from "../lib/receipt";
+import { explorerLinks, explorerUrl } from "../lib/receipt";
 import { convertTreasuryToShopFiat, shopFiatBalances } from "../lib/zecca/convert";
 import { pocketBalance, treasuryBalance } from "../lib/zecca/ledger";
 import { getReserveReport } from "../lib/zecca/reserves";
@@ -344,6 +344,12 @@ async function main() {
     assert.equal(paidWallet.receiptKind, "TX_HASH");
     assert.equal(paidWallet.receiptRef, realEthHash);
     assert.equal(paidWallet.receiptUrl, explorerUrl("ETH", realEthHash));
+    const ethExplorers = explorerLinks("ETH", realEthHash).map((link) => link.url).join(" ");
+    assert.equal(ethExplorers.includes("etherscan.io"), true);
+    assert.equal(ethExplorers.includes("blockscout.com"), true);
+    const bscExplorers = explorerLinks("BNB", realEthHash).map((link) => link.url).join(" ");
+    assert.equal(bscExplorers.includes("bscscan.com"), true);
+    assert.equal(explorerLinks("BTC", "ab".repeat(32)).some((link) => link.url.includes("mempool.space")), true);
 
     const types = await db.ledgerEntry.groupBy({ by: ["type"], _count: true });
     const typeSet = new Set(types.map((t) => t.type));
