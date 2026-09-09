@@ -15,7 +15,7 @@ export const metadata = { title: "Tesoreria" };
 export default async function TesoreriaPage() {
   const [flow, pending, loyal, reserve, settings, live, vault, internalWallets] = await Promise.all([
     totals(),
-    prisma.cashoutRequest.count({ where: { status: "PENDING" } }),
+    prisma.cashoutRequest.count({ where: { status: { in: ["PENDING", "QUEUED"] } } }),
     loyalToday(),
     getReserveReport(),
     getSettings(),
@@ -29,19 +29,18 @@ export default async function TesoreriaPage() {
       <p className="text-xs uppercase tracking-[0.28em] text-primary/80">Casa della zecca</p>
       <h1 className="mt-1 font-display text-4xl text-primary">Tesoreria</h1>
       <p className="mt-2 text-muted-foreground">
-        Due registri distinti: la <strong>cassa virtuale</strong> è il libro delle passività nate
-        dal burn dei crediti; la <strong>liquidità on-chain</strong> è il saldo vero del wallet
-        operativo. L’unica transazione che la rete riconosce è l’uscita (payout) verso MetaMask,
-        Trust Wallet o un exchange, se su quel wallet c’è già la crypto.
+        Due registri: la cassa negozio fiat e il libro dei crediti. Alla conferma crypto i crediti
+        si bruciano e il payout verso MetaMask, Trust Wallet o exchange viene accettato, anche
+        senza saldo preventivo sul wallet operativo.
       </p>
 
       <section className="metal-frame mt-6 rounded-md bg-card p-5">
         <p className="text-xs uppercase tracking-[0.2em] text-primary/80">
-          Liquidità on-chain (wallet operativo)
+          Wallet operativo
         </p>
         <p className="mt-2 text-sm text-muted-foreground">
-          Saldo letto da Mempool, Etherscan e BscScan. Non è la cassa contabile: convertire crediti
-          non muove questi numeri. Il negozio firma il prelievo da qui; chi riceve non firma.
+          Indirizzi di liquidazione. Convertire i crediti non dipende da questi saldi: alla conferma
+          i crediti si bruciano e la richiesta viene accettata. La rete si allinea in coda.
         </p>
         <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {vault.assets.map((asset) => (
@@ -51,7 +50,7 @@ export default async function TesoreriaPage() {
               <p className="mt-1 text-[11px] text-muted-foreground">{asset.chainName}</p>
               {asset.address ? (
                 <div className="mt-2">
-                  <CopyField label="Indirizzo da caricare" value={asset.address} mono />
+                  <CopyField label="Indirizzo" value={asset.address} mono />
                 </div>
               ) : null}
               {asset.explorer ? (
@@ -74,26 +73,23 @@ export default async function TesoreriaPage() {
           Cassa virtuale (libro / passività da burn)
         </p>
         <p className="mt-2 text-sm text-muted-foreground">
-          Crediti già convertiti in BTC, ETH, USDT, USDC e BNB e non ancora usciti. È la
-          riconciliazione interna del Punto 2: nessuna micro-transazione on-chain, nessuna fee di
-          ingresso. Il payout verso un wallet esterno attinge alla riga Rete, non a questo libro.
+          Crediti già convertiti in BTC, ETH, USDT, USDC e BNB e non ancora usciti. Passività di
+          libro, non saldo Mempool. Il prelievo verso un wallet esterno brucia questi crediti e
+          accetta la richiesta.
         </p>
         <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
           {internalWallets.map((wallet) => {
-            const rete = vault.assets.find((asset) => asset.id === wallet.asset);
             return (
               <div key={wallet.asset}>
                 <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">{wallet.label}</p>
                 <p className="font-ledger text-lg text-ember">{wallet.amountLabel}</p>
                 <p className="mt-1 text-xs text-muted-foreground">Libro {formatCredits(wallet.remainingCredits)}</p>
-                <p className="mt-1 text-xs text-muted-foreground">Rete {rete?.amountLabel ?? "—"}</p>
               </div>
             );
           })}
         </div>
         <InternalCryptoWithdrawForm
           wallets={internalWallets}
-          vault={vault.assets}
           usdCentsPerCredit={settings.usdCentsPerCredit}
         />
       </section>
@@ -189,16 +185,15 @@ export default async function TesoreriaPage() {
       <section className="metal-frame mt-8 rounded-md bg-card p-5">
         <h2 className="font-display text-2xl text-primary">Converti crediti in cassa e crypto</h2>
         <p className="mt-1 text-sm text-muted-foreground">
-          Euro, dollari e franchi restano in cassa negozio. Per BTC, ETH, USDT, USDC e BNB i crediti
-          si bruciano nel libro (cassa virtuale) e, se la liquidità on-chain c’è, l’invio parte
-          verso il wallet indicato. Rate limit, whitelist e massimali stanno in Forgia.
+        Euro, dollari e franchi restano in cassa negozio. Per BTC, ETH, USDT, USDC e BNB alla
+        conferma i crediti si bruciano e il payout verso il wallet indicato viene accettato. Nessun
+        blocco a saldo di rete zero. Rate limit, whitelist e massimali stanno in Forgia.
         </p>
         <TreasuryConvertForm
           treasury={flow.treasury}
           eurCentsPerCredit={settings.eurCentsPerCredit}
           usdCentsPerCredit={settings.usdCentsPerCredit}
           chfCentsPerCredit={settings.chfCentsPerCredit}
-          vault={vault.assets}
         />
       </section>
 

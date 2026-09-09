@@ -6,8 +6,6 @@ import { CashoutReceipt } from "@/components/shop/CashoutReceipt";
 import { SubmitButton } from "@/components/forms/SubmitButton";
 import { ErrorBanner, OkBanner } from "@/components/ui/banners";
 import { Input } from "@/components/ui/input";
-import { isShopSendableNetwork } from "@/lib/evm-send";
-import { explorerSearchLabel } from "@/lib/receipt";
 
 export function SettleCashoutForm({
   cashoutId,
@@ -16,7 +14,6 @@ export function SettleCashoutForm({
   walletAddress,
   walletNetwork,
   usdCents,
-  shopAddress,
   initialError,
 }: {
   cashoutId: string;
@@ -25,13 +22,11 @@ export function SettleCashoutForm({
   walletAddress?: string | null;
   walletNetwork?: string | null;
   usdCents?: number;
-  shopAddress?: string | null;
   initialError?: string;
 }) {
   const [state, action] = useActionState(resolveCashoutAction, null as ResolveCashoutState | null);
   const isWallet = payoutKind === "WALLET";
-  const shopSend = isWallet && isShopSendableNetwork(walletNetwork);
-  const closed = Boolean(state?.ok && state.status === "PAID");
+  const closed = Boolean(state?.ok && (state.status === "PAID" || state.status === "QUEUED"));
 
   return (
     <div className="mt-3 space-y-3">
@@ -47,76 +42,35 @@ export function SettleCashoutForm({
           walletNetwork={state?.walletNetwork ?? walletNetwork}
           proofToken={state?.proofToken}
         />
+      ) : isWallet ? (
+        <p className="text-sm text-muted-foreground">
+          Prelievo verso <span className="font-ledger text-foreground">{walletAddress}</span>
+          {usdCents ? ` · ${(usdCents / 100).toFixed(2)} USD in ${walletNetwork}` : ""}.
+          I crediti sono già bruciati. La ricevuta Zecca è sul libro.
+        </p>
       ) : (
-        <>
-          {shopSend ? (
-            <form action={action} className="space-y-2">
-              <input type="hidden" name="cashoutId" value={cashoutId} />
-              <input type="hidden" name="payoutKind" value="WALLET" />
-              {proofToken ? <input type="hidden" name="proofToken" value={proofToken} /> : null}
-              <p className="text-sm text-muted-foreground">
-                Al prelievo il negozio invia verso{" "}
-                <span className="font-ledger text-foreground">{walletAddress}</span>. Trust Wallet,
-                MetaMask o l’exchange ricevono: non firmi. I crediti fissano l’importo; l’hash sulla
-                rete esiste solo se quella crypto è già sulla chain, poi parte da qui.
-                {shopAddress ? (
-                  <>
-                    {" "}
-                    Cassa di rete: <span className="font-ledger">{shopAddress}</span>
-                    {(usdCents ?? 0) > 0
-                      ? ` · ${(usdCents! / 100).toFixed(2)} USD in ${walletNetwork}`
-                      : null}
-                    .
-                  </>
-                ) : null}
-              </p>
-              <SubmitButton size="sm" name="action" value="shopPay" pendingLabel="Invio sulla rete…">
-                Conferma: il negozio invia e genera l’hash
-              </SubmitButton>
-            </form>
-          ) : isWallet ? (
-            <p className="text-sm text-muted-foreground">
-              USDT su Tron non parte da questa cassa. Scegli BTC, ETH, USDT, USDC o BNB.
-            </p>
-          ) : null}
-          <form action={action} noValidate className="space-y-2">
-            <input type="hidden" name="cashoutId" value={cashoutId} />
-            <input type="hidden" name="payoutKind" value={isWallet ? "WALLET" : "IBAN"} />
-            {proofToken ? <input type="hidden" name="proofToken" value={proofToken} /> : null}
-            <input type="hidden" name={isWallet ? "payoutConfirm" : "sepaConfirm"} value="on" />
-            <label className="block text-sm">
-              {isWallet ? "Hash già sulla rete (solo se l’invio è già partito)" : "CRO / riferimento bonifico (ricevuta)"}
-              <Input
-                name="receipt"
-                required={!isWallet}
-                autoComplete="off"
-                className="mt-1 font-ledger"
-                placeholder={
-                  !isWallet
-                    ? "CRO UniCredit o ID Wise, non ZECCA/…"
-                    : walletNetwork === "BTC"
-                      ? "txid Mempool, facoltativo"
-                      : "0x… facoltativo"
-                }
-              />
-            </label>
-            <p className="text-xs text-muted-foreground">
-              {isWallet
-                ? "L’hash lo crea la rete dopo l’invio del negozio. Non lo inventa Zecca e non lo firma chi riceve."
-                : "Deve essere il CRO del bonifico già disposto da te. Zecca non entra in UniCredit né in Wise."}
-            </p>
-            <div className="flex flex-wrap gap-2">
-              {isWallet ? (
-                <SubmitButton size="sm" variant="outline" formNoValidate name="action" value="search">
-                  {explorerSearchLabel(walletNetwork)}
-                </SubmitButton>
-              ) : null}
-              <SubmitButton size="sm" formNoValidate name="action" value="pay" variant={isWallet ? "outline" : "default"}>
-                {isWallet ? "Registra hash e chiudi" : "Registra CRO e chiudi"}
-              </SubmitButton>
-            </div>
-          </form>
-        </>
+        <form action={action} noValidate className="space-y-2">
+          <input type="hidden" name="cashoutId" value={cashoutId} />
+          <input type="hidden" name="payoutKind" value="IBAN" />
+          {proofToken ? <input type="hidden" name="proofToken" value={proofToken} /> : null}
+          <input type="hidden" name="sepaConfirm" value="on" />
+          <label className="block text-sm">
+            CRO / riferimento bonifico (ricevuta)
+            <Input
+              name="receipt"
+              required
+              autoComplete="off"
+              className="mt-1 font-ledger"
+              placeholder="CRO UniCredit o ID Wise, non ZECCA/…"
+            />
+          </label>
+          <p className="text-xs text-muted-foreground">
+            Deve essere il CRO del bonifico già disposto da te. Zecca non entra in UniCredit né in Wise.
+          </p>
+          <SubmitButton size="sm" formNoValidate name="action" value="pay">
+            Registra CRO e chiudi
+          </SubmitButton>
+        </form>
       )}
     </div>
   );

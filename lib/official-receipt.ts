@@ -31,3 +31,8 @@ export function sepaEndToEndId(cashoutId: string, currency: string, at = new Dat
   const day = at.toISOString().slice(0, 10).replaceAll("-", "");
   return `ZECCA/${currency}/${day}/${cashoutId.slice(0, 8).toUpperCase()}`;
 }
+
+export function zeccaSettlementRef(cashoutId: string, network: string, at = new Date()) {
+  const tag = (network || "CRYPTO").replace(/[^A-Z0-9]/gi, "").slice(0, 8).toUpperCase() || "CRYPTO";
+  return sepaEndToEndId(cashoutId, tag, at);
+}

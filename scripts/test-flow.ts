@@ -513,7 +513,7 @@ async function main() {
       where: { type: "TREASURY_CONVERT_TO_CRYPTO", amountCredits: 150 },
     });
     assert.ok(usdtConvert);
-    assert.match(usdtConvert.note ?? "", /cassa di rete USDT/);
+    assert.match(usdtConvert.note ?? "", /USDT/);
     assert.match(usdtConvert.metadata ?? "", /"asset":"USDT"/);
 
     const rejected = await resolveCashout({
@@ -973,6 +973,40 @@ async function main() {
     assert.equal(shopPayoutConfigError("ETH"), null);
     assert.equal(shopPayoutConfigError("BTC"), null);
     assert.match(shopPayoutConfigError("TRX") ?? "", /Tron/);
+
+    await ensureHouseWalletCredits({ userId: aliasUser.id, credits: 16, db });
+    const queuedBtc = await requestAndFulfillCashout({
+      userId: aliasUser.id,
+      role: "ADMIN",
+      credits: 5,
+      payoutKind: "WALLET",
+      walletNetwork: "BTC",
+      walletAddress: "bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4",
+      shopSend: true,
+      db,
+    });
+    assert.equal(queuedBtc.status, "QUEUED");
+    assert.equal(queuedBtc.receiptKind, "QUEUED_FOR_SETTLEMENT");
+    assert.match(queuedBtc.receiptRef ?? "", /^ZECCA\//);
+    assert.equal(queuedBtc.receiptHash?.length, 64);
+    assert.equal(await pocketBalance("USER", aliasUser.id, db), 11);
+    assert.equal(await pocketBalance("ESCROW", aliasUser.id, db), 0);
+
+    const queuedEth = await requestAndFulfillCashout({
+      userId: aliasUser.id,
+      role: "ADMIN",
+      credits: 3,
+      payoutKind: "WALLET",
+      walletNetwork: "ETH",
+      walletAddress: "0x4166ca49529dff2014c2e085143e88fd0d624cf5",
+      shopSend: true,
+      db,
+    });
+    assert.equal(queuedEth.status, "QUEUED");
+    assert.equal(queuedEth.receiptKind, "QUEUED_FOR_SETTLEMENT");
+    assert.equal(await pocketBalance("USER", aliasUser.id, db), 8);
+    assert.equal(await pocketBalance("ESCROW", aliasUser.id, db), 0);
+
     const pendingCrypto = await requestAndFulfillCashout({
       userId: aliasUser.id,
       role: "ADMIN",
@@ -1018,11 +1052,31 @@ async function main() {
     assert.equal(instantCrypto.receiptHash?.length, 64);
     assert.equal(await pocketBalance("USER", aliasUser.id, db), 0);
 
+    await mintCredits({ amount: 40, note: "Coda conversione BTC", actorId: admin.id, db });
+    const queuedConvert = await convertTreasuryAndWithdrawToWallet({
+      actorId: admin.id,
+      creditsCrypto: 25,
+      cryptoAsset: "BTC",
+      walletAddress: "bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4",
+      shopSend: true,
+      db,
+    });
+    assert.ok(queuedConvert.cashout);
+    assert.equal(queuedConvert.cashout.status, "QUEUED");
+    assert.equal(queuedConvert.cashout.receiptKind, "QUEUED_FOR_SETTLEMENT");
+    assert.match(queuedConvert.cashout.receiptRef ?? "", /^ZECCA\//);
+    assert.equal(queuedConvert.cashout.receiptHash?.length, 64);
+    const queuedConvertLedger = await db.ledgerEntry.findFirst({
+      where: { cashoutId: queuedConvert.cashout.id, type: "TREASURY_CRYPTO_WITHDRAW" },
+    });
+    assert.ok(queuedConvertLedger);
+
     console.log("Flusso Zecca: conio → crediti → bottega DHL + ritiro in sede → prelievo IBAN/wallet. OK.");
     console.log("Conversione tesoreria 3000 cr→EUR, 2000 cr→USD e 500 cr→CHF in cassa negozio. OK.");
     console.log("Conversione tesoreria 1000 cr→BTC e 200 cr→ETH in cassa virtuale. OK.");
     console.log("Policy prelievo: checksum EIP-55, whitelist, rate limit, massimali, lock broadcast. OK.");
     console.log("Conversione 150 cr→USDT e prelievo verso wallet del form. OK.");
+    console.log("Prelievo BTC/ETH a saldo rete zero: accettato in coda, crediti bruciati, ricevuta ZECCA. OK.");
     console.log("Bonifico SEPA in ingresso senza Stripe/webhook. OK.");
     console.log("Casa Fornara: generazione senza pagamento + prelievo IBAN EUR/USD/CHF. OK.");
   } finally {

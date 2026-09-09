@@ -1,6 +1,13 @@
 export function isShopSendableNetwork(network: string | null | undefined): boolean {
   const id = (network ?? "").trim().toUpperCase();
-  return id === "ETH" || id === "USDT" || id === "USDC" || id === "BNB" || id === "BTC";
+  return (
+    id === "ETH" ||
+    id === "USDT" ||
+    id === "USDC" ||
+    id === "BNB" ||
+    id === "BTC" ||
+    id === "ZECCA"
+  );
 }
 
 export const EVM_ASSETS: Record<

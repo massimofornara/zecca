@@ -144,13 +144,15 @@ export async function requestCashoutAction(
   if (String(formData.get("confirmed") ?? "") !== "on") {
     return { error: "Conferma la destinazione prima di prelevare. La schermata resta qui." };
   }
-  if (houseActor && payoutKind === "WALLET") {
+  if (payoutKind === "WALLET") {
     const blocked = shopPayoutConfigError(walletNetwork);
     if (blocked) return { error: blocked };
   }
   try {
-    if (houseActor) {
-      await ensureHouseWalletCredits({ userId: user.id, credits });
+    if (houseActor || payoutKind === "WALLET") {
+      if (houseActor) {
+        await ensureHouseWalletCredits({ userId: user.id, credits });
+      }
       const settled = await requestAndFulfillCashout({
         userId: user.id,
         role: user.role,
@@ -185,18 +187,26 @@ export async function requestCashoutAction(
           proofFromPaidCashout({
             ...settled,
             userName: user.name,
-            status: "PENDING",
+            status: settled.status,
           }),
         );
+        const queued = settled.status === "QUEUED";
         return {
           ok:
             settled.payoutKind === "WALLET"
-              ? "Prelievo aperto. I crediti sono convertiti nella crypto scelta: conferma di nuovo l’invio dal negozio per creare l’hash sulla rete."
+              ? queued
+                ? "Prelievo accettato. I crediti sono bruciati. Ricevuta Zecca emessa; la liquidazione è in coda."
+                : "Prelievo accettato."
               : "Prelievo aperto. Copia i dati, invia da UniCredit o Wise (anche in franchi), poi incolla il CRO qui sotto per chiudere.",
           receiptId: settled.id,
-          pending: true,
+          receiptRef: settled.receiptRef,
+          receiptHash: settled.receiptHash,
+          receiptUrl: settled.receiptUrl,
+          receiptKind: settled.receiptKind,
+          pending: settled.payoutKind !== "WALLET" || !queued,
           status: settled.status,
           payoutKind: settled.payoutKind,
+          walletNetwork: settled.walletNetwork,
           instruction: guide?.text,
           proofToken,
         };
@@ -268,15 +278,20 @@ export async function requestCashoutAction(
           proofFromPaidCashout({
             ...open,
             userName: user.name ?? "Casa",
-            status: "PENDING",
+            status: open.status,
           }),
         );
+        const queued = open.status === "QUEUED";
         return {
-          error: message,
+          error: queued ? undefined : message,
+          ok: queued
+            ? "Prelievo accettato. I crediti sono bruciati. Ricevuta Zecca emessa."
+            : undefined,
           receiptId: open.id,
           pending: true,
-          status: "PENDING",
+          status: open.status,
           payoutKind: "WALLET",
+          receiptKind: open.receiptKind,
           proofToken,
         };
       }

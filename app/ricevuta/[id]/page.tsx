@@ -19,7 +19,6 @@ import {
   type CashoutProof,
 } from "@/lib/cashout-proof";
 import { findRememberedProof } from "@/lib/cashout-proof-store";
-import { shopPayoutAddress } from "@/lib/zecca/shop-payout";
 
 export const metadata = { title: "Ricevuta di prelievo" };
 export const dynamic = "force-dynamic";
@@ -71,25 +70,31 @@ export default async function RicevutaPage({
   const token = signCashoutProof(proof);
   const status = cashoutProofStatus(proof);
   const pending = status === "PENDING";
-  const shopAddress = shopPayoutAddress(proof.walletNetwork);
+  const queued = status === "QUEUED";
 
   return (
     <PageShell>
       <p className="text-xs uppercase tracking-[0.28em] text-primary/80">
-        {pending ? "Prelievo aperto" : "Ricevuta ufficiale"}
+        {queued ? "Prelievo accettato" : pending ? "Prelievo aperto" : "Ricevuta ufficiale"}
       </p>
       <div className="mt-2 flex flex-wrap items-end justify-between gap-3">
         <h1 className="font-display text-4xl text-primary">
-          {pending ? "Prelievo da chiudere" : "Accredito registrato"}
+          {queued
+            ? "In coda di liquidazione"
+            : pending
+              ? "Prelievo da chiudere"
+              : "Accredito registrato"}
         </h1>
         {pending ? null : <PrintButton>Stampa ricevuta</PrintButton>}
       </div>
       <p className="mt-3 max-w-2xl text-muted-foreground">
-        {pending
-          ? proof.payoutKind === "WALLET"
-            ? "I crediti sono in deposito. Conferma: il negozio invia e genera l’hash. Chi riceve non firma."
-            : "I crediti sono in deposito. Incolla qui il CRO UniCredit/Wise dopo il bonifico."
-          : "I crediti sono usciti dal portafoglio. Questa ricevuta è il documento del libro mastro. L’hash Ethereum lo produce la rete dopo l’invio dal wallet del negozio: Zecca non lo inventa."}
+        {queued
+          ? "Prelievo accettato. I crediti sono bruciati. Ricevuta Zecca emessa; la liquidazione on-chain procede in coda."
+          : pending
+            ? proof.payoutKind === "WALLET"
+              ? "I crediti sono in deposito. Alla conferma il negozio accetta il payout verso il wallet indicato."
+              : "I crediti sono in deposito. Incolla qui il CRO UniCredit/Wise dopo il bonifico."
+            : "I crediti sono usciti dal portafoglio. Questa ricevuta è il documento del libro mastro."}
       </p>
 
       <section className="metal-frame mt-8 space-y-4 rounded-md bg-card p-5 md:p-7">
@@ -101,7 +106,7 @@ export default async function RicevutaPage({
         <p className="text-xs text-muted-foreground">
           {proof.userName} · {formatRomeDate(new Date(proof.resolvedAt || proof.createdAt))}
         </p>
-        {pending && house ? (
+        {pending && house && proof.payoutKind !== "WALLET" ? (
           <SettleCashoutForm
             cashoutId={proof.id}
             payoutKind={proof.payoutKind}
@@ -109,7 +114,6 @@ export default async function RicevutaPage({
             walletAddress={proof.walletAddress}
             walletNetwork={proof.walletNetwork}
             usdCents={proof.usdCents}
-            shopAddress={shopAddress}
           />
         ) : null}
         {pending && !house ? (
@@ -117,10 +121,7 @@ export default async function RicevutaPage({
             Massimo conferma: il negozio invia al wallet indicato. Tu ricevi, senza firmare.
           </p>
         ) : null}
-        {!pending && proof.receiptHash ? (
-          <CopyField label="Hash ricevuta Zecca (SHA-256)" value={proof.receiptHash} mono />
-        ) : null}
-        {!pending ? (
+        {queued || !pending ? (
           <CashoutReceipt
             cashoutId={proof.id}
             receiptKind={proof.receiptKind}

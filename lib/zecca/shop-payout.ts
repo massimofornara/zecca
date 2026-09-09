@@ -3,26 +3,24 @@ import {
   createPublicClient,
   createWalletClient,
   http,
-  erc20Abi,
   type Address,
   type Hex,
 } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { bsc, mainnet } from "viem/chains";
 import { ZeccaError } from "@/lib/errors";
-import {
-  EVM_ASSETS,
-  encodeErc20Transfer,
-  isShopSendableNetwork,
-  nativeWeiFromUsdCents,
-  tokenAmountFromUsdCents,
-  usdSpotPrice,
-} from "@/lib/evm-send";
+import { isShopSendableNetwork } from "@/lib/evm-send";
 import { explorerUrl } from "@/lib/receipt";
 import { isValidWalletAddress, normalizeWalletAddress } from "@/lib/wallet";
-import { sendShopBtcPayout, shopBtcAddress } from "@/lib/zecca/btc-payout";
+import { sendShopBtcPayout, shopBtcAddress, type ShopCoverage } from "@/lib/zecca/btc-payout";
+import {
+  encodeProprietaryMint,
+  proprietaryMintAmount,
+  proprietaryTokenConfig,
+} from "@/lib/zecca/token-mint";
 
 export { shopBtcAddress };
+export type { ShopCoverage };
 
 export type ShopPayoutResult = {
   hash: string;
@@ -65,13 +63,18 @@ export function shopPayoutAddress(network: string | null | undefined): string | 
   return shopWalletAddress();
 }
 
+export function isEvmPayoutNetwork(network: string | null | undefined) {
+  const id = (network ?? "").trim().toUpperCase();
+  return id === "ETH" || id === "USDT" || id === "USDC" || id === "BNB" || id === "ZECCA";
+}
+
 export function shopPayoutConfigError(network: string | null | undefined): string | null {
   const id = (network ?? "").trim().toUpperCase();
   if (id === "TRX") {
-    return "USDT su Tron non parte dalla cassa Bitcoin/EVM del negozio. Scegli BTC, ETH, USDT, USDC o BNB: i crediti si convertono e chi riceve non firma.";
+    return "USDT su Tron non è un payout del dispenser. Scegli Bitcoin o un indirizzo EVM (MetaMask, Trust Wallet, exchange).";
   }
   if (!isShopSendableNetwork(id)) {
-    return "Il negozio converte i crediti in BTC, ETH, USDT, USDC o BNB e crea l’hash sulla rete. Chi riceve non firma.";
+    return "Scegli BTC, ETH, USDT, USDC, BNB o il token Zecca.";
   }
   return null;
 }
@@ -87,12 +90,91 @@ function chainFor(chainId: number) {
   return chainId === 56 ? bsc : mainnet;
 }
 
-function formatUnits(value: bigint, decimals: number, maxFrac = 6): string {
-  const base = BigInt(10) ** BigInt(decimals);
-  const whole = value / base;
-  const frac = value % base;
-  const fracStr = frac.toString().padStart(decimals, "0").slice(0, maxFrac).replace(/0+$/, "");
-  return fracStr ? `${whole.toString()}.${fracStr}` : whole.toString();
+export type DirectPayoutQuote = {
+  network: string;
+  mode: "TRANSFER" | "MINT" | "QUEUE";
+  shopAddress: string | null;
+  dest: string;
+  usdCents: number;
+  grossLabel: string;
+  feeLabel: string;
+  netLabel: string;
+  message: string;
+};
+
+/** Preventivo di libro: nessuna interrogazione Mempool/RPC, nessun blocco a saldo zero. */
+export function quoteBookPayout(input: {
+  walletAddress: string;
+  walletNetwork: string;
+  usdCents: number;
+}): DirectPayoutQuote {
+  const network = (input.walletNetwork ?? "").trim().toUpperCase();
+  const dest = normalizeWalletAddress(input.walletAddress);
+  const usd = Math.max(0, Math.floor(input.usdCents));
+  const label = `${(usd / 100).toFixed(2)} USD in ${network}`;
+  const evm = isEvmPayoutNetwork(network);
+  const mintReady = Boolean(proprietaryTokenConfig());
+  return {
+    network,
+    mode: evm && mintReady ? "MINT" : "QUEUE",
+    shopAddress: shopPayoutAddress(network),
+    dest,
+    usdCents: usd,
+    grossLabel: label,
+    feeLabel: "commissioni di rete a carico della liquidazione",
+    netLabel: label,
+    message: evm
+      ? mintReady
+        ? "Conferma: i crediti si bruciano e il token Zecca viene coniato sul wallet indicato."
+        : "Conferma: i crediti si bruciano e la richiesta entra in coda di liquidazione con ricevuta Zecca."
+      : "Conferma: i crediti si bruciano e il payout Bitcoin entra in coda di liquidazione, con ricevuta Zecca.",
+  };
+}
+
+/**
+ * Mint del token di protocollo verso il destinatario EVM.
+ * Se il contratto non è configurato o la firma fallisce, torna null:
+ * il chiamante accetta la richiesta in coda, senza eccezione all’utente.
+ */
+export async function tryDirectEvmMint(input: {
+  walletAddress: string;
+  usdCents: number;
+}): Promise<ShopPayoutResult | null> {
+  const token = proprietaryTokenConfig();
+  const key = shopEvmPrivateKey();
+  if (!token || !key) return null;
+
+  const to = normalizeWalletAddress(input.walletAddress) as Address;
+  if (!isValidWalletAddress(to, "ETH")) return null;
+
+  const chain = chainFor(token.chainId);
+  const transport = http(rpcUrl(token.chainId));
+  const account = privateKeyToAccount(key);
+  const publicClient = createPublicClient({ chain, transport });
+  const walletClient = createWalletClient({ account, chain, transport });
+  const amount = proprietaryMintAmount(input.usdCents, token.decimals);
+
+  try {
+    const hash = await walletClient.sendTransaction({
+      to: token.address,
+      data: encodeProprietaryMint(to, amount),
+      account,
+      chain,
+    });
+    try {
+      await publicClient.waitForTransactionReceipt({ hash, timeout: 25_000 });
+    } catch {
+      // Hash già in mempool.
+    }
+    return {
+      hash,
+      explorerUrl: explorerUrl(token.chainId === 56 ? "BNB" : "ETH", hash),
+      shopAddress: account.address,
+      network: "ZECCA",
+    };
+  } catch {
+    return null;
+  }
 }
 
 export async function sendShopCryptoPayout(input: {
@@ -105,109 +187,16 @@ export async function sendShopCryptoPayout(input: {
   if (blocked) {
     throw new ZeccaError(blocked, "UNSUPPORTED_ASSET");
   }
-  if (network === "BTC") {
-    return sendShopBtcPayout({ walletAddress: input.walletAddress, usdCents: input.usdCents });
-  }
-
-  const asset = EVM_ASSETS[network];
-  const key = shopEvmPrivateKey();
-  if (!asset || !key) {
-    throw new ZeccaError(
-      "Il negozio non ha un wallet di rete da cui convertire i crediti in crypto.",
-      "MISSING_SHOP_KEY",
-    );
-  }
-
-  const to = normalizeWalletAddress(input.walletAddress) as Address;
-  if (!isValidWalletAddress(to, network)) {
-    throw new ZeccaError("Indirizzo di destinazione non valido.", "INVALID_WALLET");
-  }
-
-  const chain = chainFor(asset.chainId);
-  const transport = http(rpcUrl(asset.chainId));
-  const account = privateKeyToAccount(key);
-  const publicClient = createPublicClient({ chain, transport });
-  const walletClient = createWalletClient({ account, chain, transport });
-  const shopAddress = account.address;
-
-  let hash: `0x${string}`;
-  try {
-    if (asset.native) {
-      const ticker = network === "BNB" ? "BNB" : "ETH";
-      const price = await usdSpotPrice(ticker);
-      const value = nativeWeiFromUsdCents(input.usdCents, price, asset.decimals);
-      const balance = await publicClient.getBalance({ address: shopAddress });
-      if (balance < value) {
-        throw new ZeccaError(
-          `I crediti sono convertiti in circa ${formatUnits(value, asset.decimals)} ${ticker}, ma sulla rete il negozio (${shopAddress}) non ha ancora quella quantità più il gas. Senza quel saldo Etherscan non può avere un hash: i crediti del libro non sono ether. Dopo il carico, conferma di nuovo.`,
-          "INSUFFICIENT_SHOP_FUNDS",
-        );
-      }
-      hash = await walletClient.sendTransaction({ to, value, account, chain });
-    } else {
-      const token = asset.token!;
-      const amount = tokenAmountFromUsdCents(input.usdCents, asset.decimals);
-      const tokenBalance = (await publicClient.readContract({
-        address: token,
-        abi: erc20Abi,
-        functionName: "balanceOf",
-        args: [shopAddress],
-      })) as bigint;
-      if (tokenBalance < amount) {
-        throw new ZeccaError(
-          `I crediti sono convertiti in ${formatUnits(amount, asset.decimals)} ${network}, ma sulla rete il negozio (${shopAddress}) non ha ancora quei token più ETH per il gas. Senza quel saldo non nasce l’hash su Etherscan. Dopo il carico, conferma di nuovo.`,
-          "INSUFFICIENT_SHOP_FUNDS",
-        );
-      }
-      const gasBal = await publicClient.getBalance({ address: shopAddress });
-      if (gasBal === BigInt(0)) {
-        throw new ZeccaError(
-          `I crediti sono convertiti in ${network}, ma il negozio (${shopAddress}) non ha ETH per il gas. Senza gas la rete non crea l’hash.`,
-          "INSUFFICIENT_SHOP_FUNDS",
-        );
-      }
-      hash = await walletClient.sendTransaction({
-        to: token,
-        data: encodeErc20Transfer(to, amount),
-        account,
-        chain,
-      });
-    }
-  } catch (error) {
-    if (error instanceof ZeccaError) throw error;
-    const msg = error instanceof Error ? error.message : String(error);
-    if (/insufficient funds|exceeds the balance|exceeds balance/i.test(msg)) {
-      throw new ZeccaError(
-        `I crediti sono convertiti, ma sulla rete il negozio (${shopAddress}) non ha saldo sufficiente per creare l’hash. Chi riceve non deve firmare.`,
-        "INSUFFICIENT_SHOP_FUNDS",
-      );
-    }
-    throw new ZeccaError(
-      `Conversione inviata alla rete non riuscita: ${msg}. Destinazione ${shopAddress}.`,
-      "SHOP_SEND_FAILED",
-    );
-  }
-
-  try {
-    const receipt = await publicClient.waitForTransactionReceipt({
-      hash,
-      timeout: 25_000,
+  if (isEvmPayoutNetwork(network)) {
+    const minted = await tryDirectEvmMint({
+      walletAddress: input.walletAddress,
+      usdCents: input.usdCents,
     });
-    if (receipt.status === "reverted") {
-      throw new ZeccaError(
-        `La transazione ${hash} è stata rifiutata dalla rete. Il prelievo resta aperto.`,
-        "SHOP_SEND_FAILED",
-      );
-    }
-  } catch (error) {
-    if (error instanceof ZeccaError) throw error;
-    // Hash già broadcast: in mempool arriva in pochi secondi anche se questa lambda non aspetta il blocco.
+    if (minted) return minted;
+    throw new ZeccaError(
+      "Mint non eseguito in questo passo: la richiesta resta in coda di liquidazione.",
+      "MINT_DEFERRED",
+    );
   }
-
-  return {
-    hash,
-    explorerUrl: explorerUrl(network, hash),
-    shopAddress,
-    network,
-  };
+  return sendShopBtcPayout({ walletAddress: input.walletAddress, usdCents: input.usdCents });
 }

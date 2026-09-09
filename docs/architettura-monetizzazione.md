@@ -135,7 +135,7 @@ Il burn dei crediti **non** può originare un ingresso on-chain (nessun UTXO o e
 [Transazione on-chain di uscita] → MetaMask / Trust Wallet / CEX
 ```
 
-L’unica tx che Mempool o Etherscan riconoscono è il **payout**, attinto dalla liquidità già presente sul wallet operativo. Convertire crediti non dipinge saldi sugli explorer e non salta il controllo di cassa a zero.
+L’unica tx che Mempool o Etherscan riconoscono è il **payout** successivo, se e quando la liquidazione on-chain viene eseguita. Convertire crediti **non** richiede saldo preventivo sul wallet operativo: alla conferma i crediti si bruciano e la richiesta è **ACCETTATA / IN CODA DI LIQUIDAZIONE**, con ricevuta interna `ZECCA/…`. Su EVM, se è configurato il contratto Zecca, il mint avviene verso il wallet del cliente.
 
 Policy sul gateway (`lib/zecca/withdraw-policy.ts`, regolabili in Forgia): checksum EIP-55, whitelist opzionale, massimale per invio e giornaliero, tetto di uscite per ora, lock atomico `BROADCASTING` contro il doppio click.
 

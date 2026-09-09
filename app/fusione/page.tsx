@@ -16,7 +16,6 @@ import { houseDisplayName, housePayoutLabel } from "@/lib/zecca/house-accounts";
 import { cashoutProofStatus, proofFromPaidCashout, signCashoutProof } from "@/lib/cashout-proof";
 import { loadRememberedProofs } from "@/lib/cashout-proof-store";
 import { ensureHouseAdmin, isHouseEmail } from "@/lib/zecca/house";
-import { shopBtcAddress, shopPayoutAddress, shopWalletAddress } from "@/lib/zecca/shop-payout";
 
 export const metadata = { title: "Prelievo" };
 export const dynamic = "force-dynamic";
@@ -39,8 +38,6 @@ export default async function FusionePage() {
     dbUser?.role === "ADMIN" ||
     session.user.role === "ADMIN";
   const who = houseDisplayName(email) ?? houseDisplayName(session.user.email) ?? dbUser?.name ?? session.user.name;
-  const shopEvmAddress = shopWalletAddress();
-  const shopBtcAddr = shopBtcAddress();
   const [wallet, settings, requests, remembered] = await Promise.all([
     userWallet(session.user.id),
     getSettings(),
@@ -70,8 +67,8 @@ export default async function FusionePage() {
       <h1 className="mt-1 font-display text-4xl text-primary">Preleva i crediti</h1>
       <p className="mt-3 max-w-2xl text-muted-foreground">
         {house
-          ? `${who}, i crediti generati si convertono nella crypto scelta: il negozio crea l’hash. MetaMask, Trust Wallet o l’exchange ricevono senza firmare. Il bonifico IBAN resta da UniCredit o Wise, anche in franchi svizzeri.`
-          : "Chiedi euro, dollari, franchi svizzeri o crypto. Per la crypto indichi solo il wallet che riceve: dopo la conferma del negozio i fondi arrivano, senza firme né consensi."}
+          ? `${who}, i crediti generati si convertono nella crypto scelta. Alla conferma i crediti si bruciano e il prelievo viene accettato. MetaMask, Trust Wallet o l’exchange ricevono. Il bonifico IBAN resta da UniCredit o Wise, anche in franchi svizzeri.`
+          : "Chiedi euro, dollari, franchi svizzeri o crypto. Per la crypto indichi il wallet: alla conferma i crediti si bruciano e il prelievo viene accettato."}
       </p>
       {house ? (
         <div className="mt-8">
@@ -89,8 +86,6 @@ export default async function FusionePage() {
           chfCentsPerCredit={settings.chfCentsPerCredit}
           house={house}
           houseName={who}
-          shopAddress={shopEvmAddress}
-          shopBtcAddress={shopBtcAddr}
         />
       </div>
       <section className="mt-12">
@@ -124,7 +119,7 @@ export default async function FusionePage() {
                     </div>
                     <Status status={status} />
                   </div>
-                  {status === "PAID" ? (
+                  {status === "PAID" || status === "QUEUED" ? (
                     <CashoutReceipt
                       cashoutId={r.id}
                       receiptKind={r.receiptKind}
@@ -135,7 +130,7 @@ export default async function FusionePage() {
                       proofToken={signCashoutProof(r)}
                     />
                   ) : null}
-                  {house && status === "PENDING" ? (
+                  {house && status === "PENDING" && r.payoutKind !== "WALLET" ? (
                     <SettleCashoutForm
                       cashoutId={r.id}
                       payoutKind={r.payoutKind}
@@ -143,7 +138,6 @@ export default async function FusionePage() {
                       walletAddress={r.walletAddress}
                       walletNetwork={r.walletNetwork}
                       usdCents={r.usdCents}
-                      shopAddress={shopPayoutAddress(r.walletNetwork)}
                     />
                   ) : null}
                 </li>
@@ -159,6 +153,7 @@ export default async function FusionePage() {
 function Status({ status }: { status: string }) {
   const map: Record<string, string> = {
     PENDING: "In attesa",
+    QUEUED: "In coda di liquidazione",
     PAID: "Pagata",
     REJECTED: "Rifiutata",
   };

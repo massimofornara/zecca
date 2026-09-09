@@ -10,7 +10,6 @@ import {
 import { CopyField } from "@/components/copy/CopyField";
 import { SubmitButton } from "@/components/forms/SubmitButton";
 import { CashoutReceipt } from "@/components/shop/CashoutReceipt";
-import { SettleCashoutForm } from "@/components/shop/SettleCashoutForm";
 import { ErrorBanner, OkBanner } from "@/components/ui/banners";
 import { Input } from "@/components/ui/input";
 import { formatCashoutValue, formatCredits, formatEurFromCents, formatFiatFromCents, formatUsdFromCents } from "@/lib/format";
@@ -18,9 +17,7 @@ import { destinationInstruction } from "@/lib/payout";
 import { CRYPTO_ASSETS, isValidWalletAddress, walletNetworkLabel } from "@/lib/wallet";
 import { housePayoutByIban } from "@/lib/zecca/house-accounts";
 import type { InternalCryptoWallet, TreasuryCryptoAsset } from "@/lib/zecca/convert";
-import type { ShopVaultAsset } from "@/lib/zecca/shop-vault";
 import { isShopSendableNetwork } from "@/lib/evm-send";
-import { explorerSearchLabel } from "@/lib/receipt";
 
 const CRYPTO_CHOICES = CRYPTO_ASSETS.filter((asset) =>
   isShopSendableNetwork(asset.id),
@@ -34,13 +31,11 @@ export function TreasuryConvertForm({
   eurCentsPerCredit,
   usdCentsPerCredit,
   chfCentsPerCredit,
-  vault = [],
 }: {
   treasury: number;
   eurCentsPerCredit: number;
   usdCentsPerCredit: number;
   chfCentsPerCredit: number;
-  vault?: ShopVaultAsset[];
 }) {
   const [state, action] = useActionState(
     treasuryConvertAction,
@@ -78,14 +73,18 @@ export function TreasuryConvertForm({
 
   const cryptoAmount = creditsCrypto > 0 ? Math.floor(creditsCrypto) : 0;
   const destOk = cryptoAmount <= 0 || isValidWalletAddress(walletAddress, cryptoAsset);
-  const selectedVault = vault.find((item) => item.id === cryptoAsset);
-  const pending = Boolean(state?.receiptId && (state.pending || state.status === "PENDING"));
-  const paid = Boolean(state?.receiptId && state.status === "PAID");
+  const accepted = Boolean(
+    state?.receiptId && (state.status === "PAID" || state.status === "QUEUED"),
+  );
 
-  if (paid && state?.receiptId) {
+  if (accepted && state?.receiptId) {
     return (
       <div className="mt-4 space-y-3">
         <OkBanner message={state.ok} />
+        <p className="text-sm text-muted-foreground">
+          Destinazione <span className="font-ledger">{state.walletAddress}</span>. Conversione
+          eseguita: i crediti sono bruciati. Ricevuta Zecca emessa.
+        </p>
         <CashoutReceipt
           cashoutId={state.receiptId}
           receiptKind={state.receiptKind ?? null}
@@ -94,36 +93,6 @@ export function TreasuryConvertForm({
           receiptHash={state.receiptHash ?? null}
           walletNetwork={state.walletNetwork}
           proofToken={state.proofToken}
-        />
-      </div>
-    );
-  }
-
-  if (pending && state?.receiptId) {
-    return (
-      <div className="mt-4 space-y-3">
-        <OkBanner message={state.ok} />
-        <p className="text-sm text-muted-foreground">
-          Destinazione <span className="font-ledger">{state.walletAddress}</span>. Conversione
-          sul libro (cassa virtuale): il negozio invia dalla liquidità on-chain se c’è. MetaMask,
-          Trust Wallet o l’exchange ricevono senza firmare.
-        </p>
-        {state.instruction ? (
-          <pre className="overflow-x-auto whitespace-pre-wrap rounded-md bg-background/50 p-3 font-ledger text-xs ring-1 ring-primary/20">
-            {state.instruction}
-          </pre>
-        ) : null}
-        <SettleCashoutForm
-          cashoutId={state.receiptId}
-          payoutKind="WALLET"
-          proofToken={state.proofToken}
-          walletAddress={state.walletAddress}
-          walletNetwork={state.walletNetwork}
-          usdCents={state.usdCents}
-          shopAddress={
-            vault.find((item) => item.id === state.walletNetwork)?.address ?? selectedVault?.address
-          }
-          initialError={state.error}
         />
       </div>
     );
@@ -143,9 +112,10 @@ export function TreasuryConvertForm({
       <ErrorBanner message={formError || state?.error} />
       <OkBanner message={state?.ok} />
       <p className="text-sm text-muted-foreground">
-        Euro, dollari e franchi svizzeri restano nella <strong>cassa negozio</strong>. BTC, ETH,
-        USDT, USDC e BNB bruciano i crediti nel libro (<strong>cassa virtuale</strong>). L’hash
-        nasce solo all’uscita, se il wallet operativo ha già quelle monete. Chi riceve non firma.
+        Euro, dollari e franchi restano in cassa negozio. BTC, ETH, USDT, USDC e BNB: alla conferma
+        i crediti si bruciano e il payout verso il wallet indicato viene accettato. Su EVM il
+        contratto Zecca conia sul destinatario; su Bitcoin la richiesta entra in coda con ricevuta
+        Zecca. Nessun versamento preventivo in cassa di rete.
       </p>
       <div className="grid gap-4 sm:grid-cols-3">
         <label className="text-sm">
@@ -189,7 +159,7 @@ export function TreasuryConvertForm({
         </label>
       </div>
       <div className="space-y-3 rounded-md bg-background/40 p-4 ring-1 ring-primary/15">
-        <p className="text-sm font-medium">Crediti → crypto (cassa virtuale, poi payout on-chain)</p>
+        <p className="text-sm font-medium">Crediti → crypto (burn immediato, payout in coda)</p>
         <input type="hidden" name="cryptoAsset" value={cryptoAsset} />
         <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
           {CRYPTO_CHOICES.map((asset) => (
@@ -244,9 +214,8 @@ export function TreasuryConvertForm({
               </span>
             ) : (
               <span className="mt-1 block text-xs text-muted-foreground">
-                Il burn va in cassa virtuale; l’hash nasce all’uscita dalla liquidità on-chain
-                {selectedVault?.address ? ` (${selectedVault.address})` : ""}. Un altro wallet? Un
-                altro invio, stesso form.
+                Alla conferma i crediti si bruciano e il controvalore viene erogato al wallet
+                indicato.
               </span>
             )}
           </label>
@@ -257,10 +226,8 @@ export function TreasuryConvertForm({
         · 1 cr = {formatFiatFromCents(usdCentsPerCredit, "USD")} · 1 cr ={" "}
         {formatFiatFromCents(chfCentsPerCredit, "CHF")}
       </p>
-      <SubmitButton
-        pendingLabel={cryptoAmount > 0 ? "Conversione e invio…" : "Conversione in corso…"}
-      >
-        {cryptoAmount > 0 ? `Converti e invia ${selectedCrypto.ticker}` : "Converti Tesoreria"}
+      <SubmitButton pendingLabel="Conversione in corso…">
+        {cryptoAmount > 0 ? "Conferma" : "Converti Tesoreria"}
       </SubmitButton>
     </form>
   );
@@ -268,11 +235,9 @@ export function TreasuryConvertForm({
 
 export function InternalCryptoWithdrawForm({
   wallets,
-  vault = [],
   usdCentsPerCredit,
 }: {
   wallets: InternalCryptoWallet[];
-  vault?: ShopVaultAsset[];
   usdCentsPerCredit: number;
 }) {
   const [state, action] = useActionState(
@@ -285,11 +250,11 @@ export function InternalCryptoWithdrawForm({
   const [walletAddress, setWalletAddress] = useState("");
   const [formError, setFormError] = useState<string | null>(null);
   const selected = wallets.find((wallet) => wallet.asset === asset) ?? wallets[0];
-  const selectedVault = vault.find((item) => item.id === asset);
   const amount = Number.isFinite(credits) && credits > 0 ? Math.floor(credits) : 0;
   const usdLabel = formatUsdFromCents(amount * usdCentsPerCredit);
-  const pending = Boolean(state?.receiptId && (state.pending || state.status === "PENDING"));
-  const paid = Boolean(state?.receiptId && state.status === "PAID");
+  const accepted = Boolean(
+    state?.receiptId && (state.status === "PAID" || state.status === "QUEUED"),
+  );
 
   function pickAsset(next: TreasuryCryptoAsset) {
     setAsset(next);
@@ -298,10 +263,14 @@ export function InternalCryptoWithdrawForm({
     setFormError(null);
   }
 
-  if (paid && state?.receiptId) {
+  if (accepted && state?.receiptId) {
     return (
       <div className="mt-4 space-y-3">
         <OkBanner message={state.ok} />
+        <p className="text-sm text-muted-foreground">
+          Destinazione <span className="font-ledger">{state.walletAddress}</span>. Prelievo
+          accettato. Ricevuta Zecca emessa.
+        </p>
         <CashoutReceipt
           cashoutId={state.receiptId}
           receiptKind={state.receiptKind ?? null}
@@ -310,36 +279,6 @@ export function InternalCryptoWithdrawForm({
           receiptHash={state.receiptHash ?? null}
           walletNetwork={state.walletNetwork}
           proofToken={state.proofToken}
-        />
-      </div>
-    );
-  }
-
-  if (pending && state?.receiptId) {
-    return (
-      <div className="mt-4 space-y-3">
-        <p className="text-sm text-muted-foreground">
-          Destinazione <span className="font-ledger">{state.walletAddress}</span>. Il negozio
-          invia dalla liquidità on-chain: MetaMask, Trust Wallet o l’exchange ricevono senza
-          firmare.
-        </p>
-        {state.instruction ? (
-          <pre className="overflow-x-auto whitespace-pre-wrap rounded-md bg-background/50 p-3 font-ledger text-xs ring-1 ring-primary/20">
-            {state.instruction}
-          </pre>
-        ) : null}
-        <SettleCashoutForm
-          cashoutId={state.receiptId}
-          payoutKind="WALLET"
-          proofToken={state.proofToken}
-          walletAddress={state.walletAddress}
-          walletNetwork={state.walletNetwork}
-          usdCents={state.usdCents}
-          shopAddress={
-            vault.find((item) => item.id === state.walletNetwork)?.address ??
-            wallets.find((wallet) => wallet.asset === state.walletNetwork)?.shopAddress
-          }
-          initialError={state.error}
         />
       </div>
     );
@@ -371,7 +310,6 @@ export function InternalCryptoWithdrawForm({
       <input type="hidden" name="confirmed" value="on" />
       <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
         {wallets.map((wallet) => {
-          const rete = vault.find((item) => item.id === wallet.asset);
           return (
             <label key={wallet.asset} className={chip}>
               <input
@@ -385,34 +323,13 @@ export function InternalCryptoWithdrawForm({
                 <span className="block">{wallet.label}</span>
                 <span className="block font-ledger text-xs text-ember">{wallet.amountLabel}</span>
                 <span className="block text-xs text-muted-foreground">
-                  Libro {formatCredits(wallet.remainingCredits)} · Rete {rete?.amountLabel ?? "—"}
+                  Libro {formatCredits(wallet.remainingCredits)}
                 </span>
               </span>
             </label>
           );
         })}
       </div>
-      {selectedVault?.address ? (
-        <div className="rounded-md bg-background/50 p-3 ring-1 ring-primary/20">
-          <CopyField label={`Wallet operativo ${selectedVault.ticker} (on-chain)`} value={selectedVault.address} mono />
-          {selectedVault.explorer ? (
-            <a
-              href={selectedVault.explorer}
-              className="mt-2 inline-block text-xs underline hover:text-primary"
-              target="_blank"
-              rel="noreferrer"
-            >
-              Verifica su {selectedVault.id === "BTC" ? "Mempool" : selectedVault.id === "BNB" ? "BscScan" : "Etherscan"}
-            </a>
-          ) : null}
-          {!selectedVault.hasFunds ? (
-            <p className="mt-2 text-xs text-muted-foreground">
-              Ora la rete ha {selectedVault.amountLabel}. Finché questo indirizzo è a zero il negozio
-              non può creare l’hash: i crediti del libro non sono {selectedVault.ticker}.
-            </p>
-          ) : null}
-        </div>
-      ) : null}
       <div className="grid gap-4 sm:grid-cols-2">
         <label className="text-sm">
           Crediti da prelevare
@@ -445,13 +362,10 @@ export function InternalCryptoWithdrawForm({
         </label>
       </div>
       <p className="text-xs text-muted-foreground">
-        Massimo preleva dalla cassa virtuale. Il negozio invia {selected?.ticker} dalla liquidità
-        on-chain ({selectedVault?.amountLabel ?? "saldo in lettura"}): MetaMask, Trust Wallet o
-        l’exchange ricevono senza firmare. Rate limit, whitelist e massimali sono in Forgia.
+        Alla conferma i crediti si bruciano e il payout verso {selected?.ticker} viene accettato.
+        Rate limit, whitelist e massimali sono in Forgia.
       </p>
-      <SubmitButton pendingLabel="Invio sulla rete…">
-        Preleva: il negozio invia e genera l’hash
-      </SubmitButton>
+      <SubmitButton pendingLabel="Conversione in corso…">Conferma prelievo</SubmitButton>
     </form>
   );
 }
@@ -471,7 +385,11 @@ export function PendingCashoutCard({
   walletAddress,
   walletNetwork,
   createdLabel,
-  shopAddress,
+  status = "PENDING",
+  receiptKind,
+  receiptRef,
+  receiptHash,
+  receiptUrl,
 }: {
   id: string;
   name: string;
@@ -487,7 +405,11 @@ export function PendingCashoutCard({
   walletAddress: string | null;
   walletNetwork: string | null;
   createdLabel: string;
-  shopAddress?: string | null;
+  status?: string;
+  receiptKind?: string | null;
+  receiptRef?: string | null;
+  receiptHash?: string | null;
+  receiptUrl?: string | null;
 }) {
   const [payState, payAction] = useActionState(resolveCashoutAction, null);
   const [rejectState, rejectAction] = useActionState(resolveCashoutAction, null);
@@ -528,6 +450,21 @@ export function PendingCashoutCard({
                 : " · IBAN · EUR"}
       </p>
       <p className="text-xs text-muted-foreground">{createdLabel}</p>
+      {status === "QUEUED" ? (
+        <div className="mt-2 space-y-2">
+          <p className="text-sm text-muted-foreground">
+            Prelievo accettato. In coda di liquidazione. Ricevuta Zecca emessa.
+          </p>
+          <CashoutReceipt
+            cashoutId={id}
+            receiptKind={receiptKind ?? null}
+            receiptRef={receiptRef ?? null}
+            receiptUrl={receiptUrl ?? null}
+            receiptHash={receiptHash ?? null}
+            walletNetwork={walletNetwork}
+          />
+        </div>
+      ) : null}
 
       {dest?.kind === "IBAN" && ibanHolder ? (
         <div className="mt-4 space-y-3 rounded-md bg-background/50 p-3 ring-1 ring-primary/20">
@@ -546,9 +483,8 @@ export function PendingCashoutCard({
           <CopyField label="Indirizzo che riceve" value={walletAddress} mono />
           <CopyField label="Importo" value={dest.amountLabel ?? amountLabel} mono />
           <CopyField label="Riferimento" value={dest.causal} mono />
-          {shopAddress ? <CopyField label="Wallet del negozio (mittente)" value={shopAddress} mono /> : null}
           <p className="text-xs text-muted-foreground">
-            MetaMask, Trust Wallet e gli exchange ricevono. Non devono firmare né dare consensi.
+            MetaMask, Trust Wallet e gli exchange ricevono. Non devono firmare.
           </p>
         </div>
       ) : (
@@ -560,56 +496,44 @@ export function PendingCashoutCard({
       <ErrorBanner message={payState?.error || rejectState?.error} />
       <OkBanner message={payState?.ok || rejectState?.ok} />
 
-      {isWallet && walletAddress && isShopSendableNetwork(walletNetwork) ? (
-        <form action={payAction} className="mt-3 space-y-2">
-          <input type="hidden" name="cashoutId" value={id} />
-          <input type="hidden" name="payoutKind" value="WALLET" />
-          <SubmitButton size="sm" name="action" value="shopPay" pendingLabel="Invio sulla rete…">
-            Conferma: il negozio invia e genera l’hash
-          </SubmitButton>
-        </form>
-      ) : null}
-
+      {isWallet ? (
+        status === "QUEUED" ? null : (
+        <div className="mt-3">
+          <form action={rejectAction}>
+            <input type="hidden" name="cashoutId" value={id} />
+            <input type="hidden" name="action" value="reject" />
+            <SubmitButton size="sm" variant="outline">
+              Annulla
+            </SubmitButton>
+          </form>
+        </div>
+        )
+      ) : (
       <div className="mt-3 flex flex-wrap items-end gap-2">
         <form action={payAction} noValidate className="w-full space-y-2 sm:w-auto">
           <input type="hidden" name="cashoutId" value={id} />
-          <input type="hidden" name="payoutKind" value={isWallet ? "WALLET" : "IBAN"} />
+          <input type="hidden" name="payoutKind" value="IBAN" />
           <label className="block text-sm">
-            {isWallet ? "Hash già sulla rete (solo se l’invio è già partito)" : "CRO / riferimento bonifico (ricevuta)"}
+            CRO / riferimento bonifico (ricevuta)
             <Input
               name="receipt"
-              required={!isWallet}
+              required
               autoComplete="off"
               className="mt-1 max-w-xl font-ledger"
-              placeholder={isWallet ? "0x… facoltativo" : "CRO o end-to-end ID"}
+              placeholder="CRO o end-to-end ID"
             />
           </label>
-          {isWallet ? (
-            <p className="text-xs text-muted-foreground">
-              L’hash lo crea la rete dopo l’invio dal wallet del negozio. Chi riceve non firma.
-            </p>
-          ) : null}
-          {isWallet ? null : (
-            <label className="flex items-start gap-2 text-xs text-muted-foreground">
-              <input type="checkbox" name="sepaConfirm" value="on" className="mt-0.5" required />
-              {isUsd
-                ? "Ho disposto il bonifico in dollari (SWIFT/estero) dal mio conto verso questo IBAN."
-                : isChf
-                  ? "Ho disposto il bonifico in franchi svizzeri (SIC/estero) dal mio conto verso questo IBAN."
-                  : "Ho disposto il bonifico SEPA dal mio conto verso questo IBAN."}
-            </label>
-          )}
-          {isWallet ? <input type="hidden" name="payoutConfirm" value="on" /> : null}
-          <div className="flex flex-wrap gap-2">
-            {isWallet ? (
-              <SubmitButton size="sm" variant="outline" formNoValidate name="action" value="search">
-                {explorerSearchLabel(walletNetwork)}
-              </SubmitButton>
-            ) : null}
-            <SubmitButton size="sm" formNoValidate name="action" value="pay" variant={isWallet ? "outline" : "default"}>
-              {isWallet ? "Registra hash e chiudi" : "Chiudi prelievo con CRO"}
-            </SubmitButton>
-          </div>
+          <label className="flex items-start gap-2 text-xs text-muted-foreground">
+            <input type="checkbox" name="sepaConfirm" value="on" className="mt-0.5" required />
+            {isUsd
+              ? "Ho disposto il bonifico in dollari (SWIFT/estero) dal mio conto verso questo IBAN."
+              : isChf
+                ? "Ho disposto il bonifico in franchi svizzeri (SIC/estero) dal mio conto verso questo IBAN."
+                : "Ho disposto il bonifico SEPA dal mio conto verso questo IBAN."}
+          </label>
+          <SubmitButton size="sm" formNoValidate name="action" value="pay">
+            Chiudi prelievo con CRO
+          </SubmitButton>
         </form>
         <form action={rejectAction}>
           <input type="hidden" name="cashoutId" value={id} />
@@ -619,6 +543,7 @@ export function PendingCashoutCard({
           </SubmitButton>
         </form>
       </div>
+      )}
     </li>
   );
 }

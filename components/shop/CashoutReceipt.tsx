@@ -28,6 +28,11 @@ export function CashoutReceipt({
         <p className="text-xs text-ember">
           Hash di rete verificato. Aprilo sugli explorer: è visibile solo se la transazione è già confermata.
         </p>
+      ) : receiptKind === "QUEUED_FOR_SETTLEMENT" ? (
+        <p className="text-xs text-muted-foreground">
+          Prelievo accettato. I crediti sono bruciati sul libro. Questa è la ricevuta interna della
+          Zecca; la liquidazione on-chain procede in coda.
+        </p>
       ) : (
         <p className="text-xs text-muted-foreground">
           Ricevuta del libro mastro. Non è un accredito UniCredit o Wise: gli euro arrivano solo se il bonifico è

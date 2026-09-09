@@ -6,9 +6,13 @@ import { normalizeWalletAddress } from "@/lib/wallet";
 import { getSettings } from "@/lib/zecca/settings";
 
 /** Sentinel su CashoutRequest.receiptKind mentre il nodo sta firmando. Non è un hash di rete. */
-export const WITHDRAW_BROADCASTING = "BROADCASTING";
+export const WITHDRAW_BROADCASTING = "PENDING_BROADCAST";
 
-const EVM_NETWORKS = new Set(["ETH", "USDT", "USDC", "BNB"]);
+export function isBroadcastLock(kind: string | null | undefined) {
+  return kind === WITHDRAW_BROADCASTING || kind === "BROADCASTING";
+}
+
+const EVM_NETWORKS = new Set(["ETH", "USDT", "USDC", "BNB", "ZECCA"]);
 
 function usdLabel(cents: number) {
   return (cents / 100).toLocaleString("it-IT", {
@@ -87,7 +91,7 @@ export async function assertWithdrawPolicy(input: {
 
   const sinceHour = new Date(Date.now() - 60 * 60 * 1000);
   const sinceDay = new Date(Date.now() - 24 * 60 * 60 * 1000);
-  const openStatuses: CashoutStatus[] = ["PENDING", "PAID"];
+  const openStatuses: CashoutStatus[] = ["PENDING", "QUEUED", "PAID"];
   const openWallet: Prisma.CashoutRequestWhereInput = {
     payoutKind: "WALLET",
     status: { in: openStatuses },

@@ -28,8 +28,6 @@ export function CashoutForm({
   chfCentsPerCredit,
   house = false,
   houseName,
-  shopAddress,
-  shopBtcAddress,
 }: {
   available: number;
   percent?: number;
@@ -38,8 +36,6 @@ export function CashoutForm({
   chfCentsPerCredit: number;
   house?: boolean;
   houseName?: string | null;
-  shopAddress?: string | null;
-  shopBtcAddress?: string | null;
 }) {
   const [state, action] = useActionState(requestCashoutAction, null as CashoutActionState | null);
   const [phase, setPhase] = useState<"edit" | "confirm">("edit");
@@ -75,7 +71,8 @@ export function CashoutForm({
       state.receiptId !== dismissedId &&
       (!state.error || state.pending),
   );
-  const pending = Boolean(done && (state?.pending || state?.status === "PENDING"));
+  const queued = Boolean(done && (state?.status === "QUEUED" || state?.receiptKind === "QUEUED_FOR_SETTLEMENT"));
+  const pending = Boolean(done && !queued && (state?.pending || state?.status === "PENDING"));
 
   function pickCurrency(next: FiatCurrency) {
     setCurrency(next);
@@ -103,14 +100,16 @@ export function CashoutForm({
         <ErrorBanner message={pending && house ? undefined : state.error} />
         <OkBanner message={state.ok} />
         <h2 className="font-display text-2xl text-primary">
-          {pending ? "Prelievo aperto" : "Prelievo registrato"}
+          {queued ? "Prelievo accettato" : pending ? "Prelievo aperto" : "Prelievo registrato"}
         </h2>
         <p className="text-sm text-muted-foreground">
-          {pending
+          {queued
+            ? "I crediti sono bruciati. È stata emessa la ricevuta Zecca. La liquidazione on-chain è in coda."
+            : pending
             ? payoutKind === "WALLET"
-              ? "I crediti sono convertiti nel libro (cassa virtuale). L’hash su Mempool o Etherscan nasce solo all’uscita, se il wallet operativo ha già quelle monete: chi riceve non firma."
+              ? "I crediti sono bruciati. La ricevuta Zecca è sul libro."
               : "La richiesta è attiva. Copia i dati, invia da banca, poi incolla il CRO qui sotto per chiuderla."
-            : "CRO o hash sotto chiudono il prelievo nel libro. L’hash crypto lo crea la rete dopo l’invio del negozio."}
+            : "CRO sotto chiude il prelievo nel libro."}
         </p>
         <p className="font-ledger text-xl text-ember">
           {formatCredits(amount)} → {preview}
@@ -120,7 +119,17 @@ export function CashoutForm({
             {state.instruction}
           </pre>
         ) : null}
-        {pending ? (
+        {queued ? (
+          <CashoutReceipt
+            cashoutId={state.receiptId}
+            receiptKind={state.receiptKind ?? null}
+            receiptRef={state.receiptRef ?? null}
+            receiptUrl={state.receiptUrl ?? null}
+            receiptHash={state.receiptHash ?? null}
+            walletNetwork={state.walletNetwork}
+            proofToken={state.proofToken}
+          />
+        ) : pending ? (
           <>
             <p className="text-sm text-muted-foreground">
               Chiudi il prelievo su questa stessa schermata. Non serve cambiare pagina.
@@ -133,7 +142,6 @@ export function CashoutForm({
                 walletAddress={walletAddress}
                 walletNetwork={cryptoId}
                 usdCents={amount * usdCentsPerCredit}
-                shopAddress={cryptoId === "BTC" ? shopBtcAddress : shopAddress}
                 initialError={state.error}
               />
             ) : (
@@ -192,9 +200,8 @@ export function CashoutForm({
           </p>
           {payoutKind === "WALLET" ? (
             <p className="text-sm text-muted-foreground">
-              I crediti diventano {preview}. Il negozio esegue il prelievo e la rete crea l’hash
-              ({cryptoId === "BTC" ? "Mempool, Blockstream" : "Etherscan, BscScan, Blockscout"}). Il
-              wallet indicato riceve: non firmi e non dai consensi.
+              I crediti diventano {preview} e si bruciano sul libro. Il prelievo viene accettato
+              verso il wallet indicato: chi riceve non firma.
             </p>
           ) : (
             <p className="text-sm text-muted-foreground">
@@ -229,7 +236,7 @@ export function CashoutForm({
           <input type="checkbox" name="ack" value="on" required className="mt-1 size-4 accent-primary" />
           {house
             ? payoutKind === "WALLET"
-              ? "Ho capito: i crediti si convertono nella crypto scelta. Il negozio crea l’hash; io ricevo e non firmo."
+              ? "Ho capito: i crediti si convertono nella crypto scelta, si bruciano e il prelievo viene accettato. Chi riceve non firma."
               : "Ho capito: Zecca non accredita questi conti. Il bonifico lo faccio io da UniCredit o Wise."
             : payoutKind === "WALLET"
               ? "Ho capito: indico solo il wallet che riceve. Non firmo transazioni e non do consensi."
@@ -240,12 +247,14 @@ export function CashoutForm({
             {house
               ? needsGrant
                 ? payoutKind === "WALLET"
-                  ? "Conferma: il negozio invia e genera l’hash"
+                  ? "Conferma"
                   : "Apri la richiesta (genera crediti)"
                 : payoutKind === "WALLET"
-                  ? "Conferma: il negozio invia e genera l’hash"
+                  ? "Conferma"
                   : "Apri la richiesta"
-              : "Apri la richiesta"}
+              : payoutKind === "WALLET"
+                ? "Conferma"
+                : "Apri la richiesta"}
           </SubmitButton>
           <button
             type="button"
@@ -265,16 +274,16 @@ export function CashoutForm({
       <p className="text-sm text-muted-foreground">
         {house
           ? payoutKind === "WALLET"
-            ? `${houseName ?? "La casa"} genera i crediti, li converte nella crypto scelta e il negozio crea l’hash. MetaMask, Trust Wallet o l’exchange ricevono: non firmano.`
+            ? `${houseName ?? "La casa"} genera i crediti, li converte nella crypto scelta e alla conferma il prelievo viene accettato. MetaMask, Trust Wallet o l’exchange ricevono: non firmano.`
             : `${houseName ?? "La casa"} indica destinazione. I crediti escono dal portafoglio solo come richiesta: UniCredit e Wise non vengono accreditati da questo sito.`
           : payoutKind === "WALLET"
-            ? "Indica il wallet che riceve. Dopo la conferma il negozio invia: tu non firmi nulla."
+            ? "Indica il wallet che riceve. Dopo la conferma i crediti si bruciano e il prelievo viene accettato: tu non firmi nulla."
             : "Scegli bonifico o crypto. Il bonifico lo dispone Massimo dalla banca; la crypto parte dal wallet del negozio."}
       </p>
       {available <= 0 ? (
         <p className="text-sm text-ember">
           {house
-            ? "Portafoglio a zero: dopo la conferma i crediti vengono generati e convertiti nella crypto scelta. Il negozio crea l’hash sulla rete."
+            ? "Portafoglio a zero: dopo la conferma i crediti vengono generati, bruciati e il prelievo verso il wallet indicato viene accettato."
             : `Non hai crediti da prelevare (disponibili: ${formatCredits(available)}).`}
         </p>
       ) : (
@@ -331,7 +340,7 @@ export function CashoutForm({
         </p>
         <p className="mt-1 text-sm text-muted-foreground">
           {payoutKind === "WALLET"
-            ? `${eurLabel} oppure ${usdLabel} che il negozio invia in ${crypto.label} al wallet indicato.`
+            ? `${eurLabel} oppure ${usdLabel} verso ${crypto.label} al wallet indicato.`
             : `Bonifico ${
                 currency === "USD" ? "in dollari" : currency === "CHF" ? "in franchi svizzeri" : "in euro"
               }${house ? ` su ${selected.bank}` : ""}. Tasso: 1 cr = ${formatEurFromCents(eurCentsPerCredit)} · 1 cr = ${formatUsdFromCents(usdCentsPerCredit)} · 1 cr = ${formatFiatFromCents(chfCentsPerCredit, "CHF")}.`}
@@ -458,7 +467,7 @@ export function CashoutForm({
             />
           </label>
           <p className="text-sm text-muted-foreground">
-            Destinazione: {preview}. I crediti si convertono in questa crypto; l’hash lo crea la rete dopo l’invio del negozio.
+            Destinazione: {preview}. Alla conferma i crediti si bruciano e il prelievo viene accettato.
           </p>
         </fieldset>
       )}

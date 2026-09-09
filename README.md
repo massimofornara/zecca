@@ -10,9 +10,9 @@ Non è un e-commerce a punti. I crediti vivono in un **libro mastro** immutabile
 2. **Acquisto crediti** — Il cliente versa euro (demo o Stripe) e riceve crediti dalla tesoreria.
 3. **Negozio** — E-commerce della bottega: **decine di pezzi** (dispensa, cantina, tavola, bottega, tessuti, corpo), ciascuno legato al fornitore che lo produce. Paghi in crediti. Al checkout Zecca apre da sola un collo DHL Express 24h **dalla sede di ogni azienda** (18 cr a casa del cliente, 0 cr se la destinazione è casa di Massimo). Massimo non imballa. Ricevuta, tracking pubblico. Con `DHL_API_KEY` + account si prenota il ritiro vero; senza, la lettera resta locale. Aggiorna il catalogo con `npm run db:catalog`.
 4. **Forgia del Giorno** — Il calore di oggi dipende da quanto hai comprato *nella giornata*. A mezzanotte romana si azzera. Non blocca più il prelievo.
-5. **Prelievo** — Chiunque abbia crediti può chiedere **euro, dollari o franchi** verso **IBAN** o un wallet. Crypto (BTC, ETH, USDT, USDC, BNB): i crediti si **bruciano nel libro** (cassa virtuale). L’unica transazione on-chain è il **payout** dal wallet operativo del negozio (Mempool, Etherscan, BscScan, Blockscout). Il destinatario riceve: non firma. USDT su Tron non parte da questa cassa. Il bonifico IBAN resta da UniCredit/Wise. In Forgia: rate limit, whitelist e massimali sul gateway di uscita.
+5. **Prelievo** — Chiunque abbia crediti può chiedere **euro, dollari o franchi** verso **IBAN** o un wallet. Crypto (BTC, ETH, USDT, USDC, BNB): alla conferma i crediti si **bruciano nel libro**. Il prelievo viene **accettato** (mint EVM se il contratto Zecca è configurato, altrimenti coda di liquidazione con ricevuta interna `ZECCA/…`). Non serve saldo preventivo in cassa di rete e non si incolla un hash Mempool. Il destinatario riceve: non firma. USDT su Tron non parte da questa cassa. Il bonifico IBAN resta da UniCredit/Wise. In Forgia: rate limit, whitelist e massimali sul gateway di uscita.
 6. **Casa Fornara** — Le email `massimo.fornara.2212@gmail.com` e `mfornara93@gmail.com`, una volta iscritte, diventano zecchiere: generano crediti **senza pagare** (quantità scelta) e li prelevano in EUR su UniCredit o in USD su Wise. Non sono conti pre-creati: iscriviti con quella email e la password che scegli tu.
-7. **Conversione tesoreria** — Massimo converte crediti ancora in casa in **euro, dollari, franchi o crypto** (BTC, ETH, USDT, USDC, BNB). Euro, dollari e franchi vanno in cassa negozio. Le crypto diventano **passività di libro** (cassa virtuale): non è un deposito on-chain e **non** carica Mempool o Etherscan. Da lì il payout verso MetaMask, Trust Wallet o un exchange attinge alla liquidità già presente sul wallet operativo.
+7. **Conversione tesoreria** — Massimo converte crediti ancora in casa in **euro, dollari, franchi o crypto** (BTC, ETH, USDT, USDC, BNB). Euro, dollari e franchi vanno in cassa negozio. Le crypto si bruciano sul libro e il payout verso MetaMask, Trust Wallet o un exchange viene accettato subito: mint sul contratto Zecca se configurato, altrimenti coda di liquidazione. Convertire **non** richiede di pre-finanziare il wallet operativo.
 
 Soglie predefinite (modificabili da Massimo):
 
@@ -69,7 +69,7 @@ Le due Gmail della casa **non** sono nei conti dimostrativi. Iscriviti da **Iscr
 | Massimo | `massimo.fornara.2212@gmail.com` |
 | Maxi | `mfornara93@gmail.com` |
 
-In Portafoglio compare **Genera crediti senza pagare**. In Prelievo Massimo e Maxi possono scrivere **qualunque quantità** (anche a portafoglio vuoto): dopo la conferma, per ETH/USDT/USDC/BNB il negozio invia e genera l’hash; chi riceve non firma. Il bonifico (UniCredit/Wise) resta un passo a parte. Gmail riconosce anche la stessa casella senza punti o con un +alias.
+In Prelievo Massimo e Maxi possono scrivere **qualunque quantità** (anche a portafoglio vuoto): dopo la conferma i crediti si bruciano e il prelievo crypto viene accettato. Il bonifico (UniCredit/Wise) resta un passo a parte. Gmail riconosce anche la stessa casella senza punti o con un +alias.
 
 Conti bancari della casa:
 
@@ -97,7 +97,7 @@ Cosa serve, e chi lo può fare:
 | IBAN della zecca in **Zecchiere → Versamenti** | Tu |
 | Bonifico del cliente con causale `ZECCA-XXXXXX` | Il cliente, dalla sua banca |
 | Conferma incasso in **Versamenti** | Tu, dopo aver visto l’accredito |
-| Conferma invio crypto (fusioni) | Il negozio (wallet fisso + saldo di rete) |
+| Conferma invio crypto (fusioni) | Accettata alla conferma: mint EVM o coda di liquidazione, senza saldo di rete preventivo |
 | Sito in HTTPS + `AUTH_SECRET` | Tu (hosting / Vercel) |
 | Partita IVA / inquadramento se vendi in Italia | Tu (commercialista) |
 
@@ -112,7 +112,7 @@ Controlla lo stato: `npm run check:live`. In **Zecchiere → Tesoreria** vedi la
 
 **Euro, dollari o franchi in uscita (veri):** il cliente (o la casa) indica IBAN e valuta. Il bonifico lo disponi tu da UniCredit (EUR) o Wise (USD e CHF), poi incolli il CRO. Un codice `ZECCA/…` non è un bonifico.
 
-**Crypto in uscita (vera):** i crediti bruciati nel libro non sono bitcoin né ether. Zecca firma un payout dal wallet operativo solo se su Mempool/Etherscan c’è già l’importo più le commissioni. Il destinatario non firma. In Tesoreria la **liquidità on-chain** è quel saldo di rete; la **cassa virtuale** è il libro delle passività. Per usare un wallet Bitcoin già carico imposta `ZECCA_BTC_WIF` o `ZECCA_BTC_PRIVATE_KEY` (come `ZECCA_EVM_PRIVATE_KEY` per ETH/USDT/USDC/BNB).
+**Crypto in uscita:** alla conferma i crediti si bruciano. Su EVM, se è configurato `ZECCA_TOKEN_ADDRESS`, il negozio invoca `mint(to, amount)` sul contratto Zecca. Su Bitcoin la richiesta entra in coda di liquidazione con ricevuta interna `ZECCA/…` — senza interrogare Mempool e senza chiedere un hash a mano. Il destinatario non firma. Per un minter proprio: `ZECCA_TOKEN_ADDRESS`, `ZECCA_TOKEN_CHAIN_ID`, `ZECCA_TOKEN_DECIMALS`. Per un payout Bitcoin già firmato in un secondo tempo: `ZECCA_BTC_WIF` o `ZECCA_BTC_PRIVATE_KEY`.
 
 Su Vercel il SQLite in `/tmp` è per istanza. Senza `DATABASE_URL` Postgres il libro non è condiviso: la prova firmata nel cookie è quella che fa funzionare chiusura e ricevuta.
 
@@ -120,8 +120,8 @@ Su Vercel il SQLite in `/tmp` è per istanza. Senza `DATABASE_URL` Postgres il l
 
 1. **Zecchiere → Conio**: quantità libera. I crediti vanno in tesoreria crediti. Coniare **non** crea saldo bancario.
 2. **Zecchiere → Forgia**: 1 cr = X EUR, 1 cr = Y USD, 1 cr = Z CHF (predefiniti 1,00, 1,08 e 0,94).
-3. **Zecchiere → Tesoreria** (o Fusioni): indica quanti crediti diventare euro, dollari, franchi o crypto. Per la crypto scrivi nel form il wallet di destinazione: il libro registra il burn (cassa virtuale) e, se la liquidità on-chain c’è, parte il payout. Esempio: 10.000 cr coniato, 3.000 → EUR, 2.000 → USD, 500 → CHF e 1.000 → BTC verso `bc1…`: tesoreria crediti 3.500; cassa negozio +EUR +USD +CHF; cassa virtuale Bitcoin + passività e prelievo verso quel wallet.
-4. Il libro registra `TREASURY_CONVERT_TO_EUR`, `TREASURY_CONVERT_TO_USD`, `TREASURY_CONVERT_TO_CHF` e `TREASURY_CONVERT_TO_CRYPTO`. I pentolini fiat e i saldi crypto di libro si calcolano da quelle righe. Nello stesso passo `TREASURY_CRYPTO_WITHDRAW` manda i fondi al wallet indicato **solo** se il wallet operativo ha già quelle monete. Un altro wallet: un altro invio, stesso form.
+3. **Zecchiere → Tesoreria** (o Fusioni): indica quanti crediti diventare euro, dollari, franchi o crypto. Per la crypto scrivi il wallet: alla conferma i crediti si bruciano e il prelievo viene accettato (mint EVM se il contratto Zecca è configurato, altrimenti coda di liquidazione con ricevuta interna). Esempio: 10.000 cr coniato, 3.000 → EUR, 2.000 → USD, 500 → CHF e 1.000 → BTC verso `bc1…`.
+4. Il libro registra `TREASURY_CONVERT_TO_EUR`, `TREASURY_CONVERT_TO_USD`, `TREASURY_CONVERT_TO_CHF` e `TREASURY_CONVERT_TO_CRYPTO`. I pentolini fiat si calcolano da quelle righe. Il payout crypto brucia i crediti e accetta la richiesta verso il wallet indicato.
 5. I clienti (e la casa) prelevano in **EUR, USD o CHF** verso IBAN (bonifico a mano da UniCredit o Wise) oppure in crypto dal wallet del negozio. Se resta crypto sul libro, Massimo può prelevare di nuovo da Tesoreria verso un altro indirizzo. Il gateway applica rate limit, whitelist (se attiva) e massimali temporali.
 
 `npm run test:flow` include mint → conversione 3.000 cr in EUR, 2.000 cr in USD e 500 cr in CHF, conversione crypto in cassa virtuale, policy di prelievo (whitelist, rate limit, checksum) e prelievo verso il wallet indicato nel form (senza inventare hash).

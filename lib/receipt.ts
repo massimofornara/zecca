@@ -105,6 +105,7 @@ export function parsePayoutReceipt(input: {
 
 export function receiptLabel(kind: string | null | undefined, network?: string | null): string {
   if (kind === "TX_HASH") return `Hash ${walletNetworkLabel(network ?? "OTHER")}`;
+  if (kind === "QUEUED_FOR_SETTLEMENT") return "Ricevuta Zecca";
   if (kind === "BANK_REF") return "CRO / riferimento bonifico";
   return "Ricevuta";
 }

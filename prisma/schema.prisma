@@ -39,6 +39,7 @@ enum LedgerType {
 
 enum CashoutStatus {
   PENDING
+  QUEUED
   PAID
   REJECTED
 }

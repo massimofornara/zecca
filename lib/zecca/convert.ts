@@ -127,7 +127,7 @@ export async function shopCryptoBalances(db: Db = defaultPrisma): Promise<ShopCr
       where: {
         isTreasury: true,
         payoutKind: "WALLET",
-        status: { in: ["PENDING", "PAID"] },
+        status: { in: ["PENDING", "QUEUED", "PAID"] },
       },
       select: { credits: true, usdCents: true, walletNetwork: true },
     }),
@@ -221,7 +221,7 @@ export async function convertTreasuryToShopCash(input: {
 
   if (creditsCrypto > 0 && !cryptoAssetId) {
     throw new ZeccaError(
-      "Scegli Bitcoin, Ethereum, USDT, USDC o BNB per la cassa di rete.",
+      "Scegli Bitcoin, Ethereum, USDT, USDC o BNB.",
       "INVALID_ASSET",
     );
   }
@@ -324,7 +324,7 @@ export async function convertTreasuryToShopCash(input: {
             eurCents: 0,
             usdCents: cryptoUsdCents,
             fiatCurrency: "USD",
-            note: `Conversione tesoreria: ${creditsCrypto} cr → ${(cryptoUsdCents / 100).toFixed(2)} USD in cassa di rete ${ticker} (${shopPayoutAddress(cryptoAssetId) ?? "wallet negozio"})`,
+            note: `Conversione tesoreria: ${creditsCrypto} cr → ${(cryptoUsdCents / 100).toFixed(2)} USD in ${ticker} verso payout diretto`,
             metadata: {
               asset: cryptoAssetId,
               credits: creditsCrypto,

@@ -22,7 +22,7 @@ export type CashoutProof = {
   receiptHash: string | null;
   createdAt: string;
   resolvedAt: string;
-  status: "PENDING" | "PAID" | "REJECTED";
+  status: "PENDING" | "QUEUED" | "PAID" | "REJECTED";
   isTreasury?: boolean;
 };
 
@@ -93,7 +93,10 @@ export function proofFromPaidCashout(input: {
     createdAt,
     resolvedAt,
     status:
-      input.status === "PENDING" || input.status === "REJECTED" || input.status === "PAID"
+      input.status === "PENDING" ||
+      input.status === "QUEUED" ||
+      input.status === "REJECTED" ||
+      input.status === "PAID"
         ? input.status
         : input.receiptHash
           ? "PAID"
@@ -125,7 +128,12 @@ export function verifyCashoutProof(token: string | null | undefined): CashoutPro
 }
 
 export function cashoutProofStatus(proof: Pick<CashoutProof, "status" | "receiptHash">) {
-  if (proof.status === "PENDING" || proof.status === "PAID" || proof.status === "REJECTED") {
+  if (
+    proof.status === "PENDING" ||
+    proof.status === "QUEUED" ||
+    proof.status === "PAID" ||
+    proof.status === "REJECTED"
+  ) {
     return proof.status;
   }
   return proof.receiptHash ? "PAID" : "PENDING";

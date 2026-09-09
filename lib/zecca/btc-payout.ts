@@ -68,10 +68,28 @@ function vsizeFor(inputs: number, outputs: number) {
   return Math.ceil(10.5 + 68 * inputs + 31 * outputs);
 }
 
-export async function sendShopBtcPayout(input: {
-  walletAddress: string;
-  usdCents: number;
-}): Promise<{ hash: string; explorerUrl: string | null; shopAddress: string; network: "BTC" }> {
+export type ShopCoverage = {
+  covered: boolean;
+  shopAddress: string | null;
+  onChainLabel: string;
+  neededLabel: string;
+  message: string;
+  code: "OK" | "INSUFFICIENT_SHOP_FUNDS" | "MISSING_SHOP_KEY" | "SHOP_SEND_FAILED" | "INVALID_AMOUNT" | "INVALID_WALLET";
+};
+
+type BtcPlan = {
+  dest: string;
+  key: NonNullable<ReturnType<typeof shopBtcKey>>;
+  grossSats: bigint;
+  feeSats: bigint;
+  sendSats: bigint;
+  chosen: MempoolUtxo[];
+  change: bigint;
+  total: number;
+  satPerVb: number;
+};
+
+async function planShopBtcPayout(input: { walletAddress: string; usdCents: number }): Promise<BtcPlan> {
   const dest = normalizeWalletAddress(input.walletAddress);
   if (!isValidWalletAddress(dest, "BTC")) {
     throw new ZeccaError("Indirizzo Bitcoin non valido.", "INVALID_WALLET");
@@ -79,14 +97,14 @@ export async function sendShopBtcPayout(input: {
   const key = shopBtcKey();
   if (!key) {
     throw new ZeccaError(
-      "Il negozio non ha una cassa Bitcoin da cui convertire i crediti.",
+      "Il negozio non ha una chiave Bitcoin da cui firmare il payout diretto.",
       "MISSING_SHOP_KEY",
     );
   }
 
   const price = await usdSpotPrice("BTC");
-  const sendSats = nativeWeiFromUsdCents(input.usdCents, price, 8);
-  if (sendSats < DUST) {
+  const grossSats = nativeWeiFromUsdCents(input.usdCents, price, 8);
+  if (grossSats < DUST) {
     throw new ZeccaError("Importo troppo piccolo per Bitcoin.", "INVALID_AMOUNT");
   }
 
@@ -94,7 +112,7 @@ export async function sendShopBtcPayout(input: {
     signal: AbortSignal.timeout(12000),
   });
   if (!utxoRes.ok) {
-    throw new ZeccaError("Mempool non raggiungibile per leggere il saldo Bitcoin del negozio.", "SHOP_SEND_FAILED");
+    throw new ZeccaError("Mempool non raggiungibile per leggere gli UTXO del dispenser Bitcoin.", "SHOP_SEND_FAILED");
   }
   const utxos = ((await utxoRes.json()) as MempoolUtxo[]).sort((a, b) => b.value - a.value);
   const total = utxos.reduce((sum, u) => sum + u.value, 0);
@@ -106,48 +124,108 @@ export async function sendShopBtcPayout(input: {
   const satPerVb = Math.max(1, Math.floor(Number(fees.halfHourFee ?? fees.fastestFee ?? 8)));
 
   let chosen: MempoolUtxo[] | null = null;
-  let fee = BigInt(0);
   let change = BigInt(0);
+  let feeSats = BigInt(0);
+  let sendSats = BigInt(0);
   for (let n = 1; n <= utxos.length; n += 1) {
     const slice = utxos.slice(0, n);
     const sum = BigInt(slice.reduce((s, u) => s + u.value, 0));
-    const withChange = BigInt(vsizeFor(n, 2) * satPerVb);
-    const withoutChange = BigInt(vsizeFor(n, 1) * satPerVb);
-    if (sum >= sendSats + withChange && sum - sendSats - withChange >= DUST) {
+    const feeChange = BigInt(vsizeFor(n, 2) * satPerVb);
+    const feeNoChange = BigInt(vsizeFor(n, 1) * satPerVb);
+    const netChange = grossSats - feeChange;
+    const netNoChange = grossSats - feeNoChange;
+    if (netChange >= DUST && sum >= grossSats && sum - netChange - feeChange >= DUST) {
       chosen = slice;
-      fee = withChange;
-      change = sum - sendSats - fee;
+      sendSats = netChange;
+      feeSats = feeChange;
+      change = sum - netChange - feeChange;
       break;
     }
-    if (sum >= sendSats + withoutChange) {
+    if (netNoChange >= DUST && sum >= grossSats) {
       chosen = slice;
-      fee = sum - sendSats;
+      sendSats = netNoChange;
+      feeSats = feeNoChange;
       change = BigInt(0);
       break;
     }
   }
 
-  if (!chosen) {
+  if (!chosen || sendSats < DUST) {
     throw new ZeccaError(
-      `I crediti sono convertiti in ${formatBtc(sendSats)} BTC, ma sulla rete Bitcoin il negozio (${key.address}) ha solo ${formatBtc(BigInt(total))} BTC. Senza quei satoshi Mempool non può avere un hash: i crediti del libro non sono bitcoin. Chi riceve non firma.`,
+      `Il controvalore è ${formatBtc(grossSats)} BTC, ma il dispenser Bitcoin (${key.address}) ha solo ${formatBtc(BigInt(total))} BTC confermati. I crediti del libro non sono satoshi: senza UTXO la mempool rifiuta l’invio.`,
       "INSUFFICIENT_SHOP_FUNDS",
     );
   }
 
+  return { dest, key, grossSats, feeSats, sendSats, chosen, change, total, satPerVb };
+}
+
+export async function quoteShopBtcPayout(input: {
+  walletAddress: string;
+  usdCents: number;
+}): Promise<ShopCoverage & { grossLabel: string; feeLabel: string; netLabel: string; mode: "TRANSFER" }> {
+  try {
+    const plan = await planShopBtcPayout(input);
+    return {
+      covered: true,
+      shopAddress: plan.key.address,
+      onChainLabel: `${formatBtc(BigInt(plan.total))} BTC`,
+      neededLabel: `${formatBtc(plan.grossSats)} BTC`,
+      grossLabel: `${formatBtc(plan.grossSats)} BTC`,
+      feeLabel: `${formatBtc(plan.feeSats)} BTC (${plan.satPerVb} sat/vB)`,
+      netLabel: `${formatBtc(plan.sendSats)} BTC`,
+      message: "Payout diretto: il destinatario riceve il netto, le fee minerarie restano sulla transazione.",
+      code: "OK",
+      mode: "TRANSFER",
+    };
+  } catch (error) {
+    if (error instanceof ZeccaError) {
+      const shopAddress = shopBtcAddress();
+      return {
+        covered: false,
+        shopAddress,
+        onChainLabel: shopAddress ? "saldo in lettura" : "wallet assente",
+        neededLabel: "BTC",
+        grossLabel: "BTC",
+        feeLabel: "fee in stima",
+        netLabel: "0 BTC",
+        message: error.message,
+        code: error.code as ShopCoverage["code"],
+        mode: "TRANSFER",
+      };
+    }
+    throw error;
+  }
+}
+
+export async function probeShopBtcCoverage(input: {
+  walletAddress: string;
+  usdCents: number;
+}): Promise<ShopCoverage> {
+  const quote = await quoteShopBtcPayout(input);
+  const { grossLabel: _g, feeLabel: _f, netLabel: _n, mode: _m, ...coverage } = quote;
+  return coverage;
+}
+
+export async function sendShopBtcPayout(input: {
+  walletAddress: string;
+  usdCents: number;
+}): Promise<{ hash: string; explorerUrl: string | null; shopAddress: string; network: "BTC" }> {
+  const plan = await planShopBtcPayout(input);
   const tx = new btc.Transaction();
-  for (const utxo of chosen) {
+  for (const utxo of plan.chosen) {
     tx.addInput({
-      ...key.spend,
+      ...plan.key.spend,
       txid: utxo.txid,
       index: utxo.vout,
-      witnessUtxo: { script: key.spend.script, amount: BigInt(utxo.value) },
+      witnessUtxo: { script: plan.key.spend.script, amount: BigInt(utxo.value) },
     });
   }
-  tx.addOutputAddress(dest, sendSats, btc.NETWORK);
-  if (change > BigInt(0)) {
-    tx.addOutputAddress(key.address, change, btc.NETWORK);
+  tx.addOutputAddress(plan.dest, plan.sendSats, btc.NETWORK);
+  if (plan.change > BigInt(0)) {
+    tx.addOutputAddress(plan.key.address, plan.change, btc.NETWORK);
   }
-  tx.sign(key.privateKey);
+  tx.sign(plan.key.privateKey);
   tx.finalize();
 
   const broadcast = await fetch(`${MEMPOOL}/tx`, {
@@ -159,7 +237,7 @@ export async function sendShopBtcPayout(input: {
   const body = (await broadcast.text()).trim();
   if (!broadcast.ok) {
     throw new ZeccaError(
-      `Bitcoin non accettato dalla rete: ${body || broadcast.status}. Cassa ${key.address}.`,
+      `Bitcoin non accettato dalla rete: ${body || broadcast.status}. Cassa ${plan.key.address}.`,
       "SHOP_SEND_FAILED",
     );
   }
@@ -167,7 +245,7 @@ export async function sendShopBtcPayout(input: {
   return {
     hash,
     explorerUrl: explorerUrl("BTC", hash),
-    shopAddress: key.address,
+    shopAddress: plan.key.address,
     network: "BTC",
   };
 }

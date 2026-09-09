@@ -5,11 +5,12 @@ import { requireAdmin } from "@/auth";
 import { isZeccaError, publicErrorMessage } from "@/lib/errors";
 import { mintCredits } from "@/lib/zecca/mint";
 import {
-  convertTreasuryAndWithdrawToWallet,
-  fulfillWalletCashoutFromShop,
-  materializeCashoutFromProof,
-  requestInternalCryptoWithdraw,
-  resolveCashout,
+    convertTreasuryAndWithdrawToWallet,
+    fulfillWalletCashoutFromShop,
+    materializeCashoutFromProof,
+    requestInternalCryptoWithdraw,
+    resolveCashout,
+    settleQueuedWalletCashouts,
 } from "@/lib/zecca/cashout";
 import { shopPayoutConfigError } from "@/lib/zecca/shop-payout";
 import { findIncomingCryptoTx } from "@/lib/chain-receipt";
@@ -100,7 +101,7 @@ export async function treasuryConvertAction(
     }
     if (result.creditsCrypto > 0 && result.cryptoAsset) {
       parts.push(
-        `${result.creditsCrypto.toLocaleString("it-IT")} cr → ${(result.cryptoUsdCents / 100).toLocaleString("it-IT", { style: "currency", currency: "USD" })} in cassa di rete ${result.cryptoAsset}`,
+        `${result.creditsCrypto.toLocaleString("it-IT")} cr → ${(result.cryptoUsdCents / 100).toLocaleString("it-IT", { style: "currency", currency: "USD" })} in ${result.cryptoAsset}`,
       );
     }
 
@@ -130,22 +131,29 @@ export async function treasuryConvertAction(
         usdCents: settled.usdCents,
         cashoutId: settled.id,
       });
+      const queued = settled.status === "QUEUED";
       return {
-        ok: `Conversione in cassa di rete ${result.cryptoAsset} registrata. Prelievo verso ${walletAddress} aperto: il negozio invia dalla cassa on-chain quando c’è saldo.`,
+        ok: queued
+          ? `Conversione ${result.cryptoAsset} eseguita verso ${walletAddress}. I crediti sono bruciati. Ricevuta Zecca emessa.`
+          : `Conversione ${result.cryptoAsset} eseguita verso ${walletAddress}.`,
         error: undefined,
         receiptId: settled.id,
-        pending: true,
+        receiptRef: settled.receiptRef,
+        receiptHash: settled.receiptHash,
+        receiptUrl: settled.receiptUrl,
+        pending: false,
         status: settled.status,
         payoutKind: "WALLET",
         walletNetwork: settled.walletNetwork,
         walletAddress: settled.walletAddress,
         usdCents: settled.usdCents,
+        receiptKind: settled.receiptKind,
         instruction: guide?.text,
         proofToken,
       };
     }
     return {
-      ok: `Conversione e invio da cassa di rete: ${parts.join(" · ")}. Hash reale, chi riceve non firma.`,
+      ok: `Conversione eseguita: ${parts.join(" · ")}.`,
       receiptId: settled.id,
       receiptRef: settled.receiptRef,
       receiptHash: settled.receiptHash,
@@ -162,14 +170,21 @@ export async function treasuryConvertAction(
     const message = publicErrorMessage(error, "Conversione non riuscita.");
     const cashoutId = isZeccaError(error) ? error.cashoutId : undefined;
     if (!cashoutId) return { error: message };
+    const open = await prisma.cashoutRequest.findUnique({ where: { id: cashoutId } });
+    const status = open?.status ?? "PENDING";
+    const queued = status === "QUEUED";
     return {
-      error: message,
+      error: queued ? undefined : message,
+      ok: queued
+        ? "Prelievo accettato. I crediti sono bruciati. Ricevuta Zecca emessa."
+        : undefined,
       receiptId: cashoutId,
       pending: true,
-      status: "PENDING",
+      status,
       payoutKind: "WALLET",
-      walletNetwork: cryptoAsset,
-      walletAddress,
+      walletNetwork: open?.walletNetwork ?? cryptoAsset,
+      walletAddress: open?.walletAddress ?? walletAddress,
+      receiptKind: open?.receiptKind,
     };
   }
 }
@@ -238,15 +253,22 @@ export async function treasuryCryptoWithdrawAction(
         usdCents: settled.usdCents,
         cashoutId: settled.id,
       });
+      const queued = settled.status === "QUEUED";
       return {
-        ok: "Prelievo aperto dal wallet interno. I crediti sono già convertiti: conferma di nuovo l’invio dal negozio quando la cassa di rete ha le monete.",
+        ok: queued
+          ? "Prelievo accettato. I crediti sono bruciati. Ricevuta Zecca emessa."
+          : "Prelievo accettato.",
         receiptId: settled.id,
-        pending: true,
+        receiptRef: settled.receiptRef,
+        receiptHash: settled.receiptHash,
+        receiptUrl: settled.receiptUrl,
+        pending: false,
         status: settled.status,
         payoutKind: "WALLET",
         walletNetwork: settled.walletNetwork,
         walletAddress: settled.walletAddress,
         usdCents: settled.usdCents,
+        receiptKind: settled.receiptKind,
         instruction: guide?.text,
         proofToken,
       };
@@ -269,14 +291,21 @@ export async function treasuryCryptoWithdrawAction(
     const message = publicErrorMessage(error, "Prelievo dal wallet interno non riuscito.");
     const cashoutId = isZeccaError(error) ? error.cashoutId : undefined;
     if (!cashoutId) return { error: message };
+    const open = await prisma.cashoutRequest.findUnique({ where: { id: cashoutId } });
+    const status = open?.status ?? "PENDING";
+    const queued = status === "QUEUED";
     return {
-      error: message,
+      error: queued ? undefined : message,
+      ok: queued
+        ? "Prelievo accettato. I crediti sono bruciati. Ricevuta Zecca emessa."
+        : undefined,
       receiptId: cashoutId,
       pending: true,
-      status: "PENDING",
+      status,
       payoutKind: "WALLET",
-      walletNetwork: asset,
-      walletAddress,
+      walletNetwork: open?.walletNetwork ?? asset,
+      walletAddress: open?.walletAddress ?? walletAddress,
+      receiptKind: open?.receiptKind,
     };
   }
 }
@@ -391,6 +420,19 @@ export async function resolveCashoutAction(
     revalidatePath("/portafoglio");
     revalidatePath("/fusione");
     revalidatePath(`/ricevuta/${settled.id}`);
+    if (shopPay && settled.status === "QUEUED") {
+      return {
+        ok: "Prelievo accettato. Ricevuta Zecca emessa.",
+        receiptId: settled.id,
+        receiptRef: settled.receiptRef,
+        receiptHash: settled.receiptHash,
+        receiptUrl: settled.receiptUrl,
+        receiptKind: settled.receiptKind,
+        walletNetwork: settled.walletNetwork,
+        proofToken: signed,
+        status: settled.status,
+      };
+    }
     return {
       ok:
         action === "pay"
@@ -415,6 +457,31 @@ export async function resolveCashoutAction(
     };
   } catch (error) {
     return { error: publicErrorMessage(error, "Operazione non riuscita.") };
+  }
+}
+
+export async function settleQueuedCashoutsAction(
+  _prev: { error?: string; ok?: string } | null,
+  _formData: FormData,
+): Promise<{ error?: string; ok?: string }> {
+  const admin = await requireAdmin();
+  if (!admin) return { error: "Solo il zecchiere può evadere la coda." };
+  try {
+    const settled = await settleQueuedWalletCashouts({ actorId: admin.id });
+    const paid = settled.filter((row) => row.status === "PAID").length;
+    const queued = settled.filter((row) => row.status === "QUEUED").length;
+    revalidatePath("/zecchiere");
+    revalidatePath("/zecchiere/fusioni");
+    revalidatePath("/zecchiere/libro-mastro");
+    revalidatePath("/fusione");
+    if (settled.length === 0) {
+      return { ok: "Coda di liquidazione vuota." };
+    }
+    return {
+      ok: `Coda di liquidazione: ${paid} inviate on-chain con hash reale, ${queued} ancora in attesa di UTXO o token. Nessun hash fittizio.`,
+    };
+  } catch (error) {
+    return { error: publicErrorMessage(error, "Coda non evasa.") };
   }
 }
 
