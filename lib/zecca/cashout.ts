@@ -1055,7 +1055,12 @@ export async function markSepaDisposed(input: {
   });
 }
 
-/** Invia USDC su Base dal wallet Circle. Senza env la richiesta resta aperta. */
+/** Invia USDC su Base dal wallet Circle. Senza env la richiesta resta aperta.
+ * Libro: l’utente è addebitato per il lordo (crediti della richiesta).
+ * On-chain: `amounts` = netto (richiesta − fissa − %). La commissione resta nel SCA.
+ * Cassa USDC di libro: si riserva il netto, così la commissione resta inventario allineato al SCA.
+ * Cap invio: netto ≤ min(libro disponibile, saldo Circle − commissione trattenuta).
+ */
 export async function sendUsdcFromShop(input: {
   cashoutId: string;
   actorId: string;

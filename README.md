@@ -25,8 +25,10 @@ Soglie predefinite (modificabili da Massimo):
 
 Tassi iniziali (modificabili in **Zecchiere → Forgia**): **1 credito = 1,00 EUR**, **1 credito = 1,08 USD**, **1 credito = 0,94 CHF**. Sono tre prezzi indipendenti. Stessa pagina:
 
-- **Spread di conversione** % per euro, dollari, franchi e USDC (default 0%). Resta in tesoreria a libro; solo il netto va in cassa. Non crea USDC on-chain.
-- **Commissione prelievo USDC**: importo fisso + % (default 0). Scalata dall’invio Circle; la commissione **resta nel SCA**.
+- **Spread di conversione** % per euro, dollari, franchi e USDC. **Default 100 bps (1%)** se manca in Forgia. Env: `FORGIA_SPREAD_BPS` (tutte le valute) o `FORGIA_SPREAD_BPS_EUR` / `_USD` / `_CHF` / `_USDC`. Forgia (admin) vince sull’env. Resta in tesoreria a libro; solo il netto va in cassa. Non crea USDC on-chain.
+- **Commissione prelievo USDC**: fissa + %. **Default 0,10 USDC + 50 bps (0,50%)**. Env: `USDC_WITHDRAW_FEE_FLAT` (in USDC, es. `0.10`) e `USDC_WITHDRAW_FEE_BPS`. Scalata dall’invio Circle; la commissione **resta nel SCA**. Libro utente: addebito lordo (tutti i crediti della richiesta). Cassa USDC libro: riserva il netto (la commissione resta inventario, come gli USDC lasciati nel SCA). Cap: netto ≤ min(libro, saldo Circle − commissione).
+
+Esempio: richiesta **1,00 USDC**, SCA **1,50 USDC**, default 0,10 + 50 bps. Il 0,50% di 1,00 è 0,005 USDC e in centesimi va a 0, quindi commissione = **0,10**. Circle invia **0,90**. Dopo: SCA **0,60** (1,50 − 0,90), di cui 0,10 è la commissione trattenuta.
 - Policy del gateway crypto (massimale per invio, giornaliero, prelievi/ora, soglia minima, whitelist).
 
 ## Avvio

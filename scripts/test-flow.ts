@@ -26,7 +26,7 @@ import {
   SEPA_DISPOSED_KIND,
   CIRCLE_TRANSFER_KIND,
 } from "../lib/zecca/cashout";
-import { saveSettings, DEFAULT_SETTINGS } from "../lib/zecca/settings";
+import { saveSettings, getSettings, DEFAULT_SETTINGS } from "../lib/zecca/settings";
 import { assertWithdrawPolicy, WITHDRAW_BROADCASTING } from "../lib/zecca/withdraw-policy";
 import { cashoutProofStatus, proofFromPaidCashout, signCashoutProof, verifyCashoutProof } from "../lib/cashout-proof";
 import { explorerLinks, explorerUrl, parsePayoutReceipt, catenaTxUrl } from "../lib/receipt";
@@ -49,7 +49,7 @@ import { isShopEvmConfigured, shopPayoutConfigError, shopWalletAddress } from ".
 import { shopBtcAddress } from "../lib/zecca/btc-payout";
 import { getShopNetworkVault } from "../lib/zecca/shop-vault";
 import { convertTreasuryToShopCash, convertTreasuryToShopFiat, shopCryptoBalances, shopFiatBalances } from "../lib/zecca/convert";
-import { applyConversionSpread, quoteUsdcWithdrawFee } from "../lib/zecca/forge-fees";
+import { applyConversionSpread, exampleUsdcWithdraw1, parseBpsEnv, parseUsdcFlatEnv, quoteUsdcWithdrawFee } from "../lib/zecca/forge-fees";
 import { pocketBalance, treasuryBalance } from "../lib/zecca/ledger";
 import { getReserveReport } from "../lib/zecca/reserves";
 import { ensureHouseWalletCredits, grantHouseCredits, houseDisplayName, HOUSE_PAYOUT_ACCOUNTS, isHouseEmail } from "../lib/zecca/house";
@@ -74,6 +74,22 @@ async function main() {
   const db = new PrismaClient({ datasources: { db: { url: dbUrl } } });
 
   try {
+    const spread1pct = applyConversionSpread(1000, 100);
+    assert.equal(spread1pct.retainedCredits, 10);
+    assert.equal(spread1pct.convertedCredits, 990);
+    assert.equal(parseBpsEnv("100", 0), 100);
+    assert.equal(parseBpsEnv(undefined, 100), 100);
+    assert.equal(parseUsdcFlatEnv("0.10", 0), 10);
+    assert.equal(parseUsdcFlatEnv(undefined, 10), 10);
+    const oneUsdc = quoteUsdcWithdrawFee(100, { usdcWithdrawFeeFlatCents: 10, usdcWithdrawFeeBps: 50 });
+    assert.equal(oneUsdc.feeUsdCents, 10);
+    assert.equal(oneUsdc.netUsdCents, 90);
+    const example = exampleUsdcWithdraw1(150);
+    assert.equal(example.requestUsdCents, 100);
+    assert.equal(example.feeUsdCents, 10);
+    assert.equal(example.netUsdCents, 90);
+    assert.equal(example.scaAfterUsdCents, 60);
+
     const admin = await db.user.create({
       data: {
         email: "admin@test.local",
@@ -97,8 +113,56 @@ async function main() {
         { key: "usdCentsPerCredit", value: String(DEFAULT_SETTINGS.usdCentsPerCredit) },
         { key: "chfCentsPerCredit", value: String(DEFAULT_SETTINGS.chfCentsPerCredit) },
         { key: "forgeTiers", value: JSON.stringify(DEFAULT_SETTINGS.forgeTiers) },
+        { key: "spreadBpsEur", value: "0" },
+        { key: "spreadBpsUsd", value: "0" },
+        { key: "spreadBpsChf", value: "0" },
+        { key: "spreadBpsUsdc", value: "0" },
+        { key: "usdcWithdrawFeeFlatCents", value: "0" },
+        { key: "usdcWithdrawFeeBps", value: "0" },
       ],
     });
+
+    const prevSpreadEnv = process.env.FORGIA_SPREAD_BPS;
+    const prevFlatEnv = process.env.USDC_WITHDRAW_FEE_FLAT;
+    const prevBpsEnv = process.env.USDC_WITHDRAW_FEE_BPS;
+    process.env.FORGIA_SPREAD_BPS = "250";
+    process.env.USDC_WITHDRAW_FEE_FLAT = "0.25";
+    process.env.USDC_WITHDRAW_FEE_BPS = "75";
+    await db.setting.deleteMany({
+      where: {
+        key: {
+          in: [
+            "spreadBpsEur",
+            "spreadBpsUsd",
+            "spreadBpsChf",
+            "spreadBpsUsdc",
+            "usdcWithdrawFeeFlatCents",
+            "usdcWithdrawFeeBps",
+          ],
+        },
+      },
+    });
+    const envSettings = await getSettings(db);
+    assert.equal(envSettings.spreadBpsEur, 250);
+    assert.equal(envSettings.spreadBpsUsdc, 250);
+    assert.equal(envSettings.usdcWithdrawFeeFlatCents, 25);
+    assert.equal(envSettings.usdcWithdrawFeeBps, 75);
+    await db.setting.createMany({
+      data: [
+        { key: "spreadBpsEur", value: "0" },
+        { key: "spreadBpsUsd", value: "0" },
+        { key: "spreadBpsChf", value: "0" },
+        { key: "spreadBpsUsdc", value: "0" },
+        { key: "usdcWithdrawFeeFlatCents", value: "0" },
+        { key: "usdcWithdrawFeeBps", value: "0" },
+      ],
+    });
+    if (prevSpreadEnv === undefined) delete process.env.FORGIA_SPREAD_BPS;
+    else process.env.FORGIA_SPREAD_BPS = prevSpreadEnv;
+    if (prevFlatEnv === undefined) delete process.env.USDC_WITHDRAW_FEE_FLAT;
+    else process.env.USDC_WITHDRAW_FEE_FLAT = prevFlatEnv;
+    if (prevBpsEnv === undefined) delete process.env.USDC_WITHDRAW_FEE_BPS;
+    else process.env.USDC_WITHDRAW_FEE_BPS = prevBpsEnv;
 
     const supplier = await db.supplier.create({
       data: {
@@ -1779,7 +1843,7 @@ async function main() {
     console.log("Zecca Gasless: mint a gasPrice 0 con receipt 0x1 e explorer /catena. OK.");
     console.log("Bonifico SEPA in ingresso senza Stripe/webhook. OK.");
     console.log("Casa Fornara: generazione senza pagamento + prelievo IBAN EUR/USD/CHF. OK.");
-    console.log("Forgia: spread 5% su conversione USDC/EUR resta in tesoreria; prelievo USDC invia solo il netto, commissione nel SCA. OK.");
+    console.log("Forgia default: 100 bps spread; USDC 0,10 + 50 bps → 1,00 richiesto invia 0,90, SCA 1,50 → 0,60. OK.");
     console.log("Fusione cliente: IBAN IT + BIC, rifiuto IBAN estero, bonifico disposto, USDC Circle. OK.");
   } finally {
     await db.$disconnect();

@@ -1,5 +1,11 @@
 import type { PrismaClient } from "@prisma/client";
 import { prisma as defaultPrisma } from "@/lib/db";
+import {
+  clampBps,
+  parseUsdcFlatEnv,
+  spreadBpsFromEnv,
+  usdcFeeSettingsFromEnv,
+} from "@/lib/zecca/forge-fees";
 
 export type ForgeTier = {
   minSpent: number;
@@ -30,12 +36,12 @@ export const DEFAULT_SETTINGS: ZeccaSettings = {
   eurCentsPerCredit: 100,
   usdCentsPerCredit: 108,
   chfCentsPerCredit: 94,
-  spreadBpsEur: 0,
-  spreadBpsUsd: 0,
-  spreadBpsChf: 0,
-  spreadBpsUsdc: 0,
-  usdcWithdrawFeeFlatCents: 0,
-  usdcWithdrawFeeBps: 0,
+  spreadBpsEur: 100,
+  spreadBpsUsd: 100,
+  spreadBpsChf: 100,
+  spreadBpsUsdc: 100,
+  usdcWithdrawFeeFlatCents: 10,
+  usdcWithdrawFeeBps: 50,
   forgeTiers: [
     { minSpent: 0, maxSpent: 49, percent: 0 },
     { minSpent: 50, maxSpent: 149, percent: 20 },
@@ -72,6 +78,31 @@ function numberFromMap(map: Record<string, string>, key: string, fallback: numbe
   if (!(key in map)) return fallback;
   const value = Number(map[key]);
   return Number.isFinite(value) ? value : fallback;
+}
+
+function bpsFromMapOrEnv(
+  map: Record<string, string>,
+  key: string,
+  currency: "EUR" | "USD" | "CHF" | "USDC",
+  fallback: number,
+) {
+  if (key in map) return clampBps(numberFromMap(map, key, fallback));
+  return spreadBpsFromEnv(currency, fallback);
+}
+
+function usdcFlatFromMapOrEnv(map: Record<string, string>, fallbackCents: number) {
+  if ("usdcWithdrawFeeFlatCents" in map) {
+    return Math.max(0, Math.floor(numberFromMap(map, "usdcWithdrawFeeFlatCents", fallbackCents)));
+  }
+  return parseUsdcFlatEnv(process.env.USDC_WITHDRAW_FEE_FLAT, fallbackCents);
+}
+
+function usdcBpsFromMapOrEnv(map: Record<string, string>, fallback: number) {
+  if ("usdcWithdrawFeeBps" in map) return clampBps(numberFromMap(map, "usdcWithdrawFeeBps", fallback));
+  return usdcFeeSettingsFromEnv({
+    usdcWithdrawFeeFlatCents: 0,
+    usdcWithdrawFeeBps: fallback,
+  }).usdcWithdrawFeeBps;
 }
 
 function boolFromMap(map: Record<string, string>, key: string, fallback: boolean) {
@@ -112,16 +143,15 @@ export async function getSettings(
     chfCentsPerCredit: map.chfCentsPerCredit
       ? Number(map.chfCentsPerCredit)
       : DEFAULT_SETTINGS.chfCentsPerCredit,
-    spreadBpsEur: numberFromMap(map, "spreadBpsEur", DEFAULT_SETTINGS.spreadBpsEur),
-    spreadBpsUsd: numberFromMap(map, "spreadBpsUsd", DEFAULT_SETTINGS.spreadBpsUsd),
-    spreadBpsChf: numberFromMap(map, "spreadBpsChf", DEFAULT_SETTINGS.spreadBpsChf),
-    spreadBpsUsdc: numberFromMap(map, "spreadBpsUsdc", DEFAULT_SETTINGS.spreadBpsUsdc),
-    usdcWithdrawFeeFlatCents: numberFromMap(
+    spreadBpsEur: bpsFromMapOrEnv(map, "spreadBpsEur", "EUR", DEFAULT_SETTINGS.spreadBpsEur),
+    spreadBpsUsd: bpsFromMapOrEnv(map, "spreadBpsUsd", "USD", DEFAULT_SETTINGS.spreadBpsUsd),
+    spreadBpsChf: bpsFromMapOrEnv(map, "spreadBpsChf", "CHF", DEFAULT_SETTINGS.spreadBpsChf),
+    spreadBpsUsdc: bpsFromMapOrEnv(map, "spreadBpsUsdc", "USDC", DEFAULT_SETTINGS.spreadBpsUsdc),
+    usdcWithdrawFeeFlatCents: usdcFlatFromMapOrEnv(
       map,
-      "usdcWithdrawFeeFlatCents",
       DEFAULT_SETTINGS.usdcWithdrawFeeFlatCents,
     ),
-    usdcWithdrawFeeBps: numberFromMap(map, "usdcWithdrawFeeBps", DEFAULT_SETTINGS.usdcWithdrawFeeBps),
+    usdcWithdrawFeeBps: usdcBpsFromMapOrEnv(map, DEFAULT_SETTINGS.usdcWithdrawFeeBps),
     forgeTiers: map.forgeTiers
       ? (JSON.parse(map.forgeTiers) as ForgeTier[])
       : DEFAULT_SETTINGS.forgeTiers,

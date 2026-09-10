@@ -179,6 +179,17 @@ async function hydrateLiveDatabase() {
       update: {},
     });
   }
+  const feeDefaultsFlag = await prisma.setting.findUnique({ where: { key: "forgeFeeDefaultsV2" } });
+  if (!feeDefaultsFlag) {
+    for (const row of FORGE_FEE_SETTING_ROWS) {
+      await prisma.setting.upsert({
+        where: { key: row.key },
+        create: { key: row.key, value: row.value },
+        update: { value: row.value },
+      });
+    }
+    await prisma.setting.create({ data: { key: "forgeFeeDefaultsV2", value: "1" } });
+  }
   await prisma.setting.upsert({
     where: { key: "shopIban" },
     create: { key: "shopIban", value: unicredit.iban },

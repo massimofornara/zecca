@@ -1,3 +1,10 @@
+/**
+ * Libro vs Circle (prelievo USDC):
+ * - L’utente viene addebitato per l’intero lordo (crediti in escrow/burn = richiesta).
+ * - Circle trasferisce solo il netto; la commissione non esce dal SCA (trattenuta).
+ * - La cassa USDC di libro riserva il netto: la commissione resta inventario negozio,
+ *   allineata agli USDC che restano fisicamente nel SCA.
+ */
 export const BPS_DENOMINATOR = 10_000;
 
 export const USDC_GAS_STATION_COPY =
@@ -134,6 +141,68 @@ export function usdcFeeBreakdownLines(quote: UsdcWithdrawQuote) {
     `Netto inviato ${formatUsdcCents(quote.netUsdCents)}`,
     USDC_GAS_STATION_COPY,
   ];
+}
+
+export function parseBpsEnv(raw: string | undefined, fallback: number) {
+  if (raw == null || String(raw).trim() === "") return clampBps(fallback);
+  const n = Number(String(raw).trim().replace(",", "."));
+  return Number.isFinite(n) ? clampBps(n) : clampBps(fallback);
+}
+
+/** USDC_WITHDRAW_FEE_FLAT in USDC (es. 0.10 → 10 centesimi). */
+export function parseUsdcFlatEnv(raw: string | undefined, fallbackCents: number) {
+  if (raw == null || String(raw).trim() === "") return Math.max(0, Math.floor(fallbackCents));
+  const n = Number(String(raw).trim().replace(",", "."));
+  if (!Number.isFinite(n) || n < 0) return Math.max(0, Math.floor(fallbackCents));
+  return Math.round(n * 100);
+}
+
+export function spreadBpsFromEnv(
+  currency: "EUR" | "USD" | "CHF" | "USDC",
+  fallback: number,
+) {
+  const specific =
+    currency === "EUR"
+      ? process.env.FORGIA_SPREAD_BPS_EUR
+      : currency === "USD"
+        ? process.env.FORGIA_SPREAD_BPS_USD
+        : currency === "CHF"
+          ? process.env.FORGIA_SPREAD_BPS_CHF
+          : process.env.FORGIA_SPREAD_BPS_USDC;
+  if (specific != null && String(specific).trim() !== "") return parseBpsEnv(specific, fallback);
+  return parseBpsEnv(process.env.FORGIA_SPREAD_BPS, fallback);
+}
+
+export function usdcFeeSettingsFromEnv(fallback: UsdcFeeSettings): UsdcFeeSettings {
+  return {
+    usdcWithdrawFeeFlatCents: parseUsdcFlatEnv(
+      process.env.USDC_WITHDRAW_FEE_FLAT,
+      fallback.usdcWithdrawFeeFlatCents,
+    ),
+    usdcWithdrawFeeBps: parseBpsEnv(process.env.USDC_WITHDRAW_FEE_BPS, fallback.usdcWithdrawFeeBps),
+  };
+}
+
+/** Esempio operativo: richiesta 1,00 USDC, SCA 1,50, default 0,10 + 50 bps. */
+export function exampleUsdcWithdraw1(scaUsdCents = 150): {
+  requestUsdCents: number;
+  feeUsdCents: number;
+  netUsdCents: number;
+  scaBeforeUsdCents: number;
+  scaAfterUsdCents: number;
+} {
+  const requestUsdCents = 100;
+  const quoted = quoteUsdcWithdrawFee(requestUsdCents, {
+    usdcWithdrawFeeFlatCents: 10,
+    usdcWithdrawFeeBps: 50,
+  });
+  return {
+    requestUsdCents,
+    feeUsdCents: quoted.feeUsdCents,
+    netUsdCents: quoted.netUsdCents,
+    scaBeforeUsdCents: scaUsdCents,
+    scaAfterUsdCents: scaUsdCents - quoted.netUsdCents,
+  };
 }
 
 export function spreadNote(spread: ConversionSpread, unit: string, cashLabel: string) {

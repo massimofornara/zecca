@@ -19,8 +19,11 @@ export default async function ForgiaSettingsPage() {
         Il tasso in euro, dollari e franchi svizzeri è indipendente (1 cr = X EUR, 1 cr = Y USD, 1
         cr = Z CHF). Il prelievo USDC su Base riusa il tasso USD: 1 USDC = 1 USD di libro. Lo{" "}
         <strong>spread di conversione</strong> (percentuale per € / $ / CHF / USDC) resta in
-        tesoreria a libro: solo il netto va in cassa. Sotto: commissione di prelievo USDC (fissa +
-        %) trattenuta nel SCA Circle, e policy del gateway crypto. Il conio non crea USDC.
+        tesoreria a libro: solo il netto va in cassa. Default **1% (100 bps)**; env
+        <span className="font-ledger">FORGIA_SPREAD_BPS</span>. Sotto: commissione di prelievo USDC
+        (default **0,10 USDC + 0,50%** / 50 bps; env <span className="font-ledger">USDC_WITHDRAW_FEE_FLAT</span>{" "}
+        + <span className="font-ledger">USDC_WITHDRAW_FEE_BPS</span>) trattenuta nel SCA Circle, e
+        policy del gateway crypto. Il conio non crea USDC. Forgia salvata vince sull’env.
       </p>
       <form action={saveForgeSettingsForm} className="mt-8 space-y-6">
         <div className="space-y-1.5">
