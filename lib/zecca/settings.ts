@@ -11,6 +11,12 @@ export type ZeccaSettings = {
   eurCentsPerCredit: number;
   usdCentsPerCredit: number;
   chfCentsPerCredit: number;
+  spreadBpsEur: number;
+  spreadBpsUsd: number;
+  spreadBpsChf: number;
+  spreadBpsUsdc: number;
+  usdcWithdrawFeeFlatCents: number;
+  usdcWithdrawFeeBps: number;
   forgeTiers: ForgeTier[];
   withdrawMaxUsdCentsPerTx: number;
   withdrawMaxUsdCentsPerDay: number;
@@ -24,6 +30,12 @@ export const DEFAULT_SETTINGS: ZeccaSettings = {
   eurCentsPerCredit: 100,
   usdCentsPerCredit: 108,
   chfCentsPerCredit: 94,
+  spreadBpsEur: 0,
+  spreadBpsUsd: 0,
+  spreadBpsChf: 0,
+  spreadBpsUsdc: 0,
+  usdcWithdrawFeeFlatCents: 0,
+  usdcWithdrawFeeBps: 0,
   forgeTiers: [
     { minSpent: 0, maxSpent: 49, percent: 0 },
     { minSpent: 50, maxSpent: 149, percent: 20 },
@@ -45,6 +57,15 @@ export const WITHDRAW_SETTING_ROWS = [
   { key: "withdrawMinUsdCents", value: String(DEFAULT_SETTINGS.withdrawMinUsdCents) },
   { key: "withdrawWhitelist", value: JSON.stringify(DEFAULT_SETTINGS.withdrawWhitelist) },
   { key: "withdrawWhitelistEnforced", value: DEFAULT_SETTINGS.withdrawWhitelistEnforced ? "true" : "false" },
+] as const;
+
+export const FORGE_FEE_SETTING_ROWS = [
+  { key: "spreadBpsEur", value: String(DEFAULT_SETTINGS.spreadBpsEur) },
+  { key: "spreadBpsUsd", value: String(DEFAULT_SETTINGS.spreadBpsUsd) },
+  { key: "spreadBpsChf", value: String(DEFAULT_SETTINGS.spreadBpsChf) },
+  { key: "spreadBpsUsdc", value: String(DEFAULT_SETTINGS.spreadBpsUsdc) },
+  { key: "usdcWithdrawFeeFlatCents", value: String(DEFAULT_SETTINGS.usdcWithdrawFeeFlatCents) },
+  { key: "usdcWithdrawFeeBps", value: String(DEFAULT_SETTINGS.usdcWithdrawFeeBps) },
 ] as const;
 
 function numberFromMap(map: Record<string, string>, key: string, fallback: number) {
@@ -91,6 +112,16 @@ export async function getSettings(
     chfCentsPerCredit: map.chfCentsPerCredit
       ? Number(map.chfCentsPerCredit)
       : DEFAULT_SETTINGS.chfCentsPerCredit,
+    spreadBpsEur: numberFromMap(map, "spreadBpsEur", DEFAULT_SETTINGS.spreadBpsEur),
+    spreadBpsUsd: numberFromMap(map, "spreadBpsUsd", DEFAULT_SETTINGS.spreadBpsUsd),
+    spreadBpsChf: numberFromMap(map, "spreadBpsChf", DEFAULT_SETTINGS.spreadBpsChf),
+    spreadBpsUsdc: numberFromMap(map, "spreadBpsUsdc", DEFAULT_SETTINGS.spreadBpsUsdc),
+    usdcWithdrawFeeFlatCents: numberFromMap(
+      map,
+      "usdcWithdrawFeeFlatCents",
+      DEFAULT_SETTINGS.usdcWithdrawFeeFlatCents,
+    ),
+    usdcWithdrawFeeBps: numberFromMap(map, "usdcWithdrawFeeBps", DEFAULT_SETTINGS.usdcWithdrawFeeBps),
     forgeTiers: map.forgeTiers
       ? (JSON.parse(map.forgeTiers) as ForgeTier[])
       : DEFAULT_SETTINGS.forgeTiers,
@@ -194,6 +225,26 @@ export async function saveSettings(
   }
   if (next.withdrawWhitelistEnforced != null) {
     await writePlain("withdrawWhitelistEnforced", next.withdrawWhitelistEnforced ? "true" : "false");
+  }
+
+  async function writeBps(
+    key: "spreadBpsEur" | "spreadBpsUsd" | "spreadBpsChf" | "spreadBpsUsdc" | "usdcWithdrawFeeBps",
+    nextBps: number | undefined,
+  ) {
+    if (nextBps == null) return;
+    const value = Math.min(10_000, Math.max(0, Math.floor(nextBps)));
+    await writePlain(key, String(value));
+  }
+  await writeBps("spreadBpsEur", next.spreadBpsEur);
+  await writeBps("spreadBpsUsd", next.spreadBpsUsd);
+  await writeBps("spreadBpsChf", next.spreadBpsChf);
+  await writeBps("spreadBpsUsdc", next.spreadBpsUsdc);
+  await writeBps("usdcWithdrawFeeBps", next.usdcWithdrawFeeBps);
+  if (next.usdcWithdrawFeeFlatCents != null) {
+    await writePlain(
+      "usdcWithdrawFeeFlatCents",
+      String(Math.max(0, Math.floor(next.usdcWithdrawFeeFlatCents))),
+    );
   }
 }
 

@@ -49,6 +49,7 @@ import { isShopEvmConfigured, shopPayoutConfigError, shopWalletAddress } from ".
 import { shopBtcAddress } from "../lib/zecca/btc-payout";
 import { getShopNetworkVault } from "../lib/zecca/shop-vault";
 import { convertTreasuryToShopCash, convertTreasuryToShopFiat, shopCryptoBalances, shopFiatBalances } from "../lib/zecca/convert";
+import { applyConversionSpread, quoteUsdcWithdrawFee } from "../lib/zecca/forge-fees";
 import { pocketBalance, treasuryBalance } from "../lib/zecca/ledger";
 import { getReserveReport } from "../lib/zecca/reserves";
 import { ensureHouseWalletCredits, grantHouseCredits, houseDisplayName, HOUSE_PAYOUT_ACCOUNTS, isHouseEmail } from "../lib/zecca/house";
@@ -1478,8 +1479,12 @@ async function main() {
     process.env.CIRCLE_ENTITY_SECRET = "ab".repeat(32);
     assert.equal(circleConfigured(), true);
     const mockHash = `0x${"cd".repeat(32)}`;
-    const circleFetch = (payload: Record<string, unknown>): typeof fetch =>
-      (async (url) => {
+    let lastTransferAmounts: string[] | null = null;
+    const circleFetch = (
+      payload: Record<string, unknown>,
+      balanceAmount = "10000.00",
+    ): typeof fetch =>
+      (async (url, init) => {
         const href = String(url);
         if (href.includes("publicKey")) {
           return { ok: true, status: 200, json: async () => ({ data: { publicKey: circlePem } }) } as Response;
@@ -1489,9 +1494,13 @@ async function main() {
             ok: true,
             status: 200,
             json: async () => ({
-              data: { tokenBalances: [{ token: { symbol: "USDC", blockchain: "BASE" }, amount: "10000.00" }] },
+              data: { tokenBalances: [{ token: { symbol: "USDC", blockchain: "BASE" }, amount: balanceAmount }] },
             }),
           } as Response;
+        }
+        if (href.includes("/transfer") && init && "body" in init && init.body) {
+          const parsed = JSON.parse(String(init.body)) as { amounts?: string[] };
+          lastTransferAmounts = parsed.amounts ?? null;
         }
         return { ok: true, status: 200, json: async () => payload } as Response;
       }) as typeof fetch;
@@ -1506,6 +1515,7 @@ async function main() {
     assert.equal(circlePaid.receiptRef, mockHash);
     assert.match(circlePaid.receiptUrl ?? "", /basescan\.org/);
     assert.equal(/127\.0\.0\.1|\/catena\//.test(circlePaid.receiptUrl ?? ""), false);
+    assert.deepEqual(lastTransferAmounts, [(usdcAsk.usdCents / 100).toFixed(2)]);
     const autoPaid = await requestAndFulfillCashout({
       userId: customer.id,
       role: "CUSTOMER",
@@ -1521,6 +1531,122 @@ async function main() {
     assert.equal(autoPaid.receiptKind, CIRCLE_TRANSFER_KIND);
     assert.equal(autoPaid.receiptRef, "circ-flow-2");
     assert.equal(autoPaid.walletChain, "BASE");
+    assert.deepEqual(lastTransferAmounts, [(autoPaid.usdCents / 100).toFixed(2)]);
+
+    const spreadMath = applyConversionSpread(1000, 500);
+    assert.equal(spreadMath.retainedCredits, 50);
+    assert.equal(spreadMath.convertedCredits, 950);
+    const feeMath = quoteUsdcWithdrawFee(1296, { usdcWithdrawFeeFlatCents: 50, usdcWithdrawFeeBps: 100 });
+    assert.equal(feeMath.feeUsdCents, 62);
+    assert.equal(feeMath.netUsdCents, 1234);
+
+    await saveSettings(
+      {
+        spreadBpsEur: 500,
+        spreadBpsUsdc: 500,
+        usdcWithdrawFeeFlatCents: 50,
+        usdcWithdrawFeeBps: 100,
+      },
+      admin.id,
+      db,
+    );
+    const beforeSpread = await treasuryBalance(db);
+    await mintCredits({ amount: 1000, note: "Spread USDC 5%", actorId: admin.id, db });
+    const spreadUsdc = await convertTreasuryToShopCash({
+      actorId: admin.id,
+      creditsCrypto: 1000,
+      cryptoAsset: "USDC",
+      db,
+    });
+    assert.equal(spreadUsdc.requestedCreditsCrypto, 1000);
+    assert.equal(spreadUsdc.retainedCreditsCrypto, 50);
+    assert.equal(spreadUsdc.creditsCrypto, 950);
+    assert.equal(spreadUsdc.cryptoUsdCents, 950 * 108);
+    assert.equal(await treasuryBalance(db), beforeSpread + 50);
+    await mintCredits({ amount: 1000, note: "Spread EUR 5%", actorId: admin.id, db });
+    const spreadEur = await convertTreasuryToShopCash({
+      actorId: admin.id,
+      creditsEur: 1000,
+      db,
+    });
+    assert.equal(spreadEur.creditsEur, 950);
+    assert.equal(spreadEur.retainedCreditsEur, 50);
+    assert.equal(spreadEur.eurCents, 95_000);
+    await saveSettings({ spreadBpsUsdc: 10_000 }, admin.id, db);
+    let spreadAte = false;
+    try {
+      await convertTreasuryToShopCash({
+        actorId: admin.id,
+        creditsCrypto: 100,
+        cryptoAsset: "USDC",
+        db,
+      });
+    } catch (error) {
+      spreadAte = isZeccaError(error) && error.code === "SPREAD_CONSUMES_AMOUNT";
+    }
+    assert.equal(spreadAte, true);
+    await saveSettings({ spreadBpsUsdc: 500 }, admin.id, db);
+
+    await purchaseCredits({ userId: customer.id, credits: 30, method: "demo", db });
+    const feeAsk = await requestCustomerCashout({
+      userId: customer.id,
+      role: "CUSTOMER",
+      credits: 12,
+      payoutKind: "WALLET",
+      walletNetwork: "USDC",
+      walletAddress: "0x742d35Cc6634C0532925a3b844Bc454e4438f44e",
+      db,
+    });
+    assert.equal(feeAsk.usdcFeeCents, 62);
+    assert.equal(feeAsk.usdcNetCents, 1234);
+    const feePaid = await sendUsdcFromShop({
+      cashoutId: feeAsk.id,
+      actorId: admin.id,
+      db,
+      fetchImpl: circleFetch({ data: { id: "circ-fee-1", transactionHash: `0x${"ab".repeat(32)}` } }),
+    });
+    assert.equal(feePaid.status, "PAID");
+    assert.deepEqual(lastTransferAmounts, ["12.34"]);
+    assert.match(feePaid.adminNote ?? "", /12,34 USDC/);
+    assert.match(feePaid.adminNote ?? "", /resta nel SCA/);
+    assert.match(feePaid.adminNote ?? "", /Gas Station/);
+    assert.equal(/paga il gas/i.test(feePaid.adminNote ?? ""), false);
+
+    const chainShortAsk = await requestCustomerCashout({
+      userId: customer.id,
+      role: "CUSTOMER",
+      credits: 12,
+      payoutKind: "WALLET",
+      walletNetwork: "USDC",
+      walletAddress: "0x742d35Cc6634C0532925a3b844Bc454e4438f44e",
+      db,
+    });
+    let chainShort = false;
+    try {
+      await sendUsdcFromShop({
+        cashoutId: chainShortAsk.id,
+        actorId: admin.id,
+        db,
+        fetchImpl: circleFetch({ data: { id: "circ-fee-short" } }, "12.00"),
+      });
+    } catch (error) {
+      chainShort = isZeccaError(error) && error.code === "USDC_CHAIN_SHORT";
+      assert.equal(isZeccaError(error) && error.message.includes("commissione trattenuta"), true);
+    }
+    assert.equal(chainShort, true, "Circle deve coprire netto + commissione trattenuta nel SCA");
+    assert.equal((await db.cashoutRequest.findUniqueOrThrow({ where: { id: chainShortAsk.id } })).status, "PENDING");
+
+    await saveSettings(
+      {
+        spreadBpsEur: 0,
+        spreadBpsUsdc: 0,
+        usdcWithdrawFeeFlatCents: 0,
+        usdcWithdrawFeeBps: 0,
+      },
+      admin.id,
+      db,
+    );
+
     if (prevCircleKey === undefined) delete process.env.CIRCLE_API_KEY;
     else process.env.CIRCLE_API_KEY = prevCircleKey;
     if (prevCircleWallet === undefined) delete process.env.CIRCLE_WALLET_ID;
@@ -1653,6 +1779,7 @@ async function main() {
     console.log("Zecca Gasless: mint a gasPrice 0 con receipt 0x1 e explorer /catena. OK.");
     console.log("Bonifico SEPA in ingresso senza Stripe/webhook. OK.");
     console.log("Casa Fornara: generazione senza pagamento + prelievo IBAN EUR/USD/CHF. OK.");
+    console.log("Forgia: spread 5% su conversione USDC/EUR resta in tesoreria; prelievo USDC invia solo il netto, commissione nel SCA. OK.");
     console.log("Fusione cliente: IBAN IT + BIC, rifiuto IBAN estero, bonifico disposto, USDC Circle. OK.");
   } finally {
     await db.$disconnect();

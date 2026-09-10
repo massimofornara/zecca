@@ -56,7 +56,7 @@ export function circleHealth() {
     ready: circleConfigured(),
     chain: CIRCLE_USDC_CHAIN,
     detail: circleConfigured()
-      ? `Wallet Circle SCA ${walletId()} su Base. USDC parte se il saldo USDC c’è. Il gas lo sponsorizza Gas Station (policy Base in Console), non il cliente.`
+      ? `Wallet Circle SCA ${walletId()} su Base. USDC parte se il saldo USDC c’è. Il gas lo sponsorizza il negozio tramite Gas Station (addebitato sul conto Circle). La commissione di prelievo resta nel SCA.`
       : "Mancano CIRCLE_API_KEY, CIRCLE_WALLET_ID o CIRCLE_ENTITY_SECRET. USDC automatico fermo: Wallet negozio non configurato.",
   };
 }

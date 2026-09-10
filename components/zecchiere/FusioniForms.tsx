@@ -22,6 +22,14 @@ import { isUsdcCashoutNetwork } from "@/lib/settlement/circle-ref";
 import { housePayoutByIban } from "@/lib/zecca/house-accounts";
 import type { InternalCryptoWallet, TreasuryCryptoAsset } from "@/lib/zecca/convert";
 import { isShopSendableNetwork } from "@/lib/evm-send";
+import {
+  applyConversionSpread,
+  formatUsdcCents,
+  percentFromBps,
+  quoteUsdcWithdrawFee,
+  usdcQuoteFromCashout,
+} from "@/lib/zecca/forge-fees";
+import { UsdcFeeBreakdown, UsdcGasStationNote } from "@/components/zecchiere/UsdcFeeBreakdown";
 
 const CRYPTO_CHOICES = CRYPTO_ASSETS.filter((asset) =>
   isShopSendableNetwork(asset.id),
@@ -35,11 +43,19 @@ export function TreasuryConvertForm({
   eurCentsPerCredit,
   usdCentsPerCredit,
   chfCentsPerCredit,
+  spreadBpsEur = 0,
+  spreadBpsUsd = 0,
+  spreadBpsChf = 0,
+  spreadBpsUsdc = 0,
 }: {
   treasury: number;
   eurCentsPerCredit: number;
   usdCentsPerCredit: number;
   chfCentsPerCredit: number;
+  spreadBpsEur?: number;
+  spreadBpsUsd?: number;
+  spreadBpsChf?: number;
+  spreadBpsUsdc?: number;
 }) {
   const [state, action] = useActionState(
     treasuryConvertAction,
@@ -57,9 +73,13 @@ export function TreasuryConvertForm({
   const [walletEvm, setWalletEvm] = useState("");
   const [formError, setFormError] = useState<string | null>(null);
 
-  const previewEur = formatFiatFromCents((creditsEur > 0 ? creditsEur : 0) * eurCentsPerCredit, "EUR");
-  const previewUsd = formatFiatFromCents((creditsUsd > 0 ? creditsUsd : 0) * usdCentsPerCredit, "USD");
-  const previewChf = formatFiatFromCents((creditsChf > 0 ? creditsChf : 0) * chfCentsPerCredit, "CHF");
+  const eurNet = applyConversionSpread(creditsEur > 0 ? creditsEur : 0, spreadBpsEur);
+  const usdNet = applyConversionSpread(creditsUsd > 0 ? creditsUsd : 0, spreadBpsUsd);
+  const chfNet = applyConversionSpread(creditsChf > 0 ? creditsChf : 0, spreadBpsChf);
+  const usdcNet = applyConversionSpread(creditsUsdc > 0 ? creditsUsdc : 0, spreadBpsUsdc);
+  const previewEur = formatFiatFromCents(eurNet.convertedCredits * eurCentsPerCredit, "EUR");
+  const previewUsd = formatFiatFromCents(usdNet.convertedCredits * usdCentsPerCredit, "USD");
+  const previewChf = formatFiatFromCents(chfNet.convertedCredits * chfCentsPerCredit, "CHF");
   const payouts = state?.payouts?.length ? state.payouts : state?.receiptId
     ? [
         {
@@ -134,9 +154,9 @@ export function TreasuryConvertForm({
       <ErrorBanner message={formError || state?.error} />
       <OkBanner message={state?.ok} />
       <p className="text-sm text-muted-foreground">
-        Euro, dollari e franchi: burn a libro. USDC: solo cassa di libro — deposita USDC vero sul
-        SCA Circle prima di prelevare. Altre crypto: mint on-chain se il KMS firma. Convertire USDC
-        non invia nulla sulla rete.
+        Euro, dollari e franchi: burn a libro. Lo spread impostato in Forgia resta in tesoreria.
+        USDC: solo cassa di libro — deposita USDC vero sul SCA Circle prima di prelevare. Altre
+        crypto: mint on-chain se il KMS firma. Convertire USDC non invia nulla sulla rete.
       </p>
       <div className="grid gap-4 sm:grid-cols-3">
         <label className="text-sm">
@@ -150,6 +170,12 @@ export function TreasuryConvertForm({
             className="mt-1 font-ledger"
           />
           <span className="mt-1 block font-ledger text-ember">{previewEur}</span>
+          {eurNet.retainedCredits > 0 ? (
+            <span className="mt-1 block text-xs text-muted-foreground">
+              Spread {percentFromBps(spreadBpsEur).toFixed(2)}%: {eurNet.retainedCredits} cr restano
+              in tesoreria
+            </span>
+          ) : null}
         </label>
         <label className="text-sm">
           Crediti → dollari (cassa)
@@ -162,6 +188,12 @@ export function TreasuryConvertForm({
             className="mt-1 font-ledger"
           />
           <span className="mt-1 block font-ledger text-ember">{previewUsd}</span>
+          {usdNet.retainedCredits > 0 ? (
+            <span className="mt-1 block text-xs text-muted-foreground">
+              Spread {percentFromBps(spreadBpsUsd).toFixed(2)}%: {usdNet.retainedCredits} cr restano
+              in tesoreria
+            </span>
+          ) : null}
         </label>
         <label className="text-sm">
           Crediti → franchi (cassa)
@@ -174,6 +206,12 @@ export function TreasuryConvertForm({
             className="mt-1 font-ledger"
           />
           <span className="mt-1 block font-ledger text-ember">{previewChf}</span>
+          {chfNet.retainedCredits > 0 ? (
+            <span className="mt-1 block text-xs text-muted-foreground">
+              Spread {percentFromBps(spreadBpsChf).toFixed(2)}%: {chfNet.retainedCredits} cr restano
+              in tesoreria
+            </span>
+          ) : null}
         </label>
       </div>
       <div className="space-y-3 rounded-md bg-background/40 p-4 ring-1 ring-primary/15">
@@ -199,8 +237,17 @@ export function TreasuryConvertForm({
                 className="mt-1 font-ledger"
               />
               <span className="mt-1 block font-ledger text-xs text-ember">
-                {formatUsdFromCents((value > 0 ? value : 0) * usdCentsPerCredit)}
+                {formatUsdFromCents(
+                  (asset === "USDC" ? usdcNet.convertedCredits : value > 0 ? value : 0) *
+                    usdCentsPerCredit,
+                )}
               </span>
+              {asset === "USDC" && usdcNet.retainedCredits > 0 ? (
+                <span className="mt-1 block text-[11px] text-muted-foreground">
+                  Spread {percentFromBps(spreadBpsUsdc).toFixed(2)}%: {usdcNet.retainedCredits} cr in
+                  tesoreria
+                </span>
+              ) : null}
             </label>
           ))}
         </div>
@@ -255,9 +302,13 @@ export function TreasuryConvertForm({
 export function InternalCryptoWithdrawForm({
   wallets,
   usdCentsPerCredit,
+  usdcWithdrawFeeFlatCents = 0,
+  usdcWithdrawFeeBps = 0,
 }: {
   wallets: InternalCryptoWallet[];
   usdCentsPerCredit: number;
+  usdcWithdrawFeeFlatCents?: number;
+  usdcWithdrawFeeBps?: number;
 }) {
   const [state, action] = useActionState(
     treasuryCryptoWithdrawAction,
@@ -271,6 +322,13 @@ export function InternalCryptoWithdrawForm({
   const selected = wallets.find((wallet) => wallet.asset === asset) ?? wallets[0];
   const amount = Number.isFinite(credits) && credits > 0 ? Math.floor(credits) : 0;
   const usdLabel = formatUsdFromCents(amount * usdCentsPerCredit);
+  const usdcQuote =
+    asset === "USDC"
+      ? quoteUsdcWithdrawFee(amount * usdCentsPerCredit, {
+          usdcWithdrawFeeFlatCents,
+          usdcWithdrawFeeBps,
+        })
+      : null;
   const delivered = Boolean(state?.receiptId && state.status === "PAID");
   const attempted = Boolean(state?.receiptId && (state.status === "PAID" || state.status === "QUEUED"));
 
@@ -369,6 +427,11 @@ export function InternalCryptoWithdrawForm({
           <span className="mt-1 block font-ledger text-ember">
             {usdLabel} in {selected?.ticker}
           </span>
+          {usdcQuote ? (
+            <div className="mt-2">
+              <UsdcFeeBreakdown quote={usdcQuote} className="space-y-1 text-xs text-muted-foreground" />
+            </div>
+          ) : null}
         </label>
         <label className="text-sm">
           Wallet di destinazione (MetaMask, Trust Wallet, exchange)
@@ -388,9 +451,10 @@ export function InternalCryptoWithdrawForm({
       <p className="text-xs text-muted-foreground">
         Alla conferma i crediti si bruciano
         {asset === "USDC"
-          ? " e parte l’invio Circle USDC su Base solo se cassa libro e wallet Circle coprono l’importo. Senza USDC on-chain la richiesta resta aperta."
+          ? " e parte l’invio Circle USDC su Base solo se cassa libro e wallet Circle coprono il netto (min libro, saldo Circle − commissione trattenuta nel SCA). Senza USDC on-chain la richiesta resta aperta."
           : " e il negozio tenta l’invio verso " + (selected?.ticker ?? "") + " in pochi secondi. Senza vault o minter i fondi non partono."}
       </p>
+      {asset === "USDC" ? <UsdcGasStationNote /> : null}
       <SubmitButton pendingLabel="Conversione in corso…">Conferma prelievo</SubmitButton>
     </form>
   );
@@ -404,6 +468,10 @@ export function PendingCashoutCard({
   eurCents,
   usdCents,
   chfCents = 0,
+  usdcFeeCents = null,
+  usdcNetCents = null,
+  usdcWithdrawFeeFlatCents = 0,
+  usdcWithdrawFeeBps = 0,
   currency,
   payoutKind,
   iban,
@@ -426,6 +494,10 @@ export function PendingCashoutCard({
   eurCents: number;
   usdCents: number;
   chfCents?: number;
+  usdcFeeCents?: number | null;
+  usdcNetCents?: number | null;
+  usdcWithdrawFeeFlatCents?: number;
+  usdcWithdrawFeeBps?: number;
   currency: string;
   payoutKind: string;
   iban: string | null;
@@ -462,6 +534,12 @@ export function PendingCashoutCard({
   });
   const isWallet = dest?.kind === "WALLET";
   const usdcOut = isWallet && isUsdcCashoutNetwork(walletNetwork);
+  const usdcQuote = usdcOut
+    ? usdcQuoteFromCashout(
+        { usdCents, usdcFeeCents, usdcNetCents },
+        { usdcWithdrawFeeFlatCents, usdcWithdrawFeeBps },
+      )
+    : null;
   const isUsd = currency === "USD";
   const isChf = currency === "CHF";
   const houseBank = housePayoutByIban(iban, currency);
@@ -526,12 +604,20 @@ export function PendingCashoutCard({
           {walletChain ? <CopyField label="Catena" value={walletChain} mono /> : null}
           <CopyField label="Indirizzo che riceve" value={walletAddress} mono />
           <CopyField label="Importo" value={dest.amountLabel ?? amountLabel} mono />
+          {usdcQuote ? (
+            <>
+              <CopyField label="Lordo" value={formatUsdcCents(usdcQuote.grossUsdCents)} mono />
+              <CopyField label="Commissione (resta nel SCA)" value={formatUsdcCents(usdcQuote.feeUsdCents)} mono />
+              <CopyField label="Netto inviato" value={formatUsdcCents(usdcQuote.netUsdCents)} mono />
+            </>
+          ) : null}
           <CopyField label="Riferimento" value={dest.causal} mono />
           <p className="text-xs text-muted-foreground">
             {usdcOut
-              ? "1 USDC = 1 USD di libro, Base mainnet. Destinazione: qualsiasi 0x (MetaMask, Trust, deposito USDC Base su Kraken/MEXC). Il cliente non paga il gas. Gas Station sponsorizza il SCA se la policy Base è attiva. Questo pulsante ritenta."
+              ? "1 USDC = 1 USD di libro, Base mainnet. Destinazione: qualsiasi 0x (MetaMask, Trust, deposito USDC Base su Kraken/MEXC). Il gas è sponsorizzato dal negozio tramite Circle Gas Station (addebitato sul conto Circle). La commissione di prelievo resta nel SCA."
               : "MetaMask, Trust Wallet e gli exchange ricevono. Non devono firmare."}
           </p>
+          {usdcQuote ? <UsdcFeeBreakdown quote={usdcQuote} className="space-y-1 text-xs text-muted-foreground" /> : null}
         </div>
       ) : (
         <p className="mt-3 text-sm text-destructive">
@@ -550,7 +636,7 @@ export function PendingCashoutCard({
               <input type="hidden" name="cashoutId" value={id} />
               <label className="flex items-start gap-2 text-xs text-muted-foreground">
                 <input type="checkbox" name="usdcConfirm" value="on" className="mt-0.5" required />
-                Invio USDC nativo su Base dal SCA Circle. Il gas lo paga Gas Station (policy Console), non il cliente. Non è un mint Zecca Gasless.
+                Invio USDC nativo su Base dal SCA Circle. Netto = richiesta − commissione; la commissione resta nel SCA. Il gas è sponsorizzato dal negozio tramite Gas Station (addebitato sul conto Circle). Non è un mint Zecca Gasless.
               </label>
               <SubmitButton size="sm" pendingLabel="Invio USDC…">
                 Invia USDC

@@ -4,6 +4,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { getSettings } from "@/lib/zecca/settings";
+import { percentFromBps } from "@/lib/zecca/forge-fees";
 
 export const metadata = { title: "Forgia" };
 
@@ -16,9 +17,10 @@ export default async function ForgiaSettingsPage() {
       <h1 className="font-display text-4xl text-primary">Regola la forgia</h1>
       <p className="mt-2 text-muted-foreground">
         Il tasso in euro, dollari e franchi svizzeri è indipendente (1 cr = X EUR, 1 cr = Y USD, 1
-        cr = Z CHF). Il prelievo USDC su Base riusa il tasso USD: 1 USDC = 1 USD di libro. Le soglie
-        della forgia restano in crediti. Più in basso: policy del gateway di prelievo crypto
-        (whitelist, massimali, rate limit). Non creano transazioni on-chain.
+        cr = Z CHF). Il prelievo USDC su Base riusa il tasso USD: 1 USDC = 1 USD di libro. Lo{" "}
+        <strong>spread di conversione</strong> (percentuale per € / $ / CHF / USDC) resta in
+        tesoreria a libro: solo il netto va in cassa. Sotto: commissione di prelievo USDC (fissa +
+        %) trattenuta nel SCA Circle, e policy del gateway crypto. Il conio non crea USDC.
       </p>
       <form action={saveForgeSettingsForm} className="mt-8 space-y-6">
         <div className="space-y-1.5">
@@ -60,6 +62,102 @@ export default async function ForgiaSettingsPage() {
             defaultValue={(settings.chfCentsPerCredit / 100).toFixed(2)}
             required
           />
+        </div>
+        <div className="space-y-4 border-t border-primary/15 pt-6">
+          <p className="text-sm uppercase tracking-[0.2em] text-primary/80">Spread di conversione</p>
+          <p className="text-sm text-muted-foreground">
+            Percentuale trattenuta in tesoreria (libro) quando converti crediti in cassa € / $ / CHF
+            / USDC. Il resto entra in cassa negozio. Non è un invio Circle e non crea token.
+          </p>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <label className="text-sm">
+              Spread euro (%)
+              <Input
+                name="spreadPctEur"
+                type="number"
+                step="0.01"
+                min={0}
+                max={100}
+                defaultValue={percentFromBps(settings.spreadBpsEur).toFixed(2)}
+                className="mt-1 font-ledger"
+                required
+              />
+            </label>
+            <label className="text-sm">
+              Spread dollari (%)
+              <Input
+                name="spreadPctUsd"
+                type="number"
+                step="0.01"
+                min={0}
+                max={100}
+                defaultValue={percentFromBps(settings.spreadBpsUsd).toFixed(2)}
+                className="mt-1 font-ledger"
+                required
+              />
+            </label>
+            <label className="text-sm">
+              Spread franchi (%)
+              <Input
+                name="spreadPctChf"
+                type="number"
+                step="0.01"
+                min={0}
+                max={100}
+                defaultValue={percentFromBps(settings.spreadBpsChf).toFixed(2)}
+                className="mt-1 font-ledger"
+                required
+              />
+            </label>
+            <label className="text-sm">
+              Spread USDC (%)
+              <Input
+                name="spreadPctUsdc"
+                type="number"
+                step="0.01"
+                min={0}
+                max={100}
+                defaultValue={percentFromBps(settings.spreadBpsUsdc).toFixed(2)}
+                className="mt-1 font-ledger"
+                required
+              />
+            </label>
+          </div>
+        </div>
+        <div className="space-y-4 border-t border-primary/15 pt-6">
+          <p className="text-sm uppercase tracking-[0.2em] text-primary/80">Commissione prelievo USDC</p>
+          <p className="text-sm text-muted-foreground">
+            Fissa + percentuale, scalate dall’importo inviato. La commissione resta nel wallet
+            Circle SCA (non viene trasferita). Il gas lo sponsorizza il negozio tramite Gas Station
+            (addebitato sul conto Circle), non il destinatario.
+          </p>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <label className="text-sm">
+              Commissione fissa (USDC)
+              <Input
+                name="usdcWithdrawFeeFlat"
+                type="number"
+                step="0.01"
+                min={0}
+                defaultValue={(settings.usdcWithdrawFeeFlatCents / 100).toFixed(2)}
+                className="mt-1 font-ledger"
+                required
+              />
+            </label>
+            <label className="text-sm">
+              Commissione percentuale (%)
+              <Input
+                name="usdcWithdrawFeePct"
+                type="number"
+                step="0.01"
+                min={0}
+                max={100}
+                defaultValue={percentFromBps(settings.usdcWithdrawFeeBps).toFixed(2)}
+                className="mt-1 font-ledger"
+                required
+              />
+            </label>
+          </div>
         </div>
         <div className="space-y-4">
           <p className="text-sm uppercase tracking-[0.2em] text-primary/80">Soglie (spesa odierna)</p>

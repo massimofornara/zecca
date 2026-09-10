@@ -40,9 +40,10 @@ export default async function FusioniPage() {
         Il conio crea solo crediti di libro, non euro in banca né USDC. I prelievi USDC partono
         dal wallet Circle SCA se c’è USDC vero. IBAN: disponi tu il SEPA, poi «Segna bonifico
         disposto» (non è un CRO). Stripe non versa sull’IBAN del cliente. USDC su Base: qualsiasi
-        0x (MetaMask, Trust, deposito Kraken/MEXC su Base). Il cliente non paga il gas: Gas
-        Station lo sponsorizza se la policy Base è attiva in Console. «Invia USDC» ritenta. Senza
-        env: «Wallet negozio non configurato». Altre crypto e liquidazione restano in{" "}
+        0x (MetaMask, Trust, deposito Kraken/MEXC su Base). Il gas è sponsorizzato dal negozio
+        tramite Circle Gas Station (addebitato sul conto Circle). La commissione di prelievo resta
+        nel SCA. «Invia USDC» ritenta. Senza env: «Wallet negozio non configurato». Altre crypto e
+        liquidazione restano in{" "}
         <a href="/zecchiere/liquidazione" className="text-ember underline-offset-2 hover:underline">
           Liquidazione
         </a>
@@ -55,14 +56,18 @@ export default async function FusioniPage() {
         <h2 className="font-display text-2xl text-primary">Conversione in cassa e invio crypto</h2>
         <p className="mt-1 text-sm text-muted-foreground">
           I crediti ancora in tesoreria ({formatCredits(treasury)}) diventano euro, dollari, franchi
-          o cassa USDC di libro. Convertire USDC non sposta token on-chain: deposita USDC vero sul
-          SCA, poi preleva.
+          o cassa USDC di libro. Lo spread % (Forgia) resta in tesoreria. Convertire USDC non sposta
+          token on-chain: deposita USDC vero sul SCA, poi preleva.
         </p>
         <TreasuryConvertForm
           treasury={treasury}
           eurCentsPerCredit={settings.eurCentsPerCredit}
           usdCentsPerCredit={settings.usdCentsPerCredit}
           chfCentsPerCredit={settings.chfCentsPerCredit}
+          spreadBpsEur={settings.spreadBpsEur}
+          spreadBpsUsd={settings.spreadBpsUsd}
+          spreadBpsChf={settings.spreadBpsChf}
+          spreadBpsUsdc={settings.spreadBpsUsdc}
         />
       </section>
 
@@ -83,6 +88,10 @@ export default async function FusioniPage() {
               eurCents={r.eurCents}
               usdCents={r.usdCents}
               chfCents={r.chfCents}
+              usdcFeeCents={r.usdcFeeCents}
+              usdcNetCents={r.usdcNetCents}
+              usdcWithdrawFeeFlatCents={settings.usdcWithdrawFeeFlatCents}
+              usdcWithdrawFeeBps={settings.usdcWithdrawFeeBps}
               currency={r.currency}
               payoutKind={r.payoutKind}
               iban={r.iban}

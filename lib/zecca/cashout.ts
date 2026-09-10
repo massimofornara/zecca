@@ -10,6 +10,12 @@ import {
 } from "@/lib/settlement/circle";
 import { basescanTxUrl, isCircleUsdcReceipt, isLocalOrInternalExplorer } from "@/lib/settlement/circle-ref";
 import { assertUsdcLiquidity } from "@/lib/zecca/usdc-cassa";
+import {
+  quoteUsdcWithdrawFee,
+  usdcFeeBreakdownLines,
+  usdcQuoteFromCashout,
+} from "@/lib/zecca/forge-fees";
+import type { ZeccaSettings } from "@/lib/zecca/settings";
 import { isValidWalletAddress, normalizeWalletAddress, walletNetworkLabel } from "@/lib/wallet";
 import { type ChainLookup, verifyCryptoReceipt } from "@/lib/chain-receipt";
 import { officialReceiptHash, sepaEndToEndId } from "@/lib/official-receipt";
@@ -55,6 +61,17 @@ export { AUTHORIZED_RECEIPT_KIND, READY_FOR_SIGNATURE_KIND, isAuthorizedReceiptK
 
 export function isSettleableCashoutStatus(status: string | null | undefined) {
   return status === "PENDING" || status === "QUEUED";
+}
+
+function usdcFeeFields(usdCents: number, settings: ZeccaSettings) {
+  const quote = quoteUsdcWithdrawFee(usdCents, settings);
+  if (quote.netUsdCents <= 0) {
+    throw new ZeccaError(
+      "La commissione di prelievo USDC assorbe l’intero importo. Alza l’importo o riduci flat/% in Forgia.",
+      "USDC_FEE_CONSUMES_AMOUNT",
+    );
+  }
+  return { usdcFeeCents: quote.feeUsdCents, usdcNetCents: quote.netUsdCents };
 }
 
 async function acceptQueuedSettlement(
@@ -465,6 +482,9 @@ export async function requestCustomerCashout(input: {
         walletAddress,
         walletNetwork,
         walletChain,
+        ...(payoutKind === "WALLET" && isUsdcCashoutNetwork(walletNetwork)
+          ? usdcFeeFields(usdCents, settings)
+          : {}),
       },
     });
 
@@ -1052,15 +1072,32 @@ export async function sendUsdcFromShop(input: {
   if (cashout.payoutKind !== "WALLET" || !cashout.walletAddress || !isUsdcCashoutNetwork(cashout.walletNetwork)) {
     throw new ZeccaError("Questo prelievo non è un invio USDC.", "INVALID");
   }
+  const settings = await getSettings(db);
+  const quote = usdcQuoteFromCashout(cashout, settings);
+  if (quote.netUsdCents <= 0) {
+    throw new ZeccaError(
+      "La commissione di prelievo USDC assorbe l’intero importo. Alza l’importo o riduci flat/% in Forgia.",
+      "USDC_FEE_CONSUMES_AMOUNT",
+      cashout.id,
+    );
+  }
   await assertUsdcLiquidity({
-    usdCents: cashout.usdCents,
+    usdCents: quote.grossUsdCents,
+    netUsdCents: quote.netUsdCents,
+    feeUsdCents: quote.feeUsdCents,
     cashoutId: cashout.id,
     db,
     fetchImpl: input.fetchImpl,
   });
+  if (cashout.usdcNetCents == null || cashout.usdcFeeCents == null) {
+    await db.cashoutRequest.update({
+      where: { id: cashout.id },
+      data: { usdcFeeCents: quote.feeUsdCents, usdcNetCents: quote.netUsdCents },
+    });
+  }
   const sent = await transferUsdcOnBase({
     destination: cashout.walletAddress,
-    amountUsdCents: cashout.usdCents,
+    amountUsdCents: quote.netUsdCents,
     idempotencyKey: cashout.id,
     fetchImpl: input.fetchImpl,
   });
@@ -1071,7 +1108,7 @@ export async function sendUsdcFromShop(input: {
     receiptKind: hash ? "TX_HASH" : CIRCLE_TRANSFER_KIND,
     receiptRef: hash ?? sent.id,
     receiptUrl,
-    adminNote: `USDC inviato su Base dal wallet Circle del negozio · ${sent.id}. Non è un mint Zecca Gasless.`,
+    adminNote: `USDC inviato su Base dal wallet Circle del negozio · ${sent.id}. ${usdcFeeBreakdownLines(quote).join(" · ")} Non è un mint Zecca Gasless.`,
   });
 }
 
@@ -1367,7 +1404,9 @@ export async function requestInternalCryptoWithdraw(input: {
         payoutKind: "WALLET",
         walletAddress: address,
         walletNetwork: asset,
+        walletChain: asset === "USDC" ? CIRCLE_USDC_CHAIN : null,
         adminNote: `Prelievo da wallet interno ${asset}`,
+        ...(asset === "USDC" ? usdcFeeFields(usdCents, settings) : {}),
       },
     });
   });

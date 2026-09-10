@@ -226,6 +226,8 @@ model CashoutRequest {
   receiptUrl  String?
   receiptHash String?
   adminNote  String?
+  usdcFeeCents Int?
+  usdcNetCents Int?
   createdAt  DateTime      @default(now())
   resolvedAt DateTime?
   ledger     LedgerEntry[]

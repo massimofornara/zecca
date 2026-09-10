@@ -7,7 +7,12 @@ import { creditsToFiatCents } from "@/lib/zecca/fiat";
 import { appendLedger, pocketBalance } from "@/lib/zecca/ledger";
 import { getSettings } from "@/lib/zecca/settings";
 import { shopPayoutAddress } from "@/lib/zecca/shop-payout";
-import { CIRCLE_SHOP_SCA_ADDRESS } from "@/lib/settlement/circle-ref";
+import { CIRCLE_SHOP_SCA_ADDRESS, isUsdcCashoutNetwork } from "@/lib/settlement/circle-ref";
+import {
+  applyConversionSpread,
+  reservedUsdCentsForUsdcCashout,
+  spreadNote,
+} from "@/lib/zecca/forge-fees";
 
 type Db = PrismaClient | Prisma.TransactionClient;
 
@@ -133,7 +138,7 @@ export async function shopCryptoBalances(db: Db = defaultPrisma): Promise<ShopCr
           { walletNetwork: { in: ["USDC", "USDC_BASE", "BASE"] } },
         ],
       },
-      select: { credits: true, usdCents: true, walletNetwork: true },
+      select: { credits: true, usdCents: true, walletNetwork: true, usdcNetCents: true },
     }),
   ]);
 
@@ -147,7 +152,9 @@ export async function shopCryptoBalances(db: Db = defaultPrisma): Promise<ShopCr
     const asset = parseTreasuryCryptoAsset(row.walletNetwork);
     if (!asset) continue;
     books[asset].reservedCredits += row.credits;
-    books[asset].reservedUsdCents += row.usdCents;
+    books[asset].reservedUsdCents += isUsdcCashoutNetwork(row.walletNetwork)
+      ? reservedUsdCentsForUsdcCashout(row)
+      : row.usdCents;
   }
   for (const asset of TREASURY_CRYPTO_ASSETS) {
     books[asset].remainingCredits = Math.max(0, books[asset].credits - books[asset].reservedCredits);
@@ -237,11 +244,34 @@ export async function convertTreasuryToShopCash(input: {
   }
 
   const settings = await getSettings(db);
-  const eurCents = creditsToFiatCents(creditsEur, settings.eurCentsPerCredit);
-  const usdCents = creditsToFiatCents(creditsUsd, settings.usdCentsPerCredit);
-  const chfCents = creditsToFiatCents(creditsChf, settings.chfCentsPerCredit);
-  const cryptoUsdCents = creditsToFiatCents(creditsCrypto, settings.usdCentsPerCredit);
+  const eurSpread = applyConversionSpread(creditsEur, settings.spreadBpsEur);
+  const usdSpread = applyConversionSpread(creditsUsd, settings.spreadBpsUsd);
+  const chfSpread = applyConversionSpread(creditsChf, settings.spreadBpsChf);
+  const usdcSpread =
+    cryptoAssetId === "USDC"
+      ? applyConversionSpread(creditsCrypto, settings.spreadBpsUsdc)
+      : applyConversionSpread(creditsCrypto, 0);
+  if (
+    (creditsEur > 0 && eurSpread.convertedCredits <= 0) ||
+    (creditsUsd > 0 && usdSpread.convertedCredits <= 0) ||
+    (creditsChf > 0 && chfSpread.convertedCredits <= 0) ||
+    (creditsCrypto > 0 && usdcSpread.convertedCredits <= 0)
+  ) {
+    throw new ZeccaError(
+      "Lo spread della forgia assorbe l’intera conversione. Riduci la percentuale in Forgia.",
+      "SPREAD_CONSUMES_AMOUNT",
+    );
+  }
+  const convertedEur = eurSpread.convertedCredits;
+  const convertedUsd = usdSpread.convertedCredits;
+  const convertedChf = chfSpread.convertedCredits;
+  const convertedCrypto = usdcSpread.convertedCredits;
+  const eurCents = creditsToFiatCents(convertedEur, settings.eurCentsPerCredit);
+  const usdCents = creditsToFiatCents(convertedUsd, settings.usdCentsPerCredit);
+  const chfCents = creditsToFiatCents(convertedChf, settings.chfCentsPerCredit);
+  const cryptoUsdCents = creditsToFiatCents(convertedCrypto, settings.usdCentsPerCredit);
   const totalCredits = creditsEur + creditsUsd + creditsChf + creditsCrypto;
+  const burnedCredits = convertedEur + convertedUsd + convertedChf + convertedCrypto;
 
   const converted = await db.$transaction(async (tx) => {
     const treasury = await pocketBalance("TREASURY", null, tx);
@@ -254,52 +284,64 @@ export async function convertTreasuryToShopCash(input: {
 
     const entries = [];
 
-    if (creditsEur > 0) {
+    if (convertedEur > 0) {
       entries.push(
         await appendLedger(
           {
             type: "TREASURY_CONVERT_TO_EUR",
-            amountCredits: creditsEur,
+            amountCredits: convertedEur,
             fromPocket: "TREASURY",
             toPocket: "BURN",
             actorId: input.actorId,
             eurCents,
             usdCents: 0,
             fiatCurrency: "EUR",
-            note: `Conversione tesoreria: ${creditsEur} cr → ${(eurCents / 100).toFixed(2)} EUR in cassa negozio`,
-            metadata: { credits: creditsEur, eurCents },
+            note: spreadNote(eurSpread, "EUR", `${(eurCents / 100).toFixed(2)} EUR in cassa negozio`),
+            metadata: {
+              credits: convertedEur,
+              requestedCredits: eurSpread.totalCredits,
+              retainedCredits: eurSpread.retainedCredits,
+              spreadBps: eurSpread.spreadBps,
+              eurCents,
+            },
           },
           tx,
         ),
       );
     }
 
-    if (creditsUsd > 0) {
+    if (convertedUsd > 0) {
       entries.push(
         await appendLedger(
           {
             type: "TREASURY_CONVERT_TO_USD",
-            amountCredits: creditsUsd,
+            amountCredits: convertedUsd,
             fromPocket: "TREASURY",
             toPocket: "BURN",
             actorId: input.actorId,
             eurCents: 0,
             usdCents,
             fiatCurrency: "USD",
-            note: `Conversione tesoreria: ${creditsUsd} cr → ${(usdCents / 100).toFixed(2)} USD in cassa negozio`,
-            metadata: { credits: creditsUsd, usdCents },
+            note: spreadNote(usdSpread, "USD", `${(usdCents / 100).toFixed(2)} USD in cassa negozio`),
+            metadata: {
+              credits: convertedUsd,
+              requestedCredits: usdSpread.totalCredits,
+              retainedCredits: usdSpread.retainedCredits,
+              spreadBps: usdSpread.spreadBps,
+              usdCents,
+            },
           },
           tx,
         ),
       );
     }
 
-    if (creditsChf > 0) {
+    if (convertedChf > 0) {
       entries.push(
         await appendLedger(
           {
             type: "TREASURY_CONVERT_TO_CHF",
-            amountCredits: creditsChf,
+            amountCredits: convertedChf,
             fromPocket: "TREASURY",
             toPocket: "BURN",
             actorId: input.actorId,
@@ -307,34 +349,44 @@ export async function convertTreasuryToShopCash(input: {
             usdCents: 0,
             chfCents,
             fiatCurrency: "CHF",
-            note: `Conversione tesoreria: ${creditsChf} cr → ${(chfCents / 100).toFixed(2)} CHF in cassa negozio`,
-            metadata: { credits: creditsChf, chfCents },
+            note: spreadNote(chfSpread, "CHF", `${(chfCents / 100).toFixed(2)} CHF in cassa negozio`),
+            metadata: {
+              credits: convertedChf,
+              requestedCredits: chfSpread.totalCredits,
+              retainedCredits: chfSpread.retainedCredits,
+              spreadBps: chfSpread.spreadBps,
+              chfCents,
+            },
           },
           tx,
         ),
       );
     }
 
-    if (creditsCrypto > 0 && cryptoAssetId) {
+    if (convertedCrypto > 0 && cryptoAssetId) {
       const ticker = cryptoAsset(cryptoAssetId)?.ticker ?? cryptoAssetId;
+      const cashLabel =
+        cryptoAssetId === "USDC"
+          ? `${(cryptoUsdCents / 100).toFixed(2)} USDC a libro. Non è un invio Circle: deposita USDC vero sul SCA Base.`
+          : `${(cryptoUsdCents / 100).toFixed(2)} USD in ${ticker} verso payout diretto`;
       entries.push(
         await appendLedger(
           {
             type: "TREASURY_CONVERT_TO_CRYPTO",
-            amountCredits: creditsCrypto,
+            amountCredits: convertedCrypto,
             fromPocket: "TREASURY",
             toPocket: "BURN",
             actorId: input.actorId,
             eurCents: 0,
             usdCents: cryptoUsdCents,
             fiatCurrency: "USD",
-            note:
-              cryptoAssetId === "USDC"
-                ? `Conversione tesoreria: ${creditsCrypto} cr → ${(cryptoUsdCents / 100).toFixed(2)} USDC a libro. Non è un invio Circle: deposita USDC vero sul SCA Base.`
-                : `Conversione tesoreria: ${creditsCrypto} cr → ${(cryptoUsdCents / 100).toFixed(2)} USD in ${ticker} verso payout diretto`,
+            note: spreadNote(usdcSpread, cryptoAssetId, cashLabel),
             metadata: {
               asset: cryptoAssetId,
-              credits: creditsCrypto,
+              credits: convertedCrypto,
+              requestedCredits: usdcSpread.totalCredits,
+              retainedCredits: usdcSpread.retainedCredits,
+              spreadBps: usdcSpread.spreadBps,
               usdCents: cryptoUsdCents,
               shopAddress: cryptoAssetId === "USDC" ? CIRCLE_SHOP_SCA_ADDRESS : shopPayoutAddress(cryptoAssetId),
             },
@@ -345,15 +397,24 @@ export async function convertTreasuryToShopCash(input: {
     }
 
     return {
-      creditsEur,
-      creditsUsd,
-      creditsChf,
-      creditsCrypto,
+      creditsEur: convertedEur,
+      creditsUsd: convertedUsd,
+      creditsChf: convertedChf,
+      creditsCrypto: convertedCrypto,
+      requestedCreditsEur: creditsEur,
+      requestedCreditsUsd: creditsUsd,
+      requestedCreditsChf: creditsChf,
+      requestedCreditsCrypto: creditsCrypto,
+      retainedCreditsEur: eurSpread.retainedCredits,
+      retainedCreditsUsd: usdSpread.retainedCredits,
+      retainedCreditsChf: chfSpread.retainedCredits,
+      retainedCreditsCrypto: usdcSpread.retainedCredits,
       cryptoAsset: cryptoAssetId,
       eurCents,
       usdCents,
       chfCents,
       cryptoUsdCents,
+      burnedCredits,
       entries,
     };
   });

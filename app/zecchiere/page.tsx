@@ -99,6 +99,8 @@ export default async function TesoreriaPage() {
         <InternalCryptoWithdrawForm
           wallets={internalWallets}
           usdCentsPerCredit={settings.usdCentsPerCredit}
+          usdcWithdrawFeeFlatCents={settings.usdcWithdrawFeeFlatCents}
+          usdcWithdrawFeeBps={settings.usdcWithdrawFeeBps}
         />
       </section>
 
@@ -193,14 +195,19 @@ export default async function TesoreriaPage() {
       <section className="metal-frame mt-8 rounded-md bg-card p-5">
         <h2 className="font-display text-2xl text-primary">Converti crediti in cassa e crypto</h2>
         <p className="mt-1 text-sm text-muted-foreground">
-        Euro, dollari e franchi restano in cassa negozio. USDC va a libro: deposita USDC vero sul
-        SCA Circle, poi preleva. BTC/ETH/USDT/BNB tentano l’invio on-chain.
+        Euro, dollari e franchi restano in cassa negozio (spread Forgia in tesoreria). USDC va a
+        libro: deposita USDC vero sul SCA Circle, poi preleva. BTC/ETH/USDT/BNB tentano l’invio
+        on-chain.
         </p>
         <TreasuryConvertForm
           treasury={flow.treasury}
           eurCentsPerCredit={settings.eurCentsPerCredit}
           usdCentsPerCredit={settings.usdCentsPerCredit}
           chfCentsPerCredit={settings.chfCentsPerCredit}
+          spreadBpsEur={settings.spreadBpsEur}
+          spreadBpsUsd={settings.spreadBpsUsd}
+          spreadBpsChf={settings.spreadBpsChf}
+          spreadBpsUsdc={settings.spreadBpsUsdc}
         />
       </section>
 

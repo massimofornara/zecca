@@ -7,7 +7,7 @@ import { CATALOG_SEED, catalogProductFields } from "@/lib/catalog";
 import { attachCatalogSuppliers } from "@/lib/suppliers";
 import { grantHouseCredits } from "@/lib/zecca/house";
 import { HOUSE_PAYOUT_ACCOUNTS } from "@/lib/zecca/house-accounts";
-import { DEFAULT_SETTINGS, WITHDRAW_SETTING_ROWS } from "@/lib/zecca/settings";
+import { DEFAULT_SETTINGS, FORGE_FEE_SETTING_ROWS, WITHDRAW_SETTING_ROWS } from "@/lib/zecca/settings";
 import { pocketBalance, treasuryBalance } from "@/lib/zecca/ledger";
 
 const LIVE_ACCOUNTS = [
@@ -166,6 +166,13 @@ async function hydrateLiveDatabase() {
     update: {},
   });
   for (const row of WITHDRAW_SETTING_ROWS) {
+    await prisma.setting.upsert({
+      where: { key: row.key },
+      create: { key: row.key, value: row.value },
+      update: {},
+    });
+  }
+  for (const row of FORGE_FEE_SETTING_ROWS) {
     await prisma.setting.upsert({
       where: { key: row.key },
       create: { key: row.key, value: row.value },

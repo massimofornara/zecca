@@ -136,7 +136,7 @@ export async function getLiveReport(): Promise<LiveReport> {
       ok: false,
       title: "Bonifici in uscita",
       detail:
-        "IBAN: SEPA a mano (Segna bonifico disposto). USDC su Base: automatico dal SCA Circle; gas via Gas Station se la policy Base è attiva.",
+        "IBAN: SEPA a mano (Segna bonifico disposto). USDC su Base: automatico dal SCA Circle; gas sponsorizzato dal negozio via Gas Station; commissione di prelievo trattenuta nel SCA.",
       needsYou: true,
     },
     {

@@ -25,6 +25,7 @@ import { findRememberedProof, rememberCashoutProof } from "@/lib/cashout-proof-s
 import { isValidWalletAddress, normalizeWalletAddress } from "@/lib/wallet";
 import { destinationInstruction } from "@/lib/payout";
 import { saveSettings, type ForgeTier } from "@/lib/zecca/settings";
+import { bpsFromPercent } from "@/lib/zecca/forge-fees";
 import { cancelBonificoPurchase, confirmBonificoPurchase, saveShopBank } from "@/lib/zecca/bank";
 import { prisma } from "@/lib/db";
 import { fulfillDhlOrder, markSupplierShipped, refreshOrderTracking } from "@/lib/zecca/shop";
@@ -850,6 +851,19 @@ export async function saveForgeSettingsAction(
     return { error: "La soglia minima di prelievo crypto non può essere negativa." };
   }
 
+  const spreadEur = Number(formData.get("spreadPctEur") ?? 0);
+  const spreadUsd = Number(formData.get("spreadPctUsd") ?? 0);
+  const spreadChf = Number(formData.get("spreadPctChf") ?? 0);
+  const spreadUsdc = Number(formData.get("spreadPctUsdc") ?? 0);
+  const usdcFeeFlat = Number(formData.get("usdcWithdrawFeeFlat") ?? 0);
+  const usdcFeePct = Number(formData.get("usdcWithdrawFeePct") ?? 0);
+  if ([spreadEur, spreadUsd, spreadChf, spreadUsdc, usdcFeePct].some((n) => !Number.isFinite(n) || n < 0 || n > 100)) {
+    return { error: "Spread e commissione percentuale devono stare tra 0 e 100." };
+  }
+  if (!Number.isFinite(usdcFeeFlat) || usdcFeeFlat < 0) {
+    return { error: "La commissione fissa USDC non può essere negativa." };
+  }
+
   const whitelist = String(formData.get("withdrawWhitelist") ?? "")
     .split(/[\n,;]+/)
     .map((item) => item.trim())
@@ -867,6 +881,12 @@ export async function saveForgeSettingsAction(
       withdrawMinUsdCents: Math.round(minUsd * 100),
       withdrawWhitelist: whitelist,
       withdrawWhitelistEnforced: formData.get("withdrawWhitelistEnforced") === "on",
+      spreadBpsEur: bpsFromPercent(spreadEur),
+      spreadBpsUsd: bpsFromPercent(spreadUsd),
+      spreadBpsChf: bpsFromPercent(spreadChf),
+      spreadBpsUsdc: bpsFromPercent(spreadUsdc),
+      usdcWithdrawFeeFlatCents: Math.round(usdcFeeFlat * 100),
+      usdcWithdrawFeeBps: bpsFromPercent(usdcFeePct),
     },
     admin.id,
   );

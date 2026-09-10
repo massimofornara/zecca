@@ -16,7 +16,8 @@ export function CircleCassaCard({ cassa }: { cassa: UsdcCassaSnapshot }) {
       <h2 className="font-display text-2xl text-primary">Cassa USDC reale (Circle SCA)</h2>
       <p className="mt-1 text-sm text-muted-foreground">
         Convertire crediti aggiorna solo il libro. I prelievi verso MetaMask, Trust o Kraken partono
-        solo se questo wallet ha USDC nativo su Base. Il cliente non paga il gas.
+        solo se questo wallet ha USDC nativo su Base. Il gas è sponsorizzato dal negozio tramite
+        Circle Gas Station (addebitato sul conto Circle). La commissione di prelievo resta nel SCA.
       </p>
       <div className="mt-4 grid gap-3 sm:grid-cols-3">
         <div>
@@ -40,9 +41,27 @@ export function CircleCassaCard({ cassa }: { cassa: UsdcCassaSnapshot }) {
             })}{" "}
             USDC
           </p>
-          <p className="text-xs text-muted-foreground">min(libro, catena)</p>
+          <p className="text-xs text-muted-foreground">min(libro, catena − commissione SCA)</p>
         </div>
       </div>
+      {cassa.feeFlatUsdCents > 0 || cassa.feeBps > 0 ? (
+        <p className="mt-3 text-sm text-muted-foreground">
+          Commissione prelievo (Forgia): {(cassa.feeFlatUsdCents / 100).toLocaleString("it-IT", {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2,
+          })}{" "}
+          USDC fissa + {(cassa.feeBps / 100).toLocaleString("it-IT", {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2,
+          })}
+          %. Resta nel SCA; il netto massimo inviabile è{" "}
+          {(cassa.withdrawableUsdCents / 100).toLocaleString("it-IT", {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2,
+          })}{" "}
+          USDC.
+        </p>
+      ) : null}
       {mismatch ? (
         <p className="mt-4 rounded-md bg-ember/10 px-3 py-2 text-sm text-ember ring-1 ring-ember/30">
           Libro USDC {cassa.bookLabel} ma wallet Circle {cassa.chainLabel} — deposita la differenza

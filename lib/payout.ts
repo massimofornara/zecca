@@ -21,7 +21,7 @@ export function walletInstruction(input: {
     `Crypto: ${walletNetworkLabel(input.network)} (${ticker})`,
     `Indirizzo: ${input.address}`,
     `Importo che il negozio invia: ${amountLabel} (o equivalente sulla rete)`,
-    `Chi riceve non firma e non paga il gas: MetaMask, Trust o deposito exchange su Base (USDC).`,
+    `Chi riceve non firma. Per USDC su Base il gas è sponsorizzato dal negozio tramite Circle Gas Station (addebitato sul conto Circle); la commissione di prelievo resta nel SCA.`,
     `Riferimento: ${causal}`,
   ];
   return { causal, text: lines.join("\n"), amountLabel };

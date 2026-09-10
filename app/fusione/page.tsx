@@ -72,7 +72,7 @@ export default async function FusionePage() {
       <p className="mt-3 max-w-2xl text-muted-foreground">
         {house
           ? `${who}, i crediti generati si convertono nella crypto scelta. Alla conferma i crediti si bruciano e il prelievo viene accettato. MetaMask, Trust Wallet o l’exchange ricevono. Il bonifico IBAN resta da UniCredit o Wise, anche in franchi svizzeri.`
-          : "Chiedi un bonifico SEPA su IBAN italiano, oppure USDC su Base verso MetaMask, Trust o un deposito exchange (Kraken/MEXC: indirizzo USDC Base). Tu non firmi e non paghi il gas. Stripe non accredita il tuo IBAN."}
+          : "Chiedi un bonifico SEPA su IBAN italiano, oppure USDC su Base verso MetaMask, Trust o un deposito exchange (Kraken/MEXC: indirizzo USDC Base). Tu non firmi. Il gas è sponsorizzato dal negozio tramite Circle Gas Station; la commissione di prelievo resta nel SCA. Stripe non accredita il tuo IBAN."}
       </p>
       {house ? (
         <div className="mt-8">
@@ -94,6 +94,8 @@ export default async function FusionePage() {
           usdcWithdrawableCents={usdcCassa.withdrawableUsdCents}
           usdcBookLabel={usdcCassa.bookLabel}
           usdcChainLabel={usdcCassa.chainLabel}
+          usdcWithdrawFeeFlatCents={settings.usdcWithdrawFeeFlatCents}
+          usdcWithdrawFeeBps={settings.usdcWithdrawFeeBps}
         />
       </div>
       <section className="mt-12">

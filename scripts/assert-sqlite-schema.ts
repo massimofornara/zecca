@@ -24,6 +24,11 @@ async function main() {
         `CashoutRequest.ibanBic/walletChain assenti dopo db push. Colonne: ${cashoutNames.join(", ")}`,
       );
     }
+    if (!cashoutNames.includes("usdcFeeCents") || !cashoutNames.includes("usdcNetCents")) {
+      throw new Error(
+        `CashoutRequest.usdcFeeCents/usdcNetCents assenti dopo db push. Colonne: ${cashoutNames.join(", ")}`,
+      );
+    }
     const gateway = await prisma.$queryRaw<PragmaColumn[]>`PRAGMA table_info("GatewayTransmission")`;
     const gatewayNames = gateway.map((column) => column.name);
     if (!gatewayNames.includes("signature") || !gatewayNames.includes("receiptHash")) {
