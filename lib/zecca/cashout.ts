@@ -2,7 +2,12 @@ import type { PrismaClient, Role } from "@prisma/client";
 import { prisma as defaultPrisma } from "@/lib/db";
 import { ZeccaError } from "@/lib/errors";
 import { isValidBic, isValidIban, isItalianIban, maskIban, normalizeBic, normalizeIban } from "@/lib/iban";
-import { CIRCLE_USDC_CHAIN, isUsdcCashoutNetwork, transferUsdcOnBase } from "@/lib/settlement/circle";
+import {
+  CIRCLE_USDC_CHAIN,
+  circleConfigured,
+  isUsdcCashoutNetwork,
+  transferUsdcOnBase,
+} from "@/lib/settlement/circle";
 import { isValidWalletAddress, normalizeWalletAddress, walletNetworkLabel } from "@/lib/wallet";
 import { type ChainLookup, verifyCryptoReceipt } from "@/lib/chain-receipt";
 import { officialReceiptHash, sepaEndToEndId } from "@/lib/official-receipt";
@@ -778,6 +783,7 @@ export async function fulfillWalletCashoutFromShop(input: {
   cashoutId: string;
   actorId: string;
   db?: PrismaClient;
+  fetchImpl?: typeof fetch;
 }) {
   const db = input.db ?? defaultPrisma;
   const cashout = await db.cashoutRequest.findUnique({ where: { id: input.cashoutId } });
@@ -792,7 +798,12 @@ export async function fulfillWalletCashoutFromShop(input: {
     throw new ZeccaError("Questo prelievo non è un invio crypto dal negozio.", "INVALID");
   }
   if (isUsdcCashoutNetwork(cashout.walletNetwork) && !cashout.isTreasury) {
-    return sendUsdcFromShop({ cashoutId: cashout.id, actorId: input.actorId, db });
+    return sendUsdcFromShop({
+      cashoutId: cashout.id,
+      actorId: input.actorId,
+      db,
+      fetchImpl: input.fetchImpl,
+    });
   }
   const blocked = shopPayoutConfigError(cashout.walletNetwork);
   if (blocked) {
@@ -1194,6 +1205,7 @@ export async function requestAndFulfillCashout(input: {
   shopSend?: boolean;
   bookSettle?: boolean;
   db?: PrismaClient;
+  fetchImpl?: typeof fetch;
 }) {
   const db = input.db ?? defaultPrisma;
   const cashout = await requestCustomerCashout({
@@ -1227,6 +1239,7 @@ export async function requestAndFulfillCashout(input: {
         cashoutId: cashout.id,
         actorId: input.userId,
         db,
+        fetchImpl: input.fetchImpl,
       });
     } catch (error) {
       if (error instanceof ZeccaError) {
@@ -1658,6 +1671,28 @@ export async function closeOpenBookSettlementsViaGateway(input?: {
     )?.id;
   if (!actor) return { closed: 0, rewritten: 0 };
 
+  let autoUsdc = 0;
+  if (circleConfigured()) {
+    const pendingUsdc = await db.cashoutRequest.findMany({
+      where: {
+        status: "PENDING",
+        payoutKind: "WALLET",
+        isTreasury: false,
+        walletNetwork: { in: ["USDC", "USDC_BASE", "BASE"] },
+      },
+      orderBy: { createdAt: "asc" },
+      take: 20,
+    });
+    for (const row of pendingUsdc) {
+      try {
+        const settled = await sendUsdcFromShop({ cashoutId: row.id, actorId: actor, db });
+        if (settled.status === "PAID") autoUsdc += 1;
+      } catch {
+        // Resta PENDING: wallet vuoto o Circle ha rifiutato. Niente hash inventato.
+      }
+    }
+  }
+
   const open = await db.cashoutRequest.findMany({
     where: {
       status: { in: ["QUEUED", "PENDING"] },
@@ -1752,5 +1787,5 @@ export async function closeOpenBookSettlementsViaGateway(input?: {
     rewritten += 1;
   }
 
-  return { closed, rewritten };
+  return { closed: closed + autoUsdc, rewritten };
 }

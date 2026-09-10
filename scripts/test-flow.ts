@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { generateKeyPairSync } from "node:crypto";
 import { execSync } from "node:child_process";
 import { existsSync, unlinkSync } from "node:fs";
 import path from "node:path";
@@ -52,6 +53,7 @@ import { getReserveReport } from "../lib/zecca/reserves";
 import { ensureHouseWalletCredits, grantHouseCredits, houseDisplayName, HOUSE_PAYOUT_ACCOUNTS, isHouseEmail } from "../lib/zecca/house";
 import { isZeccaError } from "../lib/errors";
 import { isValidIban, maskIban } from "../lib/iban";
+import { circleConfigured } from "../lib/settlement/circle";
 import { CATALOG_SEED, catalogProductFields, SHOP_CATEGORIES } from "../lib/catalog";
 import { attachCatalogSuppliers, SUPPLIER_SEED } from "../lib/suppliers";
 
@@ -1447,6 +1449,7 @@ async function main() {
     delete process.env.CIRCLE_API_KEY;
     delete process.env.CIRCLE_WALLET_ID;
     delete process.env.CIRCLE_ENTITY_SECRET;
+    assert.equal(circleConfigured(), false);
     let circleMissing = false;
     try {
       await sendUsdcFromShop({ cashoutId: usdcAsk.id, actorId: admin.id, db });
@@ -1458,45 +1461,45 @@ async function main() {
     assert.equal((await db.cashoutRequest.findUniqueOrThrow({ where: { id: usdcAsk.id } })).status, "PENDING");
 
     process.env.CIRCLE_API_KEY = "TEST_API_KEY:flow";
-    process.env.CIRCLE_WALLET_ID = "wallet-test-1";
+    process.env.CIRCLE_WALLET_ID = "11111111-1111-4111-8111-111111111111";
+    assert.equal(circleConfigured(), false, "senza ENTITY_SECRET Circle non è pronto");
+    const { publicKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
+    const circlePem = publicKey.export({ type: "spki", format: "pem" }).toString();
+    process.env.CIRCLE_ENTITY_SECRET = "ab".repeat(32);
+    assert.equal(circleConfigured(), true);
     const mockHash = `0x${"cd".repeat(32)}`;
+    const circleFetch = (payload: Record<string, unknown>): typeof fetch =>
+      (async (url) => {
+        const href = String(url);
+        if (href.includes("publicKey")) {
+          return { ok: true, status: 200, json: async () => ({ data: { publicKey: circlePem } }) } as Response;
+        }
+        return { ok: true, status: 200, json: async () => payload } as Response;
+      }) as typeof fetch;
     const circlePaid = await sendUsdcFromShop({
       cashoutId: usdcAsk.id,
       actorId: admin.id,
       db,
-      fetchImpl: async () =>
-        ({
-          ok: true,
-          status: 200,
-          json: async () => ({ data: { id: "circ-flow-1", transactionHash: mockHash } }),
-        }) as Response,
+      fetchImpl: circleFetch({ data: { id: "circ-flow-1", transactionHash: mockHash } }),
     });
     assert.equal(circlePaid.status, "PAID");
     assert.equal(circlePaid.receiptKind, "TX_HASH");
     assert.equal(circlePaid.receiptRef, mockHash);
-    const circleIdAsk = await requestCustomerCashout({
+    const autoPaid = await requestAndFulfillCashout({
       userId: customer.id,
       role: "CUSTOMER",
       credits: 8,
       payoutKind: "WALLET",
       walletNetwork: "USDC",
       walletAddress: "0x742d35Cc6634C0532925a3b844Bc454e4438f44e",
+      shopSend: true,
       db,
+      fetchImpl: circleFetch({ data: { id: "circ-flow-2" } }),
     });
-    const circleIdPaid = await sendUsdcFromShop({
-      cashoutId: circleIdAsk.id,
-      actorId: admin.id,
-      db,
-      fetchImpl: async () =>
-        ({
-          ok: true,
-          status: 200,
-          json: async () => ({ data: { id: "circ-flow-2" } }),
-        }) as Response,
-    });
-    assert.equal(circleIdPaid.status, "PAID");
-    assert.equal(circleIdPaid.receiptKind, CIRCLE_TRANSFER_KIND);
-    assert.equal(circleIdPaid.receiptRef, "circ-flow-2");
+    assert.equal(autoPaid.status, "PAID");
+    assert.equal(autoPaid.receiptKind, CIRCLE_TRANSFER_KIND);
+    assert.equal(autoPaid.receiptRef, "circ-flow-2");
+    assert.equal(autoPaid.walletChain, "BASE");
     if (prevCircleKey === undefined) delete process.env.CIRCLE_API_KEY;
     else process.env.CIRCLE_API_KEY = prevCircleKey;
     if (prevCircleWallet === undefined) delete process.env.CIRCLE_WALLET_ID;

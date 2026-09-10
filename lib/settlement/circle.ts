@@ -1,9 +1,10 @@
-import { constants, publicEncrypt, randomUUID } from "node:crypto";
+import { constants, createHash, publicEncrypt } from "node:crypto";
 import { ZeccaError } from "@/lib/errors";
 import { CIRCLE_USDC_CHAIN } from "@/lib/settlement/circle-ref";
 
 export { CIRCLE_USDC_CHAIN, isUsdcCashoutNetwork } from "@/lib/settlement/circle-ref";
 export const CIRCLE_USDC_TOKEN_ADDRESS = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913";
+export const CIRCLE_NOT_CONFIGURED_MESSAGE = "Wallet negozio non configurato.";
 
 export type CircleTransferResult = {
   provider: "circle";
@@ -35,7 +36,7 @@ function apiHost() {
 }
 
 export function circleConfigured() {
-  return Boolean(apiKey() && walletId());
+  return Boolean(apiKey() && walletId() && entitySecret());
 }
 
 export function circleHealth() {
@@ -44,9 +45,17 @@ export function circleHealth() {
     ready: circleConfigured(),
     chain: CIRCLE_USDC_CHAIN,
     detail: circleConfigured()
-      ? `Wallet Circle ${walletId()} su Base. USDC parte solo se il saldo del wallet è sufficiente.`
-      : "CIRCLE_API_KEY e CIRCLE_WALLET_ID assenti. Invia USDC resta fermo: Wallet negozio non configurato.",
+      ? `Wallet Circle developer-controlled ${walletId()} su Base mainnet. USDC parte in automatico se il saldo USDC e il gas ETH ci sono.`
+      : "Mancano CIRCLE_API_KEY, CIRCLE_WALLET_ID o CIRCLE_ENTITY_SECRET. USDC automatico fermo: Wallet negozio non configurato.",
   };
+}
+
+function idempotencyUuid(key: string) {
+  if (/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(key)) {
+    return key;
+  }
+  const hex = createHash("sha256").update(`zecca-circle:${key}`).digest("hex");
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-4${hex.slice(13, 16)}-8${hex.slice(17, 20)}-${hex.slice(20, 32)}`;
 }
 
 function amountUsd(cents: number) {
@@ -71,6 +80,7 @@ async function circleJson(
         Authorization: `Bearer ${key}`,
         Accept: "application/json",
         "Content-Type": "application/json",
+        "X-Request-Id": idempotencyUuid(`${path}:${Date.now()}`),
         ...(init.headers ?? {}),
       },
       signal: AbortSignal.timeout(20_000),
@@ -140,72 +150,50 @@ export async function transferUsdcOnBase(input: {
   fetchImpl?: typeof fetch;
 }): Promise<CircleTransferResult> {
   if (!circleConfigured()) {
-    throw new ZeccaError("Wallet negozio non configurato.", "CIRCLE_NOT_CONFIGURED");
+    throw new ZeccaError(CIRCLE_NOT_CONFIGURED_MESSAGE, "CIRCLE_NOT_CONFIGURED");
   }
   const fetchImpl = input.fetchImpl ?? fetch;
   const destination = input.destination.trim();
   const amount = amountUsd(input.amountUsdCents);
-  const idempotencyKey = input.idempotencyKey.slice(0, 36);
-
-  if (entitySecret()) {
-    const ciphertext = await entitySecretCiphertext(fetchImpl);
-    const tokenId = process.env.CIRCLE_USDC_TOKEN_ID?.trim();
-    const body: Record<string, unknown> = {
-      idempotencyKey,
-      walletId: walletId(),
-      destinationAddress: destination,
-      amounts: [amount],
-      feeLevel: "MEDIUM",
-      entitySecretCiphertext: ciphertext,
-    };
-    if (tokenId) {
-      body.tokenId = tokenId;
-    } else {
-      body.blockchain = CIRCLE_USDC_CHAIN;
-      body.tokenAddress = process.env.CIRCLE_USDC_TOKEN_ADDRESS?.trim() || CIRCLE_USDC_TOKEN_ADDRESS;
-    }
-    const posted = await circleJson(
-      "/v1/w3s/developer/transactions/transfer",
-      { method: "POST", body: JSON.stringify(body) },
-      fetchImpl,
-    );
-    const id =
-      readNestedString(posted.json, [["data", "id"], ["data", "transaction", "id"], ["id"]]) ?? "";
-    const txHash = readNestedString(posted.json, [
-      ["data", "txHash"],
-      ["data", "transactionHash"],
-      ["data", "transaction", "txHash"],
-    ]);
-    if (!posted.ok || !id) {
-      throw new ZeccaError(
-        "Circle ha rifiutato l’invio USDC. Il wallet del negozio è configurato ma il trasferimento non è partito. La richiesta resta aperta.",
-        "CIRCLE_REJECTED",
-      );
-    }
-    return toResult(id, txHash);
+  const idempotencyKey = idempotencyUuid(input.idempotencyKey);
+  const ciphertext = await entitySecretCiphertext(fetchImpl);
+  if (!ciphertext) {
+    throw new ZeccaError(CIRCLE_NOT_CONFIGURED_MESSAGE, "CIRCLE_NOT_CONFIGURED");
   }
-
-  const legacy = await circleJson(
-    "/v1/transfers",
-    {
-      method: "POST",
-      body: JSON.stringify({
-        idempotencyKey: randomUUID(),
-        source: { type: "wallet", id: walletId() },
-        destination: { type: "blockchain", address: destination, chain: CIRCLE_USDC_CHAIN },
-        amount: { amount, currency: "USD" },
-      }),
-    },
+  const tokenId = process.env.CIRCLE_USDC_TOKEN_ID?.trim();
+  const body: Record<string, unknown> = {
+    idempotencyKey,
+    walletId: walletId(),
+    destinationAddress: destination,
+    amounts: [amount],
+    feeLevel: "MEDIUM",
+    entitySecretCiphertext: ciphertext,
+    refId: `zecca-usdc-${input.idempotencyKey.slice(0, 24)}`,
+  };
+  if (tokenId) {
+    body.tokenId = tokenId;
+  } else {
+    body.blockchain = CIRCLE_USDC_CHAIN;
+    body.tokenAddress = process.env.CIRCLE_USDC_TOKEN_ADDRESS?.trim() || CIRCLE_USDC_TOKEN_ADDRESS;
+  }
+  const posted = await circleJson(
+    "/v1/w3s/developer/transactions/transfer",
+    { method: "POST", body: JSON.stringify(body) },
     fetchImpl,
   );
-  const id = readNestedString(legacy.json, [["data", "id"], ["id"]]) ?? "";
-  const txHash = readNestedString(legacy.json, [
-    ["data", "transactionHash"],
+  const id =
+    readNestedString(posted.json, [["data", "id"], ["data", "transaction", "id"], ["id"]]) ?? "";
+  const txHash = readNestedString(posted.json, [
     ["data", "txHash"],
+    ["data", "transactionHash"],
+    ["data", "transaction", "txHash"],
   ]);
-  if (!legacy.ok || !id) {
+  if (!posted.ok || !id) {
+    const apiMessage = readNestedString(posted.json, [["message"], ["data", "message"]]);
     throw new ZeccaError(
-      "Circle ha rifiutato l’invio USDC. Imposta anche CIRCLE_ENTITY_SECRET per i wallet developer-controlled, oppure verifica il saldo.",
+      apiMessage
+        ? `Circle ha rifiutato l’invio USDC: ${apiMessage} La richiesta resta aperta.`
+        : "Circle ha rifiutato l’invio USDC. Controlla saldo USDC e ETH per il gas sul wallet Base. La richiesta resta aperta.",
       "CIRCLE_REJECTED",
     );
   }

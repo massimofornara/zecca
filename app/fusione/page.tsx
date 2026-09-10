@@ -16,6 +16,7 @@ import { houseDisplayName, housePayoutLabel } from "@/lib/zecca/house-accounts";
 import { cashoutProofStatus, proofFromPaidCashout, signCashoutProof } from "@/lib/cashout-proof";
 import { loadRememberedProofs } from "@/lib/cashout-proof-store";
 import { ensureHouseAdmin, isHouseEmail } from "@/lib/zecca/house";
+import { circleConfigured } from "@/lib/settlement/circle";
 
 export const metadata = { title: "Prelievo" };
 export const dynamic = "force-dynamic";
@@ -86,6 +87,7 @@ export default async function FusionePage() {
           chfCentsPerCredit={settings.chfCentsPerCredit}
           house={house}
           houseName={who}
+          circleReady={circleConfigured()}
         />
       </div>
       <section className="mt-12">

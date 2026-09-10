@@ -10,7 +10,7 @@ Non è un e-commerce a punti. I crediti vivono in un **libro mastro** immutabile
 2. **Acquisto crediti** — Il cliente versa euro (demo o Stripe) e riceve crediti dalla tesoreria.
 3. **Negozio** — E-commerce della bottega: **decine di pezzi** (dispensa, cantina, tavola, bottega, tessuti, corpo), ciascuno legato al fornitore che lo produce. Paghi in crediti. Al checkout Zecca apre da sola un collo DHL Express 24h **dalla sede di ogni azienda** (18 cr a casa del cliente, 0 cr se la destinazione è casa di Massimo). Massimo non imballa. Ricevuta, tracking pubblico. Con `DHL_API_KEY` + account si prenota il ritiro vero; senza, la lettera resta locale. Aggiorna il catalogo con `npm run db:catalog`.
 4. **Forgia del Giorno** — Il calore di oggi dipende da quanto hai comprato *nella giornata*. A mezzanotte romana si azzera. Non blocca più il prelievo.
-5. **Prelievo** — I crediti cliente escono **solo da fondi di bottega** (vendite), mai da conio inventato. Il cliente chiede **bonifico SEPA su IBAN italiano** (intestatario + IBAN IT + BIC facoltativo) oppure **USDC su Base** (indirizzo `0x…`). Conversione USDC: tasso libro USD (`1 USDC = 1 USD`). Massimo in **Fusioni** chiude l’IBAN con **«Segna bonifico disposto»** (SEPA fatto da lui in banca; non è un CRO) oppure **«Invia USDC»** (Circle, se `CIRCLE_API_KEY` + `CIRCLE_WALLET_ID` e wallet finanziato). Senza Circle: *Wallet negozio non configurato*, richiesta ancora aperta. Stripe, se usato, versa **solo** sul conto bancario collegato all’account Stripe di Massimo, **non** sull’IBAN del cliente. Altre crypto casa (BTC, ETH, USDT, BNB) restano sulla pipeline / Zecca Gasless. Bitcoin, SEPA, USD e CHF senza banca o UTXO possono chiudere sul **gateway di liquidazione** come **EXECUTED AND RECEIVED** (`GW-BTC-…`, `SEPA-…`): **non** è un hash Mempool, **non** è un CRO.
+5. **Prelievo** — I crediti cliente escono **solo da fondi di bottega** (vendite), mai da conio inventato. Il cliente chiede **bonifico SEPA su IBAN italiano** (intestatario + IBAN IT + BIC facoltativo) oppure **USDC su Base mainnet** (indirizzo `0x…`). Conversione USDC: tasso libro USD (`1 USDC = 1 USD`). IBAN: Massimo chiude con **«Segna bonifico disposto»** (SEPA fatto da lui in banca; non è un CRO). USDC: con Circle developer-controlled wallets l’invio **parte in automatico** alla conferma; **«Invia USDC»** ritenta. Senza `CIRCLE_API_KEY` + `CIRCLE_WALLET_ID` + `CIRCLE_ENTITY_SECRET`: *Wallet negozio non configurato*, richiesta ancora aperta. Stripe, se usato, versa **solo** sul conto bancario collegato all’account Stripe di Massimo, **non** sull’IBAN del cliente. Altre crypto casa restano sulla pipeline / Zecca Gasless.
 6. **Casa Fornara** — Le email `massimo.fornara.2212@gmail.com` e `mfornara93@gmail.com`, una volta iscritte, diventano zecchiere: generano crediti **senza pagare** (quantità scelta) e li prelevano in EUR su UniCredit o in USD su Wise. Non sono conti pre-creati: iscriviti con quella email e la password che scegli tu.
 7. **Conversione tesoreria** — Massimo converte crediti ancora in casa in **euro, dollari, franchi o crypto** (BTC, ETH, USDT, USDC, BNB). Euro, dollari e franchi partono verso gli IBAN casa (UniCredit / Wise) nello stesso passo. Le crypto EVM tentano mint a gas zero su Zecca Gasless verso il wallet indicato. **Arrivo crypto EVM = tx_hash su /catena.** **Arrivo banca = TRN.** Senza `ZECCA_SEPA_GATEWAY_*` o Wise Platform i destinatari IBAN non ricevono.
 
@@ -112,18 +112,44 @@ Controlla lo stato: `npm run check:live`. In **Zecchiere → Tesoreria** vedi la
 
 **Euro in uscita verso il cliente (veri):** il cliente indica IBAN italiano e intestatario. Tu disponi il SEPA da UniCredit (fuori dall’app), poi in **Fusioni** premi **Segna bonifico disposto**. Quella ricevuta `DISPOTO/…` è un’attestazione tua, **non** un CRO. Se hai il CRO vero, puoi ancora chiudere con quello. Un payout Stripe **non** va sull’IBAN del cliente: Stripe paga solo il conto collegato al *tuo* account Stripe.
 
-**USDC in uscita:** il cliente indica un wallet `0x…` su **Base**. Tasso: 1 credito = `usdCentsPerCredit` (1 USDC = 1 USD di libro). In Fusioni **Invia USDC** chiama Circle lato server. Env su Vercel:
+**USDC in uscita (automatico, Circle developer-controlled, Base mainnet):** il cliente indica un wallet `0x…`. Tasso: 1 credito = `usdCentsPerCredit` (**1 USDC = 1 USD** di libro). Alla conferma, se le tre env Circle ci sono, Zecca chiama lato server `POST /v1/w3s/developer/transactions/transfer` (entity secret cifrato RSA-OAEP SHA-256, ciphertext fresco ogni volta). Il cliente **non firma**. MetaMask e Trust Wallet devono essere sulla rete **Base**.
 
-| Variabile | Serve a |
+### Setup Circle (esatto, da fare una volta)
+
+1. Account su [console.circle.com](https://console.circle.com) → **API Keys** → crea una chiave (`PREFIX:ID:SECRET`). In produzione usa la chiave live, non `TEST_API_KEY`.
+2. **Developer-controlled wallets** → genera un **entity secret** (32 byte, 64 caratteri hex). Registralo in Console e **salva il recovery file** in un posto sicuro, separato dal secret. Circle non lo conserva: se perdi entrambi, i wallet non si autorizzano più.
+3. Crea un **wallet set**, poi un wallet sulla blockchain **BASE** (mainnet, non BASE-SEPOLIA). Copia il **Wallet ID** (UUID).
+4. Finanzia quel wallet:
+   - **USDC nativo Base** `0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913` (importo da pagare ai clienti);
+   - **ETH su Base** per il gas (`feeLevel: MEDIUM`).
+5. Su **Vercel → Project → Settings → Environment Variables** (Production + Preview se ti serve) aggiungi:
+
+| Variabile | Obbligatoria | Valore |
+| --- | --- | --- |
+| `CIRCLE_API_KEY` | sì | chiave Console |
+| `CIRCLE_WALLET_ID` | sì | UUID del wallet BASE |
+| `CIRCLE_ENTITY_SECRET` | sì | 64 hex dell’entity secret |
+| `CIRCLE_API_HOST` | no | default `https://api.circle.com` (sandbox: `https://api-sandbox.circle.com`) |
+| `CIRCLE_USDC_TOKEN_ID` | no | UUID token Circle, se lo usi al posto dell’address |
+| `CIRCLE_USDC_TOKEN_ADDRESS` | no | default `0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913` |
+| `STRIPE_SECRET_KEY` / `STRIPE_WEBHOOK_SECRET` | no | solo incassi carte. **Non** paga l’IBAN cliente. |
+
+6. Redeploy. `npm run check:live` deve mostrare Circle USDC come pronto. Senza le tre env, o con wallet vuoto, l’invio risponde **Wallet negozio non configurato** (o il messaggio Circle) e la fusione resta **aperta**. I segreti restano solo in env, mai nel client.
+
+### MetaMask / Trust Wallet (cliente)
+
+Rete **Base mainnet**, non Ethereum:
+
+| Campo | Valore |
 | --- | --- |
-| `STRIPE_SECRET_KEY` / `STRIPE_WEBHOOK_SECRET` | Incasso carte (già documentato). Non paga l’IBAN cliente. |
-| `CIRCLE_API_KEY` | Autenticazione Circle |
-| `CIRCLE_WALLET_ID` | Wallet negozio da cui parte USDC |
-| `CIRCLE_ENTITY_SECRET` | Wallet developer-controlled (cifratura per-request) |
-| `CIRCLE_API_HOST` | Facoltativo (`https://api.circle.com` o sandbox) |
-| `CIRCLE_USDC_TOKEN_ID` / `CIRCLE_USDC_TOKEN_ADDRESS` | Facoltativi; default USDC nativo Base `0x8335…2913` |
+| Nome rete | Base |
+| RPC | `https://mainnet.base.org` |
+| Chain ID | `8453` |
+| Valuta | ETH |
+| Explorer | `https://basescan.org` |
+| USDC | `0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913` |
 
-Senza quelle env, o con wallet Circle vuoto, l’invio fallisce in chiaro e la fusione resta **aperta**. I segreti Circle restano solo in env, mai nel client.
+In MetaMask: Impostazioni → Reti → Aggiungi rete. In Trust: Impostazioni → Reti → Base. Un indirizzo `0x…` su Ethereum non riceve USDC Base.
 
 **Euro, dollari o franchi casa:** IBAN UniCredit/Wise come prima. Distinta CSV e pain.001 da **Liquidazione** se `ZECCA_SEPA_DEBTOR_IBAN` è impostato. Un codice `ZECCA/…` non è un bonifico.
 

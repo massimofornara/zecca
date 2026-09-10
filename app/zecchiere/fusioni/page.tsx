@@ -32,9 +32,10 @@ export default async function FusioniPage() {
       <p className="mt-2 text-muted-foreground">
         I crediti cliente escono solo da vendite vere, mai da conio inventato. IBAN: disponi tu il
         SEPA dalla banca, poi «Segna bonifico disposto» (non è un CRO). Stripe, se lo usi, versa
-        solo sul tuo conto collegato a Stripe, non sull’IBAN del cliente. USDC: «Invia USDC» parte
-        dal wallet Circle su Base se le env ci sono; altrimenti «Wallet negozio non configurato» e
-        la richiesta resta aperta. Altre crypto e liquidazione restano in{" "}
+        solo sul tuo conto collegato a Stripe, non sull’IBAN del cliente. USDC su Base: con
+        CIRCLE_API_KEY + CIRCLE_WALLET_ID + CIRCLE_ENTITY_SECRET parte in automatico dal wallet
+        Circle; «Invia USDC» ritenta. Senza env: «Wallet negozio non configurato», richiesta aperta.
+        Altre crypto e liquidazione restano in{" "}
         <a href="/zecchiere/liquidazione" className="text-ember underline-offset-2 hover:underline">
           Liquidazione
         </a>

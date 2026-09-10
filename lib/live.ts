@@ -1,4 +1,5 @@
 import { isDemoPayEnabled, isStripeEnabled } from "@/lib/stripe";
+import { circleHealth } from "@/lib/settlement/circle";
 import { getShopBank, isShopBankReady } from "@/lib/zecca/bank";
 
 export type LiveCheck = {
@@ -85,6 +86,13 @@ export async function getLiveReport(): Promise<LiveReport> {
       needsYou: false,
     },
     {
+      id: "circle-usdc",
+      ok: circleHealth().ready,
+      title: "Circle USDC su Base (automatico)",
+      detail: circleHealth().detail,
+      needsYou: true,
+    },
+    {
       id: "public-https",
       ok: publicUrl.startsWith("https://"),
       title: "URL pubblico HTTPS",
@@ -128,7 +136,7 @@ export async function getLiveReport(): Promise<LiveReport> {
       ok: false,
       title: "Bonifici in uscita",
       detail:
-        "Non automatizzabili da Zecca. Il zecchiere paga i cash-out dal proprio home banking.",
+        "IBAN: SEPA a mano (Segna bonifico disposto). USDC su Base: automatico se Circle developer-controlled è configurato.",
       needsYou: true,
     },
     {

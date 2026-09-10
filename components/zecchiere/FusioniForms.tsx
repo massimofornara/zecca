@@ -527,7 +527,7 @@ export function PendingCashoutCard({
           <CopyField label="Riferimento" value={dest.causal} mono />
           <p className="text-xs text-muted-foreground">
             {usdcOut
-              ? "1 USDC = 1 USD di libro. Invia USDC parte dal wallet Circle del negozio su Base, se CIRCLE_API_KEY e CIRCLE_WALLET_ID sono impostati. Senza wallet configurato la richiesta resta aperta."
+              ? "1 USDC = 1 USD di libro, rete Base mainnet (chain 8453). Con CIRCLE_API_KEY + CIRCLE_WALLET_ID + CIRCLE_ENTITY_SECRET l’invio parte in automatico. Questo pulsante ritenta se Circle ha rifiutato o mancavano le env."
               : "MetaMask, Trust Wallet e gli exchange ricevono. Non devono firmare."}
           </p>
         </div>

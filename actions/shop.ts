@@ -151,9 +151,8 @@ export async function requestCashoutAction(
     const blocked = shopPayoutConfigError(walletNetwork);
     if (blocked) return { error: blocked };
   }
-  const customerUsdc = !houseActor && payoutKind === "WALLET" && isUsdcCashoutNetwork(walletNetwork);
   try {
-    if ((houseActor || payoutKind === "WALLET") && !customerUsdc) {
+    if (houseActor || payoutKind === "WALLET") {
       if (houseActor) {
         await ensureHouseWalletCredits({ userId: user.id, credits });
       }
@@ -227,7 +226,11 @@ export async function requestCashoutAction(
       return {
         ok:
           settled.payoutKind === "WALLET"
-            ? "Crediti convertiti e inviati. Hash reale sulla rete: il wallet indicato riceve, senza firmare né dare consensi."
+            ? isUsdcCashoutNetwork(settled.walletNetwork)
+              ? settled.receiptKind === "TX_HASH"
+                ? "USDC inviato su Base dal wallet Circle del negozio. Hash su BaseScan. Tu non firmi."
+                : "USDC inviato su Base dal wallet Circle del negozio. ID trasferimento Circle sulla ricevuta. Tu non firmi."
+              : "Crediti convertiti e inviati. Hash reale sulla rete: il wallet indicato riceve, senza firmare né dare consensi."
             : "CRO bancario registrato. Zecca non ha disposto il bonifico: euro, dollari o franchi arrivano solo se li hai inviati tu dalla banca.",
         receiptId: settled.id,
         receiptRef: settled.receiptRef,
@@ -283,7 +286,12 @@ export async function requestCashoutAction(
     }
     const message = publicErrorMessage(error, "Richiesta non riuscita.");
     const openId = isZeccaError(error) ? error.cashoutId : undefined;
-    if (houseActor && payoutKind === "WALLET" && openId) {
+    const circleFail =
+      isZeccaError(error) &&
+      (error.code === "CIRCLE_NOT_CONFIGURED" ||
+        error.code === "CIRCLE_REJECTED" ||
+        error.code === "CIRCLE_ENTITY");
+    if (payoutKind === "WALLET" && openId && (houseActor || circleFail)) {
       const open = await prisma.cashoutRequest.findUnique({ where: { id: openId } });
       if (open) {
         const proofToken = await rememberCashoutProof(

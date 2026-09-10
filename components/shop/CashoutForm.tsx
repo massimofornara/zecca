@@ -29,6 +29,7 @@ export function CashoutForm({
   chfCentsPerCredit,
   house = false,
   houseName,
+  circleReady = false,
 }: {
   available: number;
   percent?: number;
@@ -37,6 +38,7 @@ export function CashoutForm({
   chfCentsPerCredit: number;
   house?: boolean;
   houseName?: string | null;
+  circleReady?: boolean;
 }) {
   const [state, action] = useActionState(requestCashoutAction, null as CashoutActionState | null);
   const [phase, setPhase] = useState<"edit" | "confirm">("edit");
@@ -136,7 +138,7 @@ export function CashoutForm({
             : pending
             ? payoutKind === "WALLET"
               ? customerUsdc
-                ? "I crediti sono in deposito. Massimo invia USDC su Base dal wallet Circle del negozio quando è configurato. Tu non firmi."
+                ? "I crediti sono in deposito. L’invio automatico Circle non è partito: la richiesta resta aperta. Massimo può ritentare da Fusioni."
                 : "I crediti sono in deposito. Alla conferma il negozio tenta l’invio in pochi secondi."
               : house
                 ? "La richiesta è attiva. Copia i dati, invia da banca, poi incolla il CRO qui sotto per chiuderla."
@@ -179,7 +181,9 @@ export function CashoutForm({
             ) : (
               <p className="text-sm text-muted-foreground">
                 {customerUsdc
-                  ? "Massimo in Fusioni preme «Invia USDC». Senza wallet Circle la richiesta resta aperta. Tu non firmi."
+                  ? circleReady
+                    ? "Se l’invio automatico non è partito, Massimo ritenta «Invia USDC» in Fusioni. Tu non firmi."
+                    : "Wallet Circle non configurato. Massimo può ritentare da Fusioni quando le env ci sono. Tu non firmi."
                   : "Massimo conferma: il negozio invia al wallet che hai indicato. Tu ricevi, senza firmare."}
               </p>
             )}
@@ -221,7 +225,9 @@ export function CashoutForm({
             ? "Questa conferma apre il prelievo. Crypto: il negozio tenta l’invio. IBAN: il bonifico resta da UniCredit o Wise."
             : payoutKind === "WALLET"
               ? customerUsdc
-                ? "I crediti diventano USDC al tasso libro (1 USDC = 1 USD). Massimo invia dal wallet Circle del negozio su Base quando è configurato e finanziato. Tu non firmi."
+                ? circleReady
+                  ? "I crediti diventano USDC al tasso libro (1 USDC = 1 USD). Alla conferma Zecca invia dal wallet Circle del negozio su Base mainnet. Tu non firmi. MetaMask o Trust devono essere su Base (chain 8453)."
+                  : "I crediti diventano USDC al tasso libro (1 USDC = 1 USD). Senza wallet Circle configurato la richiesta resta aperta; Massimo può ritentare da Fusioni. Tu non firmi."
                 : "Indichi solo il wallet che riceve. Il negozio invia: tu non firmi."
               : "Massimo dispone il bonifico SEPA dal suo conto verso il tuo IBAN italiano. Stripe, se usato, paga solo il conto bancario collegato a Stripe di Massimo: non accredita te."}
         </p>
@@ -239,7 +245,9 @@ export function CashoutForm({
           {payoutKind === "WALLET" ? (
             <p className="text-sm text-muted-foreground">
               {customerUsdc
-                ? `I crediti diventano ${preview} su Base. Massimo preme «Invia USDC» in Fusioni: senza wallet Circle la richiesta resta aperta.`
+                ? circleReady
+                  ? `I crediti diventano ${preview} su Base mainnet e partono in automatico dal wallet Circle del negozio.`
+                  : `I crediti diventano ${preview} su Base. Senza Circle la richiesta resta aperta; da Fusioni si può ritentare «Invia USDC».`
                 : `I crediti diventano ${preview} e si bruciano sul libro. Il prelievo viene accettato verso il wallet indicato: chi riceve non firma.`}
             </p>
           ) : (
@@ -282,7 +290,9 @@ export function CashoutForm({
               : "Ho capito: Zecca non accredita questi conti. Il bonifico lo faccio io da UniCredit o Wise."
             : payoutKind === "WALLET"
               ? customerUsdc
-                ? "Ho capito: chiedo USDC su Base. Massimo invia dal wallet Circle del negozio quando è configurato. Io non firmo."
+                ? circleReady
+                  ? "Ho capito: chiedo USDC su Base mainnet. Zecca invia dal wallet Circle del negozio. Io non firmo."
+                  : "Ho capito: chiedo USDC su Base. Senza wallet Circle la richiesta resta aperta. Io non firmo."
                 : "Ho capito: indico solo il wallet che riceve. Non firmo transazioni e non do consensi."
               : "Ho capito: Massimo dispone il SEPA dalla sua banca verso il mio IBAN. Stripe non accredita me."}
         </label>
@@ -322,7 +332,9 @@ export function CashoutForm({
             : `${houseName ?? "La casa"} indica destinazione. I crediti escono dal portafoglio solo come richiesta: UniCredit e Wise non vengono accreditati da questo sito.`
           : payoutKind === "WALLET"
             ? customerUsdc
-              ? "USDC su Base: 1 credito al tasso USD di libro (1 USDC = 1 USD). Massimo invia dal wallet Circle del negozio. Tu non firmi."
+              ? circleReady
+                ? "USDC su Base mainnet: 1 credito al tasso USD di libro (1 USDC = 1 USD). Alla conferma parte dal wallet Circle. Tu non firmi. In MetaMask/Trust scegli la rete Base."
+                : "USDC su Base mainnet: 1 credito = 1 USD di libro. Wallet Circle non configurato: la richiesta resta aperta. Tu non firmi."
               : "Indica il wallet che riceve. Massimo conferma l’invio dalla coda Fusioni. Tu non firmi nulla."
             : "Bonifico in euro su IBAN italiano. Massimo dispone il SEPA dal suo conto. Stripe non versa sul tuo IBAN."}
       </p>
@@ -535,7 +547,9 @@ export function CashoutForm({
           </label>
           <p className="text-sm text-muted-foreground">
             {customerUsdc
-              ? `Destinazione: ${preview} su Base (Circle). Massimo invia dal wallet del negozio; senza env la richiesta resta aperta.`
+              ? circleReady
+                ? `Destinazione: ${preview} su Base mainnet (Circle). Alla conferma l’invio parte in automatico.`
+                : `Destinazione: ${preview} su Base. Senza CIRCLE_* su Vercel la richiesta resta aperta.`
               : `Destinazione: ${preview}. Alla conferma i crediti restano in deposito finché Massimo conferma l’invio.`}
           </p>
         </fieldset>
