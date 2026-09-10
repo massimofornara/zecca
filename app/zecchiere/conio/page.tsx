@@ -21,7 +21,8 @@ export default async function ConioPage() {
       <h1 className="font-display text-4xl text-primary">Conio</h1>
       <p className="mt-2 text-muted-foreground">
         Solo tu fai nascere i crediti. Scrivi la quantità che vuoi: entra in tesoreria, non sul
-        conto in banca. Coniare non crea euro né dollari spendibili.
+        conto in banca. Coniare non crea euro, dollari né USDC. Un prelievo USDC parte solo se il
+        wallet Circle del negozio ha USDC vero su Base.
       </p>
       <p className="mt-4 font-ledger text-ember">Tesoreria: {formatCredits(treasury)}</p>
       <div className="mt-8 max-w-lg">

@@ -26,7 +26,7 @@ export const CRYPTO_ASSETS: readonly CryptoAsset[] = [
   { id: "BTC", label: "Bitcoin", ticker: "BTC", hint: "bc1… / 1… / 3…" },
   { id: "ETH", label: "Ethereum", ticker: "ETH", hint: "0x…" },
   { id: "USDT", label: "USDT", ticker: "USDT", hint: "0x… su Ethereum (ERC-20)" },
-  { id: "USDC", label: "USDC su Base", ticker: "USDC", hint: "0x… su Base (Circle)" },
+  { id: "USDC", label: "USDC su Base", ticker: "USDC", hint: "0x… MetaMask, Trust o deposito Base (Kraken/MEXC)" },
   { id: "BNB", label: "BNB Smart Chain", ticker: "BNB", hint: "0x… su BNB (BscScan / Blockscout)" },
   { id: "ZECCA", label: "Token Zecca", ticker: "ZECCA", hint: "0x… mint diretto sul contratto del negozio" },
   { id: "TRX", label: "USDT TRC-20", ticker: "USDT", hint: "T… su Tron" },

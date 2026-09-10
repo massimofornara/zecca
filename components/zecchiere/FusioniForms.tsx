@@ -527,7 +527,7 @@ export function PendingCashoutCard({
           <CopyField label="Riferimento" value={dest.causal} mono />
           <p className="text-xs text-muted-foreground">
             {usdcOut
-              ? "1 USDC = 1 USD di libro, rete Base mainnet (chain 8453). Con CIRCLE_API_KEY + CIRCLE_WALLET_ID + CIRCLE_ENTITY_SECRET l’invio parte in automatico. Questo pulsante ritenta se Circle ha rifiutato o mancavano le env."
+              ? "1 USDC = 1 USD di libro, Base mainnet. Destinazione: qualsiasi 0x (MetaMask, Trust, deposito USDC Base su Kraken/MEXC). Il cliente non paga il gas. Gas Station sponsorizza il SCA se la policy Base è attiva. Questo pulsante ritenta."
               : "MetaMask, Trust Wallet e gli exchange ricevono. Non devono firmare."}
           </p>
         </div>
@@ -548,7 +548,7 @@ export function PendingCashoutCard({
               <input type="hidden" name="cashoutId" value={id} />
               <label className="flex items-start gap-2 text-xs text-muted-foreground">
                 <input type="checkbox" name="usdcConfirm" value="on" className="mt-0.5" required />
-                Invio USDC nativo su Base dal wallet Circle del negozio. Non è un mint Zecca Gasless.
+                Invio USDC nativo su Base dal SCA Circle. Il gas lo paga Gas Station (policy Console), non il cliente. Non è un mint Zecca Gasless.
               </label>
               <SubmitButton size="sm" pendingLabel="Invio USDC…">
                 Invia USDC

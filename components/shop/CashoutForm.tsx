@@ -226,7 +226,7 @@ export function CashoutForm({
             : payoutKind === "WALLET"
               ? customerUsdc
                 ? circleReady
-                  ? "I crediti diventano USDC al tasso libro (1 USDC = 1 USD). Alla conferma Zecca invia dal wallet Circle del negozio su Base mainnet. Tu non firmi. MetaMask o Trust devono essere su Base (chain 8453)."
+                  ? "I crediti diventano USDC al tasso libro (1 USDC = 1 USD). Alla conferma il negozio invia su Base a MetaMask, Trust o un deposito exchange. Tu non firmi e non paghi il gas."
                   : "I crediti diventano USDC al tasso libro (1 USDC = 1 USD). Senza wallet Circle configurato la richiesta resta aperta; Massimo può ritentare da Fusioni. Tu non firmi."
                 : "Indichi solo il wallet che riceve. Il negozio invia: tu non firmi."
               : "Massimo dispone il bonifico SEPA dal suo conto verso il tuo IBAN italiano. Stripe, se usato, paga solo il conto bancario collegato a Stripe di Massimo: non accredita te."}
@@ -246,7 +246,7 @@ export function CashoutForm({
             <p className="text-sm text-muted-foreground">
               {customerUsdc
                 ? circleReady
-                  ? `I crediti diventano ${preview} su Base mainnet e partono in automatico dal wallet Circle del negozio.`
+                  ? `I crediti diventano ${preview} su Base e partono dal wallet Circle del negozio. Tu non paghi il gas.`
                   : `I crediti diventano ${preview} su Base. Senza Circle la richiesta resta aperta; da Fusioni si può ritentare «Invia USDC».`
                 : `I crediti diventano ${preview} e si bruciano sul libro. Il prelievo viene accettato verso il wallet indicato: chi riceve non firma.`}
             </p>
@@ -291,7 +291,7 @@ export function CashoutForm({
             : payoutKind === "WALLET"
               ? customerUsdc
                 ? circleReady
-                  ? "Ho capito: chiedo USDC su Base mainnet. Zecca invia dal wallet Circle del negozio. Io non firmo."
+                  ? "Ho capito: chiedo USDC su Base verso il mio 0x. Il negozio invia; io non firmo e non pago il gas."
                   : "Ho capito: chiedo USDC su Base. Senza wallet Circle la richiesta resta aperta. Io non firmo."
                 : "Ho capito: indico solo il wallet che riceve. Non firmo transazioni e non do consensi."
               : "Ho capito: Massimo dispone il SEPA dalla sua banca verso il mio IBAN. Stripe non accredita me."}
@@ -333,7 +333,7 @@ export function CashoutForm({
           : payoutKind === "WALLET"
             ? customerUsdc
               ? circleReady
-                ? "USDC su Base mainnet: 1 credito al tasso USD di libro (1 USDC = 1 USD). Alla conferma parte dal wallet Circle. Tu non firmi. In MetaMask/Trust scegli la rete Base."
+                ? "USDC su Base: incolla l’indirizzo MetaMask, Trust o il deposito USDC Base di Kraken/MEXC. 1 cr = 1 USD di libro. Tu non firmi e non paghi il gas."
                 : "USDC su Base mainnet: 1 credito = 1 USD di libro. Wallet Circle non configurato: la richiesta resta aperta. Tu non firmi."
               : "Indica il wallet che riceve. Massimo conferma l’invio dalla coda Fusioni. Tu non firmi nulla."
             : "Bonifico in euro su IBAN italiano. Massimo dispone il SEPA dal suo conto. Stripe non versa sul tuo IBAN."}
@@ -536,7 +536,9 @@ export function CashoutForm({
             ))}
           </div>
           <label className="block text-sm">
-            Wallet che riceve {crypto.label} (non deve firmare)
+            {customerUsdc
+              ? "Indirizzo 0x su Base (MetaMask, Trust, Kraken o MEXC — deposito USDC Base)"
+              : `Wallet che riceve ${crypto.label} (non deve firmare)`}
             <Input
               value={walletAddress}
               onChange={(e) => setWalletAddress(e.target.value)}
@@ -548,7 +550,7 @@ export function CashoutForm({
           <p className="text-sm text-muted-foreground">
             {customerUsdc
               ? circleReady
-                ? `Destinazione: ${preview} su Base mainnet (Circle). Alla conferma l’invio parte in automatico.`
+                ? `Destinazione: ${preview} su Base (MetaMask, Trust o deposito exchange). Alla conferma parte dal negozio; tu non paghi il gas.`
                 : `Destinazione: ${preview} su Base. Senza CIRCLE_* su Vercel la richiesta resta aperta.`
               : `Destinazione: ${preview}. Alla conferma i crediti restano in deposito finché Massimo conferma l’invio.`}
           </p>

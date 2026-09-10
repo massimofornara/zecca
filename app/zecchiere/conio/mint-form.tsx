@@ -16,8 +16,9 @@ export function MintForm() {
       <ErrorBanner message={state?.error} />
       <OkBanner message={state?.ok} />
       <p className="text-sm text-muted-foreground">
-        Indica <strong>qualsiasi quantità positiva</strong>: i crediti nascono in tesoreria, pronti
-        per la vendita. Coniare <strong>non</strong> accredita euro o dollari sul conto in banca.
+        Indica <strong>qualsiasi quantità positiva</strong>: i crediti nascono in tesoreria. Coniare
+        <strong> non</strong> crea euro in banca né USDC. Per pagare un cliente in USDC il wallet
+        Circle deve già avere USDC su Base.
       </p>
       <div className="space-y-1.5">
         <Label htmlFor="amount">Quantità da coniare (libera)</Label>

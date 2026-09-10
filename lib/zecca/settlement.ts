@@ -171,7 +171,7 @@ function lineBlocker(row: {
     return `Pipeline: ${net} nativo via hot wallet o liquidity gateway, non via mint.`;
   }
   if (net === "USDC") {
-    return "USDC su Base: CIRCLE_API_KEY + CIRCLE_WALLET_ID e wallet Circle finanziato. Senza env: Wallet negozio non configurato.";
+    return "USDC su Base: CIRCLE_API_KEY + CIRCLE_WALLET_ID + CIRCLE_ENTITY_SECRET, saldo USDC sul SCA e Gas Station su Base. Senza env: Wallet negozio non configurato.";
   }
   if (net === "USDT") {
     return "Pipeline: mint sul contratto Zecca (MINTER_ROLE), non su Tether. Senza ZECCA_TOKEN_ADDRESS / ZECCA_MINT_USDT_ADDRESS niente hash.";

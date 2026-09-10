@@ -30,12 +30,12 @@ export default async function FusioniPage() {
     <div>
       <h1 className="font-display text-4xl text-primary">Fusioni</h1>
       <p className="mt-2 text-muted-foreground">
-        I crediti cliente escono solo da vendite vere, mai da conio inventato. IBAN: disponi tu il
-        SEPA dalla banca, poi «Segna bonifico disposto» (non è un CRO). Stripe, se lo usi, versa
-        solo sul tuo conto collegato a Stripe, non sull’IBAN del cliente. USDC su Base: con
-        CIRCLE_API_KEY + CIRCLE_WALLET_ID + CIRCLE_ENTITY_SECRET parte in automatico dal wallet
-        Circle; «Invia USDC» ritenta. Senza env: «Wallet negozio non configurato», richiesta aperta.
-        Altre crypto e liquidazione restano in{" "}
+        Il conio crea solo crediti di libro, non euro in banca né USDC. I prelievi USDC partono
+        dal wallet Circle SCA se c’è USDC vero. IBAN: disponi tu il SEPA, poi «Segna bonifico
+        disposto» (non è un CRO). Stripe non versa sull’IBAN del cliente. USDC su Base: qualsiasi
+        0x (MetaMask, Trust, deposito Kraken/MEXC su Base). Il cliente non paga il gas: Gas
+        Station lo sponsorizza se la policy Base è attiva in Console. «Invia USDC» ritenta. Senza
+        env: «Wallet negozio non configurato». Altre crypto e liquidazione restano in{" "}
         <a href="/zecchiere/liquidazione" className="text-ember underline-offset-2 hover:underline">
           Liquidazione
         </a>

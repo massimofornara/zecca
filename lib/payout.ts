@@ -21,7 +21,7 @@ export function walletInstruction(input: {
     `Crypto: ${walletNetworkLabel(input.network)} (${ticker})`,
     `Indirizzo: ${input.address}`,
     `Importo che il negozio invia: ${amountLabel} (o equivalente sulla rete)`,
-    `Chi riceve non firma: MetaMask, Trust Wallet o exchange solo ricevono.`,
+    `Chi riceve non firma e non paga il gas: MetaMask, Trust o deposito exchange su Base (USDC).`,
     `Riferimento: ${causal}`,
   ];
   return { causal, text: lines.join("\n"), amountLabel };

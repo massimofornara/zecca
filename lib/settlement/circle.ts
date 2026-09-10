@@ -45,7 +45,7 @@ export function circleHealth() {
     ready: circleConfigured(),
     chain: CIRCLE_USDC_CHAIN,
     detail: circleConfigured()
-      ? `Wallet Circle developer-controlled ${walletId()} su Base mainnet. USDC parte in automatico se il saldo USDC e il gas ETH ci sono.`
+      ? `Wallet Circle SCA ${walletId()} su Base. USDC parte se il saldo USDC c’è. Il gas lo sponsorizza Gas Station (policy Base in Console), non il cliente.`
       : "Mancano CIRCLE_API_KEY, CIRCLE_WALLET_ID o CIRCLE_ENTITY_SECRET. USDC automatico fermo: Wallet negozio non configurato.",
   };
 }
@@ -140,7 +140,10 @@ function toResult(id: string, txHash: string | null): CircleTransferResult {
 }
 
 /**
- * Invia USDC nativo su Base dal wallet Circle del negozio.
+ * Invia USDC nativo su Base dal wallet Circle SCA del negozio.
+ * feeLevel MEDIUM: Circle stima il gas. Su SCA, se in Console c’è una policy Gas
+ * Station di default su BASE, Circle sponsorizzata il gas in automatico: nessun
+ * flag extra e nessun ETH nel wallet. Senza policy il transfer fallisce in chiaro.
  * Nessun segreto esce da questo modulo. Senza env: errore chiaro, niente hash inventato.
  */
 export async function transferUsdcOnBase(input: {
@@ -193,7 +196,7 @@ export async function transferUsdcOnBase(input: {
     throw new ZeccaError(
       apiMessage
         ? `Circle ha rifiutato l’invio USDC: ${apiMessage} La richiesta resta aperta.`
-        : "Circle ha rifiutato l’invio USDC. Controlla saldo USDC e ETH per il gas sul wallet Base. La richiesta resta aperta.",
+        : "Circle ha rifiutato l’invio USDC. Controlla il saldo USDC sul wallet SCA e la policy Gas Station su Base in Console. La richiesta resta aperta.",
       "CIRCLE_REJECTED",
     );
   }
