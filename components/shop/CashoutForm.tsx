@@ -77,8 +77,9 @@ export function CashoutForm({
     ? CRYPTO_ASSETS.filter((asset) => asset.id !== "OTHER")
     : [...customerAssets.filter((asset) => asset.id === "USDC"), ...customerAssets.filter((asset) => asset.id !== "USDC")];
   const crypto = cryptoAsset(cryptoId) ?? CRYPTO_ASSETS.find((asset) => asset.id === "USDC") ?? CRYPTO_ASSETS[2];
-  const customerUsdc = !house && isUsdcCashoutNetwork(cryptoId);
-  const usdcQuote = customerUsdc
+  const walletUsdc = payoutKind === "WALLET" && isUsdcCashoutNetwork(cryptoId);
+  const customerUsdc = !house && walletUsdc;
+  const usdcQuote = walletUsdc
     ? quoteUsdcWithdrawFee(amount * usdCentsPerCredit, {
         usdcWithdrawFeeFlatCents,
         usdcWithdrawFeeBps,
@@ -240,7 +241,9 @@ export function CashoutForm({
         <h2 className="font-display text-2xl text-primary">Conferma destinazione</h2>
         <p className="text-sm text-muted-foreground">
           {house
-            ? "Questa conferma apre il prelievo. Crypto: il negozio tenta l’invio. IBAN: il bonifico resta da UniCredit o Wise."
+            ? walletUsdc
+              ? "Questa conferma apre il prelievo USDC. Circle invia il netto; la commissione resta nel SCA. Il gas è sponsorizzato dal negozio tramite Gas Station."
+              : "Questa conferma apre il prelievo. Crypto: il negozio tenta l’invio. IBAN: il bonifico resta da UniCredit o Wise."
             : payoutKind === "WALLET"
               ? customerUsdc
                 ? circleReady
@@ -262,7 +265,7 @@ export function CashoutForm({
           </p>
           {payoutKind === "WALLET" ? (
             <p className="text-sm text-muted-foreground">
-              {customerUsdc
+              {walletUsdc
                 ? circleReady
                   ? `I crediti diventano ${preview} su Base e partono dal wallet Circle del negozio. ${USDC_GAS_STATION_COPY}`
                   : `I crediti diventano ${preview} su Base. Senza Circle la richiesta resta aperta; da Fusioni si può ritentare «Invia USDC».`
@@ -305,7 +308,9 @@ export function CashoutForm({
           <input type="checkbox" name="ack" value="on" required className="mt-1 size-4 accent-primary" />
           {house
             ? payoutKind === "WALLET"
-              ? "Ho capito: i crediti si convertono nella crypto scelta, si bruciano e il prelievo viene accettato. Chi riceve non firma."
+              ? walletUsdc
+                ? "Ho capito: USDC su Base, lordo meno commissione = netto inviato. La commissione resta nel SCA. Il gas è sponsorizzato dal negozio tramite Gas Station."
+                : "Ho capito: i crediti si convertono nella crypto scelta, si bruciano e il prelievo viene accettato. Chi riceve non firma."
               : "Ho capito: Zecca non accredita questi conti. Il bonifico lo faccio io da UniCredit o Wise."
             : payoutKind === "WALLET"
               ? customerUsdc
@@ -347,7 +352,9 @@ export function CashoutForm({
       <p className="text-sm text-muted-foreground">
         {house
           ? payoutKind === "WALLET"
-            ? `${houseName ?? "La casa"} genera i crediti, li converte nella crypto scelta e alla conferma il prelievo viene accettato. MetaMask, Trust Wallet o l’exchange ricevono: non firmano.`
+            ? walletUsdc
+              ? `${houseName ?? "La casa"} chiede USDC su Base. Lordo, commissione (SCA) e netto sono sotto. Il gas è sponsorizzato dal negozio tramite Gas Station.`
+              : `${houseName ?? "La casa"} genera i crediti, li converte nella crypto scelta e alla conferma il prelievo viene accettato. MetaMask, Trust Wallet o l’exchange ricevono: non firmano.`
             : `${houseName ?? "La casa"} indica destinazione. I crediti escono dal portafoglio solo come richiesta: UniCredit e Wise non vengono accreditati da questo sito.`
           : payoutKind === "WALLET"
             ? customerUsdc
@@ -557,7 +564,7 @@ export function CashoutForm({
             ))}
           </div>
           <label className="block text-sm">
-            {customerUsdc
+            {walletUsdc
               ? "Indirizzo 0x su Base (MetaMask, Trust, Kraken o MEXC — deposito USDC Base)"
               : `Wallet che riceve ${crypto.label} (non deve firmare)`}
             <Input
@@ -569,7 +576,7 @@ export function CashoutForm({
             />
           </label>
           <p className="text-sm text-muted-foreground">
-            {customerUsdc
+            {walletUsdc
               ? circleReady
                 ? `Destinazione: ${preview} su Base (MetaMask, Trust o deposito exchange). Alla conferma parte il netto dal negozio. ${USDC_GAS_STATION_COPY}`
                 : `Destinazione: ${preview} su Base. Senza CIRCLE_* su Vercel la richiesta resta aperta.`
