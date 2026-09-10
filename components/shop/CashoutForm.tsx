@@ -30,6 +30,9 @@ export function CashoutForm({
   house = false,
   houseName,
   circleReady = false,
+  usdcWithdrawableCents = 0,
+  usdcBookLabel,
+  usdcChainLabel,
 }: {
   available: number;
   percent?: number;
@@ -39,6 +42,9 @@ export function CashoutForm({
   house?: boolean;
   houseName?: string | null;
   circleReady?: boolean;
+  usdcWithdrawableCents?: number;
+  usdcBookLabel?: string;
+  usdcChainLabel?: string;
 }) {
   const [state, action] = useActionState(requestCashoutAction, null as CashoutActionState | null);
   const [phase, setPhase] = useState<"edit" | "confirm">("edit");
@@ -333,7 +339,9 @@ export function CashoutForm({
           : payoutKind === "WALLET"
             ? customerUsdc
               ? circleReady
-                ? "USDC su Base: incolla l’indirizzo MetaMask, Trust o il deposito USDC Base di Kraken/MEXC. 1 cr = 1 USD di libro. Tu non firmi e non paghi il gas."
+                ? usdcWithdrawableCents <= 0
+                  ? `USDC su Base: cassa prelevabile ${usdcBookLabel ?? "0"} a libro / ${usdcChainLabel ?? "n.d."} on-chain. Senza deposito Circle l’invio resta aperto. Tu non firmi.`
+                  : "USDC su Base: incolla l’indirizzo MetaMask, Trust o il deposito USDC Base di Kraken/MEXC. Prelievo limitato al min(cassa libro, saldo Circle). Tu non firmi e non paghi il gas."
                 : "USDC su Base mainnet: 1 credito = 1 USD di libro. Wallet Circle non configurato: la richiesta resta aperta. Tu non firmi."
               : "Indica il wallet che riceve. Massimo conferma l’invio dalla coda Fusioni. Tu non firmi nulla."
             : "Bonifico in euro su IBAN italiano. Massimo dispone il SEPA dal suo conto. Stripe non versa sul tuo IBAN."}

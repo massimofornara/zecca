@@ -1,5 +1,6 @@
 import { CopyField } from "@/components/copy/CopyField";
 import { explorerLinks, receiptLabel } from "@/lib/receipt";
+import { isCircleUsdcReceipt, isLocalOrInternalExplorer, isUsdcCashoutNetwork } from "@/lib/settlement/circle-ref";
 import { isGatewayReceiptRef } from "@/lib/settlement/gateway-ref";
 
 export function CashoutReceipt({
@@ -27,18 +28,37 @@ export function CashoutReceipt({
       : receiptKind === "GATEWAY_RECEIVED" && receiptUrl
         ? receiptUrl
         : null;
+  const circleUsdc = isCircleUsdcReceipt({ receiptKind, receiptRef, receiptUrl, walletNetwork });
+  const fakeUsdcHash =
+    receiptKind === "TX_HASH" && isUsdcCashoutNetwork(walletNetwork) && !circleUsdc;
+  const executedLabel =
+    receiptKind === "GATEWAY_RECEIVED" ||
+    receiptKind === "CIRCLE_TRANSFER" ||
+    (receiptKind === "TX_HASH" && !fakeUsdcHash);
+
   return (
     <div className="mt-2 space-y-2 rounded-md bg-background/50 p-3 ring-1 ring-primary/20">
       <p className="text-[11px] uppercase tracking-[0.18em] text-primary/80">
-        {receiptKind === "GATEWAY_RECEIVED" || receiptKind === "TX_HASH" || receiptKind === "CIRCLE_TRANSFER"
+        {executedLabel
           ? "EXECUTED AND RECEIVED"
           : receiptKind === "SEPA_DISPOSED"
             ? "Bonifico disposto"
-            : "Ricevuta del prelievo"}
+            : fakeUsdcHash
+              ? "Non è un invio Circle"
+              : "Ricevuta del prelievo"}
       </p>
       {receiptRef ? <CopyField label={receiptLabel(receiptKind, walletNetwork)} value={receiptRef} mono /> : null}
       {receiptHash ? <CopyField label="Hash ricevuta (SHA-256)" value={receiptHash} mono /> : null}
-      {receiptKind === "TX_HASH" ? (
+      {fakeUsdcHash ? (
+        <p className="text-xs text-ember">
+          Questo hash non è un trasferimento Circle USDC su Base (catena interna o localhost). Non è
+          un accredito MetaMask/Kraken. La richiesta va riaperta e inviata dal wallet Circle.
+        </p>
+      ) : receiptKind === "TX_HASH" && isUsdcCashoutNetwork(walletNetwork) ? (
+        <p className="text-xs text-ember">
+          USDC inviato su Base dal wallet Circle del negozio. Hash su BaseScan, non su /catena.
+        </p>
+      ) : receiptKind === "TX_HASH" ? (
         <p className="text-xs text-ember">
           EXECUTED AND RECEIVED. Hash di rete verificato sulla catena del negozio. Non aprirlo su
           etherscan.io se è un mint Zecca Gasless: è visibile su /catena.
@@ -98,7 +118,7 @@ export function CashoutReceipt({
             Ricevuta di trasmissione gateway
           </a>
         ) : null}
-        {receiptKind === "TX_HASH" && receiptRef
+        {receiptKind === "TX_HASH" && receiptRef && !(isUsdcCashoutNetwork(walletNetwork) && isLocalOrInternalExplorer(receiptUrl))
           ? explorerLinks(walletNetwork, receiptRef, receiptUrl).map((link) => (
               <a
                 key={link.url}

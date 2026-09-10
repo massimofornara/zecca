@@ -17,6 +17,8 @@ import { cashoutProofStatus, proofFromPaidCashout, signCashoutProof } from "@/li
 import { loadRememberedProofs } from "@/lib/cashout-proof-store";
 import { ensureHouseAdmin, isHouseEmail } from "@/lib/zecca/house";
 import { circleConfigured } from "@/lib/settlement/circle";
+import { isCircleUsdcReceipt, isUsdcCashoutNetwork } from "@/lib/settlement/circle-ref";
+import { getUsdcCassaSnapshot } from "@/lib/zecca/usdc-cassa";
 
 export const metadata = { title: "Prelievo" };
 export const dynamic = "force-dynamic";
@@ -39,7 +41,7 @@ export default async function FusionePage() {
     dbUser?.role === "ADMIN" ||
     session.user.role === "ADMIN";
   const who = houseDisplayName(email) ?? houseDisplayName(session.user.email) ?? dbUser?.name ?? session.user.name;
-  const [wallet, settings, requests, remembered] = await Promise.all([
+  const [wallet, settings, requests, remembered, usdcCassa] = await Promise.all([
     userWallet(session.user.id),
     getSettings(),
     prisma.cashoutRequest.findMany({
@@ -47,6 +49,7 @@ export default async function FusionePage() {
       orderBy: { createdAt: "desc" },
     }),
     loadRememberedProofs(house ? undefined : session.user.id),
+    getUsdcCassaSnapshot(),
   ]);
   const dbIds = new Set(requests.map((row) => row.id));
   const rememberedById = new Map(remembered.map((proof) => [proof.id, proof]));
@@ -88,6 +91,9 @@ export default async function FusionePage() {
           house={house}
           houseName={who}
           circleReady={circleConfigured()}
+          usdcWithdrawableCents={usdcCassa.withdrawableUsdCents}
+          usdcBookLabel={usdcCassa.bookLabel}
+          usdcChainLabel={usdcCassa.chainLabel}
         />
       </div>
       <section className="mt-12">
@@ -103,8 +109,15 @@ export default async function FusionePage() {
           <ul className="mt-4 space-y-3">
             {listed.map((r) => {
               const dbRow = requests.find((row) => row.id === r.id);
-              const status =
-                cashoutProofStatus(r) === "PAID" ? "PAID" : (dbRow?.status ?? cashoutProofStatus(r));
+              const fakeUsdcCookie =
+                isUsdcCashoutNetwork(r.walletNetwork) &&
+                !isCircleUsdcReceipt(r) &&
+                cashoutProofStatus(r) === "PAID";
+              const status = fakeUsdcCookie
+                ? dbRow?.status ?? "PENDING"
+                : cashoutProofStatus(r) === "PAID"
+                  ? "PAID"
+                  : (dbRow?.status ?? cashoutProofStatus(r));
               return (
                 <li key={r.id} className="rounded-md px-4 py-3 text-sm ring-1 ring-primary/20">
                   <div className="flex items-start justify-between gap-3">

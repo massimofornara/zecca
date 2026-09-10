@@ -184,6 +184,8 @@ export async function tryDirectEvmMint(input: {
     if (minted) return minted;
   }
 
+  if (network === "USDC") return null;
+
   const gasless = await tryGaslessEvmMint({
     walletAddress: to,
     usdCents: input.usdCents,
@@ -207,6 +209,7 @@ export async function tryDirectEvmTransfer(input: {
   usdCents: number;
 }): Promise<ShopPayoutResult | null> {
   const network = (input.walletNetwork ?? "").trim().toUpperCase();
+  if (network === "USDC") return null;
   const spec = EVM_ASSETS[network];
   if (!spec) return null;
 

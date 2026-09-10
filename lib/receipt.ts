@@ -1,12 +1,12 @@
-import { publicOrigin } from "@/lib/public-url";
+import { siteHref } from "@/lib/public-url";
+import { basescanTxUrl, isLocalOrInternalExplorer, isUsdcCashoutNetwork } from "@/lib/settlement/circle-ref";
 import { isGatewayReceiptRef } from "@/lib/settlement/gateway-ref";
 import { walletNetworkLabel } from "@/lib/wallet";
 
 export function catenaTxUrl(hash: string) {
   const ref = normalizeReceipt(hash);
   const path = ref.startsWith("0x") ? ref : `0x${ref}`;
-  const origin = publicOrigin() || `http://127.0.0.1:${process.env.PORT ?? "4731"}`;
-  return `${origin}/catena/tx/${path}`;
+  return siteHref(`/catena/tx/${path}`);
 }
 
 export type ReceiptKind = "TX_HASH" | "BANK_REF";
@@ -27,6 +27,7 @@ export function isZeccaGaslessExplorerHash(
   network?: string | null,
   receiptUrl?: string | null,
 ) {
+  if (isUsdcCashoutNetwork(network)) return false;
   if (network === "ZECCA") return true;
   if ((receiptUrl ?? "").includes("/catena/tx")) return true;
   const ref = normalizeReceipt(hash ?? "").toLowerCase();
@@ -40,6 +41,11 @@ export function explorerLinks(
 ): { label: string; url: string }[] {
   const ref = normalizeReceipt(hash);
   if (!ref) return [];
+  if (isUsdcCashoutNetwork(network)) {
+    const path = ref.startsWith("0x") ? ref : `0x${ref}`;
+    if (!/^0x[a-fA-F0-9]{64}$/.test(path) || isLocalOrInternalExplorer(receiptUrl)) return [];
+    return [{ label: "BaseScan", url: basescanTxUrl(path) }];
+  }
   if (isZeccaGaslessExplorerHash(ref, network, receiptUrl)) {
     const path = ref.startsWith("0x") ? ref : `0x${ref}`;
     return [{ label: "Catena Zecca", url: catenaTxUrl(path) }];

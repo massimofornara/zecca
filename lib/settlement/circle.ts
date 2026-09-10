@@ -1,10 +1,21 @@
 import { constants, createHash, publicEncrypt } from "node:crypto";
 import { ZeccaError } from "@/lib/errors";
-import { CIRCLE_USDC_CHAIN } from "@/lib/settlement/circle-ref";
+import {
+  CIRCLE_SHOP_SCA_ADDRESS,
+  CIRCLE_USDC_CHAIN,
+  CIRCLE_USDC_TOKEN_ADDRESS,
+} from "@/lib/settlement/circle-ref";
 
-export { CIRCLE_USDC_CHAIN, isUsdcCashoutNetwork } from "@/lib/settlement/circle-ref";
-export const CIRCLE_USDC_TOKEN_ADDRESS = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913";
+export {
+  CIRCLE_SHOP_SCA_ADDRESS,
+  CIRCLE_USDC_CHAIN,
+  CIRCLE_USDC_TOKEN_ADDRESS,
+  isCircleUsdcReceipt,
+  isUsdcCashoutNetwork,
+} from "@/lib/settlement/circle-ref";
 export const CIRCLE_NOT_CONFIGURED_MESSAGE = "Wallet negozio non configurato.";
+
+const FAILED_STATES = new Set(["FAILED", "DENIED", "CANCELLED"]);
 
 export type CircleTransferResult = {
   provider: "circle";
@@ -139,6 +150,71 @@ function toResult(id: string, txHash: string | null): CircleTransferResult {
   };
 }
 
+function parseUsdCents(raw: string | null) {
+  if (!raw) return null;
+  const value = Number.parseFloat(raw.replace(",", "."));
+  if (!Number.isFinite(value) || value < 0) return null;
+  return Math.round(value * 100);
+}
+
+export type CircleUsdcBalance = {
+  usdCents: number;
+  amountLabel: string;
+  walletId: string;
+  address: string;
+};
+
+function tokenLooksLikeUsdc(token: Record<string, unknown> | null | undefined) {
+  if (!token) return false;
+  const symbol = String(token.symbol ?? token.name ?? "").toUpperCase();
+  const chain = String(token.blockchain ?? "").toUpperCase();
+  const address = String(token.tokenAddress ?? token.address ?? "").toLowerCase();
+  const expected = CIRCLE_USDC_TOKEN_ADDRESS.toLowerCase();
+  if (address && address === expected) return true;
+  if (symbol.includes("USDC") && (!chain || chain.includes("BASE"))) return true;
+  return symbol === "USDC";
+}
+
+function readBalanceRows(json: Record<string, unknown> | null): { amount: string; token: Record<string, unknown> }[] {
+  if (!json) return [];
+  const data = (json.data ?? json) as Record<string, unknown>;
+  const rows =
+    (data.tokenBalances as unknown[]) ??
+    (data.balances as unknown[]) ??
+    (Array.isArray(data) ? data : []);
+  if (!Array.isArray(rows)) return [];
+  return rows
+    .map((row) => {
+      if (!row || typeof row !== "object") return null;
+      const record = row as Record<string, unknown>;
+      const token = (record.token as Record<string, unknown> | undefined) ?? record;
+      const amount = String(record.amount ?? record.available ?? record.balance ?? "");
+      return { amount, token };
+    })
+    .filter((row): row is { amount: string; token: Record<string, unknown> } => Boolean(row));
+}
+
+/** Saldo USDC nativo Base del wallet SCA. Null se Circle non è configurato. */
+export async function fetchCircleUsdcBalance(fetchImpl: typeof fetch = fetch): Promise<CircleUsdcBalance | null> {
+  if (!circleConfigured()) return null;
+  const id = walletId();
+  if (!id) return null;
+  const listed = await circleJson(`/v1/w3s/wallets/${id}/balances`, { method: "GET" }, fetchImpl);
+  const rows = readBalanceRows(listed.json);
+  let usdCents = 0;
+  for (const row of rows) {
+    if (!tokenLooksLikeUsdc(row.token)) continue;
+    const cents = parseUsdCents(row.amount);
+    if (cents != null) usdCents += cents;
+  }
+  return {
+    usdCents,
+    amountLabel: (usdCents / 100).toLocaleString("it-IT", { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+    walletId: id,
+    address: process.env.CIRCLE_WALLET_ADDRESS?.trim() || CIRCLE_SHOP_SCA_ADDRESS,
+  };
+}
+
 /**
  * Invia USDC nativo su Base dal wallet Circle SCA del negozio.
  * feeLevel MEDIUM: Circle stima il gas. Su SCA, se in Console c’è una policy Gas
@@ -186,12 +262,15 @@ export async function transferUsdcOnBase(input: {
   );
   const id =
     readNestedString(posted.json, [["data", "id"], ["data", "transaction", "id"], ["id"]]) ?? "";
+  const state = (
+    readNestedString(posted.json, [["data", "state"], ["data", "transaction", "state"], ["state"]]) ?? ""
+  ).toUpperCase();
   const txHash = readNestedString(posted.json, [
     ["data", "txHash"],
     ["data", "transactionHash"],
     ["data", "transaction", "txHash"],
   ]);
-  if (!posted.ok || !id) {
+  if (!posted.ok || !id || FAILED_STATES.has(state)) {
     const apiMessage = readNestedString(posted.json, [["message"], ["data", "message"]]);
     throw new ZeccaError(
       apiMessage
@@ -200,6 +279,7 @@ export async function transferUsdcOnBase(input: {
       "CIRCLE_REJECTED",
     );
   }
-  return toResult(id, txHash);
+  const hash = txHash && /^0x[a-fA-F0-9]{64}$/i.test(txHash) ? txHash : null;
+  return toResult(id, hash);
 }
 

@@ -50,6 +50,19 @@ export async function mintAction(
   }
 }
 
+export async function refreshCircleBalanceAction(
+  _prev: { error?: string; ok?: string } | null,
+  _formData: FormData,
+): Promise<{ error?: string; ok?: string }> {
+  const admin = await requireAdmin();
+  if (!admin) return { error: "Solo il zecchiere può aggiornare il saldo Circle." };
+  revalidatePath("/zecchiere");
+  revalidatePath("/zecchiere/fusioni");
+  revalidatePath("/zecchiere/conio");
+  revalidatePath("/fusione");
+  return { ok: "Saldo Circle riletto da API. Se il deposito è appena arrivato, attendi un minuto e ritenta." };
+}
+
 export type PayoutSnapshot = {
   receiptId: string;
   receiptRef?: string | null;
@@ -206,6 +219,10 @@ export async function treasuryConvertAction(
     for (const asset of TREASURY_CRYPTO_ASSETS) {
       const credits = Number(formData.get(`credits${asset}`) ?? 0);
       if (credits <= 0) continue;
+      if (asset === "USDC") {
+        cryptos.push({ asset, credits, address: "" });
+        continue;
+      }
       const address = asset === "BTC" ? walletBtc : walletEvm;
       if (!address) {
         return {
@@ -238,6 +255,7 @@ export async function treasuryConvertAction(
       payouts.push(await snapshotCashout(row, admin.name ?? "Casa"));
     }
     const parts = [];
+    const usdcBook = cryptos.filter((line) => line.asset === "USDC").reduce((sum, line) => sum + line.credits, 0);
     if (fiat?.creditsEur) {
       parts.push(
         `${fiat.creditsEur.toLocaleString("it-IT")} cr → ${(fiat.eurCents / 100).toLocaleString("it-IT", { style: "currency", currency: "EUR" })} verso UniCredit`,
@@ -256,12 +274,20 @@ export async function treasuryConvertAction(
     for (const row of cashouts) {
       parts.push(`${row.credits} cr → ${row.walletNetwork}`);
     }
+    if (usdcBook > 0) {
+      parts.push(`${usdcBook.toLocaleString("it-IT")} cr → USDC a libro (deposita sul SCA prima di prelevare)`);
+    }
     const arrived = payouts.filter((payout) => fundsDelivered(payout)).length;
     const authorized = payouts.filter((payout) => fundsAuthorized(payout)).length;
-    if (payouts.length === 0) {
+    if (payouts.length === 0 && usdcBook <= 0) {
       return {
         error:
           "Nessun accredito partito: indica crediti e destinazioni. La cassa libro da sola non è un bonifico.",
+      };
+    }
+    if (payouts.length === 0 && usdcBook > 0) {
+      return {
+        ok: `Convertiti ${usdcBook.toLocaleString("it-IT")} cr in cassa USDC di libro. Non è un invio on-chain. Deposita USDC su Base sul SCA, poi «Aggiorna saldo Circle» e preleva.`,
       };
     }
     return {

@@ -111,6 +111,12 @@ async function hydrateLiveDatabase() {
     }
   }
   if (userCount > 0) {
+    try {
+      const { replayBookOps } = await import("@/lib/book-proof-store");
+      await replayBookOps(prisma);
+    } catch {
+      /* cookie assenti in instrumentation */
+    }
     const massimo = await prisma.user.findUnique({ where: { email: "massimo@zecca.local" } });
     if (massimo && (await pocketBalance("USER", massimo.id, prisma)) <= 0) {
       await grantHouseCredits({ userId: massimo.id, credits: 100_000, db: prisma });
@@ -214,5 +220,12 @@ async function hydrateLiveDatabase() {
         },
       });
     }
+  }
+
+  try {
+    const { replayBookOps } = await import("@/lib/book-proof-store");
+    await replayBookOps(prisma);
+  } catch {
+    /* cookie assenti in instrumentation */
   }
 }

@@ -3,10 +3,13 @@ import { formatCredits } from "@/lib/format";
 import { treasuryBalance } from "@/lib/zecca/ledger";
 import { prisma } from "@/lib/db";
 import { formatRomeDate } from "@/lib/rome-day";
+import { sqliteEphemeral } from "@/lib/public-url";
+import { replayBookOps } from "@/lib/book-proof-store";
 
 export const metadata = { title: "Conio" };
 
 export default async function ConioPage() {
+  await replayBookOps(prisma);
   const [treasury, mints] = await Promise.all([
     treasuryBalance(),
     prisma.ledgerEntry.findMany({
@@ -24,6 +27,13 @@ export default async function ConioPage() {
         conto in banca. Coniare non crea euro, dollari né USDC. Un prelievo USDC parte solo se il
         wallet Circle del negozio ha USDC vero su Base.
       </p>
+      {sqliteEphemeral() ? (
+        <p className="mt-3 rounded-md bg-ember/10 px-3 py-2 text-sm text-ember ring-1 ring-ember/30">
+          Su Vercel senza Postgres il libro vive in /tmp per istanza. I conii di questa sessione
+          restano in un cookie firmato e vengono riallineati al ricaricamento. Per tesoreria
+          condivisa imposta <span className="font-ledger">DATABASE_URL</span> Postgres.
+        </p>
+      ) : null}
       <p className="mt-4 font-ledger text-ember">Tesoreria: {formatCredits(treasury)}</p>
       <div className="mt-8 max-w-lg">
         <MintForm />

@@ -164,11 +164,21 @@ Su Vercel il SQLite in `/tmp` è per istanza. Senza `DATABASE_URL` Postgres il l
 
 1. **Zecchiere → Conio**: quantità libera. I crediti vanno in tesoreria crediti. Coniare **non** crea saldo bancario.
 2. **Zecchiere → Forgia**: 1 cr = X EUR, 1 cr = Y USD, 1 cr = Z CHF (predefiniti 1,00, 1,08 e 0,94).
-3. **Zecchiere → Tesoreria** (o Fusioni): indica quanti crediti diventare euro, dollari, franchi o crypto. Per la crypto scrivi il wallet: alla conferma i crediti si bruciano e il prelievo viene accettato (mint EVM se il contratto Zecca è configurato, altrimenti coda di liquidazione con ricevuta interna). Esempio: 10.000 cr coniato, 3.000 → EUR, 2.000 → USD, 500 → CHF e 1.000 → BTC verso `bc1…`.
+3. **Zecchiere → Tesoreria** (o Fusioni): indica quanti crediti diventare euro, dollari, franchi o crypto. **USDC** va solo a libro: non parte nessun token. Deposita USDC nativo Base sul SCA `0xaa7b4d75b80b145163d1f1caacd8b1b468fcca08`, premi «Aggiorna saldo Circle», poi preleva verso MetaMask/Trust/Kraken (deposito USDC Base). Altre crypto: alla conferma i crediti si bruciano e il prelievo viene accettato (mint EVM se configurato, altrimenti coda). Esempio: 10.000 cr coniato, 3.000 → EUR, 2.000 → USD, 500 → CHF, 1.000 → USDC a libro (poi deposito Circle) e BTC verso `bc1…`.
 4. Il libro registra `TREASURY_CONVERT_TO_EUR`, `TREASURY_CONVERT_TO_USD`, `TREASURY_CONVERT_TO_CHF` e `TREASURY_CONVERT_TO_CRYPTO`. I pentolini fiat si calcolano da quelle righe. Il payout crypto brucia i crediti e accetta la richiesta verso il wallet indicato.
 5. I clienti (e la casa) prelevano in **EUR, USD o CHF** verso IBAN (bonifico a mano da UniCredit o Wise) oppure in crypto dal wallet del negozio. Se resta crypto sul libro, Massimo può prelevare di nuovo da Tesoreria verso un altro indirizzo. Il gateway applica rate limit, whitelist (se attiva) e massimali temporali.
 
-`npm run test:flow` include mint → conversione 3.000 cr in EUR, 2.000 cr in USD e 500 cr in CHF, conversione crypto in cassa virtuale, policy di prelievo (whitelist, rate limit, checksum) e prelievo verso il wallet indicato nel form (senza inventare hash).
+**USDC verso Kraken / MetaMask (convert → deposita → preleva):**
+
+1. **Conio** i crediti in tesoreria (solo libro).
+2. **Fusioni / Tesoreria**: converti crediti → USDC. Il pentolino libro sale; **nessun** token esce.
+3. Deposita USDC nativo Base sul SCA `0xaa7b4d75b80b145163d1f1caacd8b1b468fcca08`. Premi **Aggiorna saldo Circle**.
+4. Se libro > catena, il banner chiede la differenza. I prelievi sono limitati a `min(libro, saldo Circle)`.
+5. Cliente o casa in **Prelievo**: USDC, indirizzo `0x…` (es. deposito Kraken USDC su Base `0x9b4a778c812a891ECFaAaE95483B5DCB21F6917e`). Conferma. Circle invia; PAID solo se l’API accetta. Hash su BaseScan, mai su localhost `/catena`.
+
+Senza Postgres su Vercel il SQLite è in `/tmp` per istanza: i conii restano anche in un cookie firmato e vengono riallineati al reload. Per un libro condiviso usa `DATABASE_URL` Postgres.
+
+
 
 ## Architettura (fattibilità, MiCA, riserve)
 

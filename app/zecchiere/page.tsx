@@ -9,11 +9,13 @@ import { getShopNetworkVault } from "@/lib/zecca/shop-vault";
 import { CopyField } from "@/components/copy/CopyField";
 import { TreasuryConvertForm, InternalCryptoWithdrawForm } from "@/components/zecchiere/FusioniForms";
 import { shopInternalCryptoWallets } from "@/lib/zecca/convert";
+import { getUsdcCassaSnapshot } from "@/lib/zecca/usdc-cassa";
+import { CircleCassaCard } from "@/components/zecchiere/CircleCassaCard";
 
 export const metadata = { title: "Tesoreria" };
 
 export default async function TesoreriaPage() {
-  const [flow, pending, loyal, reserve, settings, live, vault, internalWallets] = await Promise.all([
+  const [flow, pending, loyal, reserve, settings, live, vault, internalWallets, usdcCassa] = await Promise.all([
     totals(),
     prisma.cashoutRequest.count({ where: { status: { in: ["PENDING", "QUEUED"] } } }),
     loyalToday(),
@@ -22,6 +24,7 @@ export default async function TesoreriaPage() {
     getLiveReport(),
     getShopNetworkVault(),
     shopInternalCryptoWallets(),
+    getUsdcCassaSnapshot(),
   ]);
 
   return (
@@ -72,14 +75,15 @@ export default async function TesoreriaPage() {
         </div>
       </section>
 
+      <CircleCassaCard cassa={usdcCassa} />
+
       <section className="metal-frame mt-6 rounded-md bg-card p-5">
         <p className="text-xs uppercase tracking-[0.2em] text-primary/80">
           Cassa virtuale (libro / passività da burn)
         </p>
         <p className="mt-2 text-sm text-muted-foreground">
-          Crediti già convertiti in BTC, ETH, USDT, USDC e BNB e non ancora usciti. Passività di
-          libro, non saldo Mempool. Il prelievo verso un wallet esterno brucia questi crediti e
-          accetta la richiesta.
+          Crediti già convertiti in BTC, ETH, USDT, USDC e BNB e non ancora usciti. Per USDC il
+          numero di libro non è il saldo Circle: allinea con un deposito sul SCA.
         </p>
         <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
           {internalWallets.map((wallet) => {
@@ -189,9 +193,8 @@ export default async function TesoreriaPage() {
       <section className="metal-frame mt-8 rounded-md bg-card p-5">
         <h2 className="font-display text-2xl text-primary">Converti crediti in cassa e crypto</h2>
         <p className="mt-1 text-sm text-muted-foreground">
-        Euro, dollari e franchi restano in cassa negozio. Per BTC, ETH, USDT, USDC e BNB alla
-        conferma i crediti si bruciano e il negozio tenta l’invio on-chain. Se la cassa di rete è
-        vuota il prelievo resta accettato in coda. Rate limit, whitelist e massimali stanno in Forgia.
+        Euro, dollari e franchi restano in cassa negozio. USDC va a libro: deposita USDC vero sul
+        SCA Circle, poi preleva. BTC/ETH/USDT/BNB tentano l’invio on-chain.
         </p>
         <TreasuryConvertForm
           treasury={flow.treasury}

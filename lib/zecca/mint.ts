@@ -3,6 +3,7 @@ import { prisma as defaultPrisma } from "@/lib/db";
 import { ZeccaError } from "@/lib/errors";
 import { LEDGER_INT_MAX, parsePositiveCredits } from "@/lib/zecca/amount";
 import { appendLedger, treasuryBalance } from "@/lib/zecca/ledger";
+import { rememberBookOp } from "@/lib/book-proof-store";
 
 type Db = PrismaClient | Prisma.TransactionClient;
 
@@ -23,6 +24,7 @@ export async function mintCredits(input: {
     );
   }
 
+  const note = input.note?.trim() || `Lotto coniato: ${amount} crediti`;
   const run = async (tx: Db) =>
     appendLedger(
       {
@@ -31,13 +33,22 @@ export async function mintCredits(input: {
         fromPocket: "VOID",
         toPocket: "TREASURY",
         actorId: input.actorId,
-        note: input.note?.trim() || `Lotto coniato: ${amount} crediti`,
+        note,
       },
       tx,
     );
 
-  if (input.db) return run(input.db);
-  return defaultPrisma.$transaction(async (tx) => run(tx));
+  const entry = input.db ? await run(input.db) : await defaultPrisma.$transaction(async (tx) => run(tx));
+  await rememberBookOp({
+    v: 1,
+    id: entry.id,
+    type: "MINT",
+    amountCredits: amount,
+    note,
+    actorId: input.actorId,
+    createdAt: entry.createdAt.toISOString(),
+  });
+  return entry;
 }
 
 /** Se la tesoreria non copre il bisogno, la zecca batte il metallo mancante. */

@@ -1,4 +1,5 @@
 import { PendingCashoutCard, TreasuryConvertForm } from "@/components/zecchiere/FusioniForms";
+import { CircleCassaCard } from "@/components/zecchiere/CircleCassaCard";
 import { CashoutReceipt } from "@/components/shop/CashoutReceipt";
 import { EmptyState } from "@/components/ui/banners";
 import { formatCredits, formatEurFromCents, formatFiatFromCents } from "@/lib/format";
@@ -6,11 +7,16 @@ import { formatRomeDate } from "@/lib/rome-day";
 import { prisma } from "@/lib/db";
 import { treasuryBalance } from "@/lib/zecca/ledger";
 import { getSettings } from "@/lib/zecca/settings";
+import { getUsdcCassaSnapshot } from "@/lib/zecca/usdc-cassa";
+import { reopenFakeUsdcCashouts } from "@/lib/zecca/cashout";
+import { replayBookOps } from "@/lib/book-proof-store";
 
 export const metadata = { title: "Fusioni" };
 
 export default async function FusioniPage() {
-  const [pending, closed, treasury, settings] = await Promise.all([
+  await replayBookOps(prisma);
+  await reopenFakeUsdcCashouts();
+  const [pending, closed, treasury, settings, usdcCassa] = await Promise.all([
     prisma.cashoutRequest.findMany({
       where: { status: { in: ["PENDING", "QUEUED"] } },
       orderBy: { createdAt: "asc" },
@@ -24,6 +30,7 @@ export default async function FusioniPage() {
     }),
     treasuryBalance(),
     getSettings(),
+    getUsdcCassaSnapshot(),
   ]);
 
   return (
@@ -42,12 +49,14 @@ export default async function FusioniPage() {
         . Un codice ZECCA/… non è un bonifico.
       </p>
 
+      <CircleCassaCard cassa={usdcCassa} />
+
       <section className="metal-frame mt-8 rounded-md bg-card p-5">
         <h2 className="font-display text-2xl text-primary">Conversione in cassa e invio crypto</h2>
         <p className="mt-1 text-sm text-muted-foreground">
-          I crediti ancora in tesoreria ({formatCredits(treasury)}) partono verso IBAN casa e
-          wallet. Se SEPA Instant, Wise, minter o vault sono spenti, i destinatari non ricevono
-          nulla in questi secondi.
+          I crediti ancora in tesoreria ({formatCredits(treasury)}) diventano euro, dollari, franchi
+          o cassa USDC di libro. Convertire USDC non sposta token on-chain: deposita USDC vero sul
+          SCA, poi preleva.
         </p>
         <TreasuryConvertForm
           treasury={treasury}

@@ -8,6 +8,8 @@ import {
   isUsdcCashoutNetwork,
   transferUsdcOnBase,
 } from "@/lib/settlement/circle";
+import { basescanTxUrl, isCircleUsdcReceipt, isLocalOrInternalExplorer } from "@/lib/settlement/circle-ref";
+import { assertUsdcLiquidity } from "@/lib/zecca/usdc-cassa";
 import { isValidWalletAddress, normalizeWalletAddress, walletNetworkLabel } from "@/lib/wallet";
 import { type ChainLookup, verifyCryptoReceipt } from "@/lib/chain-receipt";
 import { officialReceiptHash, sepaEndToEndId } from "@/lib/official-receipt";
@@ -797,7 +799,7 @@ export async function fulfillWalletCashoutFromShop(input: {
   if (cashout.payoutKind !== "WALLET" || !cashout.walletAddress || !cashout.walletNetwork) {
     throw new ZeccaError("Questo prelievo non è un invio crypto dal negozio.", "INVALID");
   }
-  if (isUsdcCashoutNetwork(cashout.walletNetwork) && !cashout.isTreasury) {
+  if (isUsdcCashoutNetwork(cashout.walletNetwork)) {
     return sendUsdcFromShop({
       cashoutId: cashout.id,
       actorId: input.actorId,
@@ -1050,19 +1052,26 @@ export async function sendUsdcFromShop(input: {
   if (cashout.payoutKind !== "WALLET" || !cashout.walletAddress || !isUsdcCashoutNetwork(cashout.walletNetwork)) {
     throw new ZeccaError("Questo prelievo non è un invio USDC.", "INVALID");
   }
+  await assertUsdcLiquidity({
+    usdCents: cashout.usdCents,
+    cashoutId: cashout.id,
+    db,
+    fetchImpl: input.fetchImpl,
+  });
   const sent = await transferUsdcOnBase({
     destination: cashout.walletAddress,
     amountUsdCents: cashout.usdCents,
     idempotencyKey: cashout.id,
     fetchImpl: input.fetchImpl,
   });
-  const hash = sent.txHash && /^0x[a-fA-F0-9]{64}$/.test(sent.txHash) ? sent.txHash : null;
+  const hash = sent.txHash && /^0x[a-fA-F0-9]{64}$/i.test(sent.txHash) ? sent.txHash : null;
+  const receiptUrl = hash ? basescanTxUrl(hash) : sent.url && !isLocalOrInternalExplorer(sent.url) ? sent.url : null;
   return resolveOperatorPaid(db, cashout, {
     actorId: input.actorId,
     receiptKind: hash ? "TX_HASH" : CIRCLE_TRANSFER_KIND,
     receiptRef: hash ?? sent.id,
-    receiptUrl: sent.url,
-    adminNote: `USDC inviato su Base dal wallet Circle del negozio · ${sent.id}`,
+    receiptUrl,
+    adminNote: `USDC inviato su Base dal wallet Circle del negozio · ${sent.id}. Non è un mint Zecca Gasless.`,
   });
 }
 
@@ -1402,28 +1411,30 @@ export async function convertTreasuryAndWithdrawToWallet(input: {
   const db = input.db ?? defaultPrisma;
   const creditsCrypto = Math.max(0, Math.floor(Number(input.creditsCrypto ?? 0)));
   const address = normalizeWalletAddress(input.walletAddress ?? "");
+  const asset = creditsCrypto > 0 ? parseTreasuryCryptoAsset(input.cryptoAsset) : null;
   if (creditsCrypto > 0) {
-    const asset = parseTreasuryCryptoAsset(input.cryptoAsset);
     if (!asset) {
       throw new ZeccaError(
         "Scegli Bitcoin, Ethereum, USDT, USDC o BNB.",
         "INVALID_ASSET",
       );
     }
-    if (!isValidWalletAddress(address, asset)) {
-      throw new ZeccaError(
-        `Indirizzo non valido per ${walletNetworkLabel(asset)}. Indicalo nel form prima dell’invio.`,
-        "INVALID_WALLET",
-      );
+    if (asset !== "USDC") {
+      if (!isValidWalletAddress(address, asset)) {
+        throw new ZeccaError(
+          `Indirizzo non valido per ${walletNetworkLabel(asset)}. Indicalo nel form prima dell’invio.`,
+          "INVALID_WALLET",
+        );
+      }
+      const settings = await getSettings(db);
+      const usdCents = creditsToUsdCents(creditsCrypto, settings.usdCentsPerCredit);
+      await assertWithdrawPolicy({
+        address,
+        network: asset,
+        usdCents,
+        db,
+      });
     }
-    const settings = await getSettings(db);
-    const usdCents = creditsToUsdCents(creditsCrypto, settings.usdCentsPerCredit);
-    await assertWithdrawPolicy({
-      address,
-      network: asset,
-      usdCents,
-      db,
-    });
   }
 
   const converted = await convertTreasuryToShopCash({
@@ -1436,7 +1447,7 @@ export async function convertTreasuryAndWithdrawToWallet(input: {
     db: input.db,
   });
 
-  if (converted.creditsCrypto <= 0 || !converted.cryptoAsset) {
+  if (converted.creditsCrypto <= 0 || !converted.cryptoAsset || converted.cryptoAsset === "USDC") {
     return { converted, cashout: null };
   }
 
@@ -1551,6 +1562,15 @@ export async function convertTreasuryBundle(input: {
 
   const cashouts = [];
   for (const line of cryptos) {
+    if (line.asset === "USDC") {
+      await convertTreasuryToShopCash({
+        actorId: input.actorId,
+        creditsCrypto: line.credits,
+        cryptoAsset: "USDC",
+        db,
+      });
+      continue;
+    }
     const { cashout } = await convertTreasuryAndWithdrawToWallet({
       actorId: input.actorId,
       creditsCrypto: line.credits,
@@ -1655,6 +1675,70 @@ const PRODUCTION_GASLESS_HASHES = new Set([
   "0x35216ad2114fd8a0143ad00aff443af0b3d926d7af049fecb573096034e451bd",
 ]);
 
+/** Riapre USDC chiusi con hash gasless/localhost: non erano un invio Circle. */
+export async function reopenFakeUsdcCashouts(input?: { actorId?: string; db?: PrismaClient }) {
+  const db = input?.db ?? defaultPrisma;
+  const rows = await db.cashoutRequest.findMany({
+    where: {
+      status: "PAID",
+      payoutKind: "WALLET",
+      walletNetwork: { in: ["USDC", "USDC_BASE", "BASE"] },
+    },
+  });
+  let reopened = 0;
+  for (const row of rows) {
+    if (
+      isCircleUsdcReceipt({
+        receiptKind: row.receiptKind,
+        receiptRef: row.receiptRef,
+        receiptUrl: row.receiptUrl,
+        adminNote: row.adminNote,
+        walletNetwork: row.walletNetwork,
+      })
+    ) {
+      continue;
+    }
+    await db.$transaction(async (tx) => {
+      await tx.cashoutRequest.update({
+        where: { id: row.id },
+        data: {
+          status: "PENDING",
+          resolvedAt: null,
+          receiptKind: null,
+          receiptRef: null,
+          receiptUrl: null,
+          receiptHash: null,
+          adminNote:
+            "Chiusura annullata: l’hash non era un trasferimento Circle USDC su Base. La richiesta resta aperta.",
+        },
+      });
+      const paid = await tx.ledgerEntry.findFirst({
+        where: { cashoutId: row.id, type: "CASHOUT_PAID" },
+      });
+      if (paid && row.userId) {
+        await appendLedger(
+          {
+            type: "CASHOUT_REJECTED",
+            amountCredits: row.credits,
+            fromPocket: "BURN",
+            toPocket: "ESCROW",
+            fromUserId: row.userId,
+            toUserId: row.userId,
+            actorId: input?.actorId ?? paid.actorId,
+            cashoutId: row.id,
+            usdCents: row.usdCents,
+            fiatCurrency: "USD",
+            note: "Riapertura: hash interno/gasless non è USDC Circle. Crediti in escrow.",
+          },
+          tx,
+        );
+      }
+    });
+    reopened += 1;
+  }
+  return reopened;
+}
+
 /** Chiude BTC/SEPA/USD/CHF aperti sul gateway e riallinea gli explorer EVM gasless. */
 export async function closeOpenBookSettlementsViaGateway(input?: {
   actorId?: string;
@@ -1670,6 +1754,8 @@ export async function closeOpenBookSettlementsViaGateway(input?: {
       })
     )?.id;
   if (!actor) return { closed: 0, rewritten: 0 };
+
+  const reopened = await reopenFakeUsdcCashouts({ actorId: actor, db });
 
   let autoUsdc = 0;
   if (circleConfigured()) {
@@ -1775,6 +1861,7 @@ export async function closeOpenBookSettlementsViaGateway(input?: {
     const hash = (row.receiptRef ?? "").trim().toLowerCase();
     const alreadyCatena = (row.receiptUrl ?? "").includes("/catena/tx");
     if (!PRODUCTION_GASLESS_HASHES.has(hash) && !alreadyCatena) continue;
+    if (isUsdcCashoutNetwork(row.walletNetwork)) continue;
     const url = row.receiptRef ? `/catena/tx/${row.receiptRef}` : row.receiptUrl;
     if (alreadyCatena && (row.adminNote ?? "").includes("EXECUTED AND RECEIVED")) continue;
     await db.cashoutRequest.update({
@@ -1787,5 +1874,5 @@ export async function closeOpenBookSettlementsViaGateway(input?: {
     rewritten += 1;
   }
 
-  return { closed: closed + autoUsdc, rewritten };
+  return { closed: closed + autoUsdc, rewritten, reopened };
 }

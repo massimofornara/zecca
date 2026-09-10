@@ -16,7 +16,8 @@ import {
   sepaGatewayHealth,
 } from "@/lib/settlement/gateways";
 import { executeWisePlatformTransfer, wiseHealth } from "@/lib/settlement/wise";
-import { circleHealth } from "@/lib/settlement/circle";
+import { circleHealth, transferUsdcOnBase } from "@/lib/settlement/circle";
+import { isUsdcCashoutNetwork } from "@/lib/settlement/circle-ref";
 import type {
   CryptoInstruction,
   FiatInstruction,
@@ -52,6 +53,38 @@ export async function executeCryptoSettlement(
   db?: PrismaClient,
 ): Promise<SettlementResult> {
   const asset = input.asset.trim().toUpperCase();
+  if (isUsdcCashoutNetwork(asset)) {
+    try {
+      const sent = await transferUsdcOnBase({
+        destination: input.destination,
+        amountUsdCents: input.usdCents,
+        idempotencyKey: input.idempotencyKey,
+        fetchImpl,
+      });
+      const hash = sent.txHash && /^0x[a-fA-F0-9]{64}$/i.test(sent.txHash) ? sent.txHash : null;
+      if (!hash) {
+        return {
+          status: "DISPATCHED",
+          provider: "circle",
+          proofKind: "PROVIDER_REF",
+          ref: sent.id,
+          url: sent.url,
+          signer: null,
+        };
+      }
+      return executedFromHash("circle", hash, "USDC", null, sent.url);
+    } catch (error) {
+      return {
+        status: "DEFERRED",
+        provider: "circle",
+        code: "CIRCLE_USDC",
+        reason:
+          error instanceof Error
+            ? error.message
+            : "Circle non ha inviato USDC. Nessun hash inventato.",
+      };
+    }
+  }
   const mintable = Boolean(mintContractForAsset(asset));
   const tokenMint = mintable && (asset === "USDT" || asset === "USDC" || asset === "ZECCA");
   const evmSend = asset === "ETH" || asset === "BNB" || asset === "USDT" || asset === "USDC";

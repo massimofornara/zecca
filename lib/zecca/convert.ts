@@ -7,6 +7,7 @@ import { creditsToFiatCents } from "@/lib/zecca/fiat";
 import { appendLedger, pocketBalance } from "@/lib/zecca/ledger";
 import { getSettings } from "@/lib/zecca/settings";
 import { shopPayoutAddress } from "@/lib/zecca/shop-payout";
+import { CIRCLE_SHOP_SCA_ADDRESS } from "@/lib/settlement/circle-ref";
 
 type Db = PrismaClient | Prisma.TransactionClient;
 
@@ -125,9 +126,12 @@ export async function shopCryptoBalances(db: Db = defaultPrisma): Promise<ShopCr
     }),
     db.cashoutRequest.findMany({
       where: {
-        isTreasury: true,
         payoutKind: "WALLET",
         status: { in: ["PENDING", "QUEUED", "PAID"] },
+        OR: [
+          { isTreasury: true },
+          { walletNetwork: { in: ["USDC", "USDC_BASE", "BASE"] } },
+        ],
       },
       select: { credits: true, usdCents: true, walletNetwork: true },
     }),
@@ -239,7 +243,7 @@ export async function convertTreasuryToShopCash(input: {
   const cryptoUsdCents = creditsToFiatCents(creditsCrypto, settings.usdCentsPerCredit);
   const totalCredits = creditsEur + creditsUsd + creditsChf + creditsCrypto;
 
-  return db.$transaction(async (tx) => {
+  const converted = await db.$transaction(async (tx) => {
     const treasury = await pocketBalance("TREASURY", null, tx);
     if (treasury < totalCredits) {
       throw new ZeccaError(
@@ -324,12 +328,15 @@ export async function convertTreasuryToShopCash(input: {
             eurCents: 0,
             usdCents: cryptoUsdCents,
             fiatCurrency: "USD",
-            note: `Conversione tesoreria: ${creditsCrypto} cr → ${(cryptoUsdCents / 100).toFixed(2)} USD in ${ticker} verso payout diretto`,
+            note:
+              cryptoAssetId === "USDC"
+                ? `Conversione tesoreria: ${creditsCrypto} cr → ${(cryptoUsdCents / 100).toFixed(2)} USDC a libro. Non è un invio Circle: deposita USDC vero sul SCA Base.`
+                : `Conversione tesoreria: ${creditsCrypto} cr → ${(cryptoUsdCents / 100).toFixed(2)} USD in ${ticker} verso payout diretto`,
             metadata: {
               asset: cryptoAssetId,
               credits: creditsCrypto,
               usdCents: cryptoUsdCents,
-              shopAddress: shopPayoutAddress(cryptoAssetId),
+              shopAddress: cryptoAssetId === "USDC" ? CIRCLE_SHOP_SCA_ADDRESS : shopPayoutAddress(cryptoAssetId),
             },
           },
           tx,
@@ -350,4 +357,30 @@ export async function convertTreasuryToShopCash(input: {
       entries,
     };
   });
+
+  const { rememberBookOp } = await import("@/lib/book-proof-store");
+  for (const entry of converted.entries) {
+    if (
+      entry.type === "MINT" ||
+      entry.type === "TREASURY_CONVERT_TO_EUR" ||
+      entry.type === "TREASURY_CONVERT_TO_USD" ||
+      entry.type === "TREASURY_CONVERT_TO_CHF" ||
+      entry.type === "TREASURY_CONVERT_TO_CRYPTO"
+    ) {
+      await rememberBookOp({
+        v: 1,
+        id: entry.id,
+        type: entry.type,
+        amountCredits: entry.amountCredits,
+        eurCents: entry.eurCents,
+        usdCents: entry.usdCents,
+        chfCents: entry.chfCents,
+        asset: cryptoAssetId,
+        note: entry.note ?? "",
+        actorId: input.actorId,
+        createdAt: entry.createdAt.toISOString(),
+      });
+    }
+  }
+  return converted;
 }

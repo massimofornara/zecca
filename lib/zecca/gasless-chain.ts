@@ -9,7 +9,7 @@ import {
   type Address,
   type Hex,
 } from "viem";
-import { publicOrigin } from "@/lib/public-url";
+import { siteHref } from "@/lib/public-url";
 import { kmsSealedPrivateKey, kmsSignerAddress, withKmsAccount } from "@/lib/zecca/kms-signer";
 import { proprietaryMintAmount } from "@/lib/zecca/token-mint";
 import { zeccaTokenArtifact } from "@/lib/zecca/zecca-token-artifact";
@@ -53,19 +53,16 @@ export function canHostGasless() {
 }
 
 export function gaslessExplorerTx(hash: string) {
-  const origin = publicOrigin() || `http://127.0.0.1:${process.env.PORT ?? "4731"}`;
   const id = hash.replace(/\/+$/, "");
-  return `${origin}/catena/tx/${id}`;
+  return siteHref(`/catena/tx/${id}`);
 }
 
 export function gaslessRpcProxyUrl() {
-  const origin = publicOrigin() || `http://127.0.0.1:${process.env.PORT ?? "4731"}`;
-  return `${origin}/api/rails/chain/rpc`;
+  return siteHref("/api/rails/chain/rpc");
 }
 
 export function gaslessEtherscanApiUrl(hash?: string) {
-  const origin = publicOrigin() || `http://127.0.0.1:${process.env.PORT ?? "4731"}`;
-  const base = `${origin}/api/rails/chain/v2/api`;
+  const base = siteHref("/api/rails/chain/v2/api");
   if (!hash) return base;
   return `${base}?module=proxy&action=eth_getTransactionReceipt&txhash=${hash}`;
 }

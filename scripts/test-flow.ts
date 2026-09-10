@@ -22,13 +22,14 @@ import {
   resolveCashout,
   sendUsdcFromShop,
   settleQueuedWalletCashouts,
+  reopenFakeUsdcCashouts,
   SEPA_DISPOSED_KIND,
   CIRCLE_TRANSFER_KIND,
 } from "../lib/zecca/cashout";
 import { saveSettings, DEFAULT_SETTINGS } from "../lib/zecca/settings";
 import { assertWithdrawPolicy, WITHDRAW_BROADCASTING } from "../lib/zecca/withdraw-policy";
 import { cashoutProofStatus, proofFromPaidCashout, signCashoutProof, verifyCashoutProof } from "../lib/cashout-proof";
-import { explorerLinks, explorerUrl, parsePayoutReceipt } from "../lib/receipt";
+import { explorerLinks, explorerUrl, parsePayoutReceipt, catenaTxUrl } from "../lib/receipt";
 import { classifyCashout, fundsDelivered, settlementPhase } from "../lib/zecca/settlement";
 import { transmitAllSummary } from "../lib/zecca/transmit";
 import { executeCryptoSettlement } from "../lib/settlement/pipeline";
@@ -1148,7 +1149,9 @@ async function main() {
     assert.equal(generation.bundle.fiat?.creditsEur, 20);
     assert.equal(generation.bundle.fiat?.creditsUsd, 20);
     assert.equal(generation.bundle.fiat?.creditsChf, 20);
-    assert.equal(generation.bundle.cashouts.length, 5);
+    assert.equal(generation.bundle.cashouts.length, 4);
+    assert.equal(generation.bundle.cashouts.every((row) => row.walletNetwork !== "USDC"), true);
+    assert.ok((await shopCryptoBalances(db)).USDC.credits >= 5);
     assert.equal(generation.bundle.fiatCashouts.length, 3);
     assert.equal(generation.ibans.length, 3);
     assert.equal(generation.ibans.every((row) => row.status === "PAID"), true);
@@ -1443,6 +1446,13 @@ async function main() {
     assert.equal(usdcAsk.walletNetwork, "USDC");
     assert.equal(usdcAsk.walletChain, "BASE");
     assert.equal(usdcAsk.status, "PENDING");
+    await mintCredits({ amount: 40, note: "Cassa USDC di libro per test Circle", actorId: admin.id, db });
+    await convertTreasuryToShopCash({
+      actorId: admin.id,
+      creditsCrypto: 40,
+      cryptoAsset: "USDC",
+      db,
+    });
     const prevCircleKey = process.env.CIRCLE_API_KEY;
     const prevCircleWallet = process.env.CIRCLE_WALLET_ID;
     const prevCircleSecret = process.env.CIRCLE_ENTITY_SECRET;
@@ -1474,6 +1484,15 @@ async function main() {
         if (href.includes("publicKey")) {
           return { ok: true, status: 200, json: async () => ({ data: { publicKey: circlePem } }) } as Response;
         }
+        if (href.includes("/balances")) {
+          return {
+            ok: true,
+            status: 200,
+            json: async () => ({
+              data: { tokenBalances: [{ token: { symbol: "USDC", blockchain: "BASE" }, amount: "10000.00" }] },
+            }),
+          } as Response;
+        }
         return { ok: true, status: 200, json: async () => payload } as Response;
       }) as typeof fetch;
     const circlePaid = await sendUsdcFromShop({
@@ -1485,6 +1504,8 @@ async function main() {
     assert.equal(circlePaid.status, "PAID");
     assert.equal(circlePaid.receiptKind, "TX_HASH");
     assert.equal(circlePaid.receiptRef, mockHash);
+    assert.match(circlePaid.receiptUrl ?? "", /basescan\.org/);
+    assert.equal(/127\.0\.0\.1|\/catena\//.test(circlePaid.receiptUrl ?? ""), false);
     const autoPaid = await requestAndFulfillCashout({
       userId: customer.id,
       role: "CUSTOMER",
@@ -1536,6 +1557,68 @@ async function main() {
       assert.equal(/etherscan/i.test(gaslessSettled.url ?? ""), false);
       assert.equal(gaslessSettled.provider, "zecca-gasless");
     }
+
+    const usdcNotGasless = await executeCryptoSettlement({
+      rail: "WALLET",
+      asset: "USDC",
+      destination: gaslessDest,
+      usdCents: 250,
+      idempotencyKey: "test-gasless-usdc-must-not-mint",
+    });
+    assert.equal(usdcNotGasless.status, "DEFERRED");
+    if (usdcNotGasless.status === "DEFERRED") {
+      assert.equal(usdcNotGasless.provider, "circle");
+    }
+
+    await mintCredits({ amount: 15, note: "USDC libro only", actorId: admin.id, db });
+    const usdcBookOnly = await convertTreasuryAndWithdrawToWallet({
+      actorId: admin.id,
+      creditsCrypto: 15,
+      cryptoAsset: "USDC",
+      walletAddress: gaslessDest,
+      shopSend: true,
+      db,
+    });
+    assert.equal(usdcBookOnly.cashout, null);
+    assert.equal(usdcBookOnly.converted.cryptoAsset, "USDC");
+    assert.ok((await shopCryptoBalances(db)).USDC.remainingCredits >= 15);
+
+    await purchaseCredits({ userId: customer.id, credits: 5, method: "demo", db });
+    const fakeUsdc = await requestCustomerCashout({
+      userId: customer.id,
+      role: "CUSTOMER",
+      credits: 1,
+      payoutKind: "WALLET",
+      walletNetwork: "USDC",
+      walletAddress: gaslessDest,
+      db,
+    });
+    await db.cashoutRequest.update({
+      where: { id: fakeUsdc.id },
+      data: {
+        status: "PAID",
+        receiptKind: "TX_HASH",
+        receiptRef: gaslessMint.hash,
+        receiptUrl: `http://127.0.0.1:4731/catena/tx/${gaslessMint.hash}`,
+        adminNote: "EXECUTED AND RECEIVED su Zecca Gasless /catena",
+      },
+    });
+    const reopened = await reopenFakeUsdcCashouts({ actorId: admin.id, db });
+    assert.ok(reopened >= 1);
+    const afterFake = await db.cashoutRequest.findUniqueOrThrow({ where: { id: fakeUsdc.id } });
+    assert.equal(afterFake.status, "PENDING");
+    assert.equal(afterFake.receiptRef, null);
+
+    process.env.VERCEL = "1";
+    process.env.AUTH_URL = "http://127.0.0.1:4731";
+    process.env.VERCEL_PROJECT_PRODUCTION_URL = "zecca-ten.vercel.app";
+    const catena = catenaTxUrl(gaslessMint.hash);
+    assert.equal(/127\.0\.0\.1/.test(catena), false);
+    assert.match(catena, /zecca-ten\.vercel\.app|\/catena\/tx\//);
+    delete process.env.VERCEL;
+    delete process.env.AUTH_URL;
+    delete process.env.VERCEL_PROJECT_PRODUCTION_URL;
+
     process.env.ZECCA_GASLESS = "0";
 
     assert.match(

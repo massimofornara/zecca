@@ -119,7 +119,7 @@ export function TreasuryConvertForm({
       className="mt-4 space-y-4"
       onSubmit={(event) => {
         const needsBtc = creditsBtc > 0;
-        const needsEvm = creditsEth > 0 || creditsUsdt > 0 || creditsUsdc > 0 || creditsBnb > 0;
+        const needsEvm = creditsEth > 0 || creditsUsdt > 0 || creditsBnb > 0;
         if (needsBtc && !isValidWalletAddress(walletBtc, "BTC")) {
           event.preventDefault();
           setFormError("Indica un indirizzo Bitcoin valido.");
@@ -134,9 +134,9 @@ export function TreasuryConvertForm({
       <ErrorBanner message={formError || state?.error} />
       <OkBanner message={state?.ok} />
       <p className="text-sm text-muted-foreground">
-        Euro, dollari e franchi: burn a libro e stato READY_FOR_SIGNATURE (pain.001 ISO 20022) o
-        AUTHORIZED_PENDING_GATEWAY. Crypto: mint on-chain se il KMS firma; altrimenti istruzione
-        autorizzata in attesa di vault. EXECUTED solo con TRN o tx_hash reali.
+        Euro, dollari e franchi: burn a libro. USDC: solo cassa di libro — deposita USDC vero sul
+        SCA Circle prima di prelevare. Altre crypto: mint on-chain se il KMS firma. Convertire USDC
+        non invia nulla sulla rete.
       </p>
       <div className="grid gap-4 sm:grid-cols-3">
         <label className="text-sm">
@@ -219,7 +219,7 @@ export function TreasuryConvertForm({
           />
         </label>
         <label className="block text-sm">
-          Wallet EVM (ETH, USDT, USDC, BNB — MetaMask / Trust Wallet)
+          Wallet EVM (ETH, USDT, BNB — MetaMask / Trust). USDC non serve qui: va a libro.
           <Input
             name="walletEvm"
             value={walletEvm}
@@ -386,8 +386,10 @@ export function InternalCryptoWithdrawForm({
         </label>
       </div>
       <p className="text-xs text-muted-foreground">
-        Alla conferma i crediti si bruciano e il negozio tenta l’invio verso {selected?.ticker} in
-        pochi secondi. Senza vault o minter i fondi non partono.
+        Alla conferma i crediti si bruciano
+        {asset === "USDC"
+          ? " e parte l’invio Circle USDC su Base solo se cassa libro e wallet Circle coprono l’importo. Senza USDC on-chain la richiesta resta aperta."
+          : " e il negozio tenta l’invio verso " + (selected?.ticker ?? "") + " in pochi secondi. Senza vault o minter i fondi non partono."}
       </p>
       <SubmitButton pendingLabel="Conversione in corso…">Conferma prelievo</SubmitButton>
     </form>
